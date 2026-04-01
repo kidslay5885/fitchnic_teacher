@@ -19,6 +19,18 @@ type ViewFilter = "all" | "발송 예정" | "진행 중" | "needs_followup" | "�
 
 const ROW_H = 36;
 
+// 컬럼 정의 — 헤더/본문 동일하게 사용
+const COL = {
+  name: 120,
+  status: 80,
+  field: 140,
+  assignee: 80,
+  wave: 130,
+  final: 80,
+  action: 64,
+} as const;
+const TABLE_W = COL.name + COL.status + COL.field + COL.assignee + COL.wave * 3 + COL.final + COL.action;
+
 export default function ContactTab() {
   const { state, dispatch, loadStats } = useOutreach();
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
@@ -174,81 +186,84 @@ export default function ContactTab() {
         </div>
       </div>
 
-      {/* 테이블 */}
-      <div className="border rounded flex-1 min-h-0 flex flex-col">
-        <div className="flex bg-[#f8f9fa] border-b shrink-0 text-xs font-semibold text-muted-foreground">
-          <div className="w-[100px] px-2 py-2 border-r">이름</div>
-          <div className="w-[76px] px-2 py-2 border-r">상태</div>
-          <div className="w-[120px] px-2 py-2 border-r">분야</div>
-          <div className="w-[72px] px-2 py-2 border-r">담당자</div>
-          <div className="flex-1 min-w-[100px] px-2 py-2 border-r text-center">1차</div>
-          <div className="flex-1 min-w-[100px] px-2 py-2 border-r text-center">2차</div>
-          <div className="flex-1 min-w-[100px] px-2 py-2 border-r text-center">3차</div>
-          <div className="w-[72px] px-2 py-2 border-r">최종</div>
-          <div className="w-[60px] px-2 py-2"></div>
+      {/* 테이블: 헤더+본문 같은 스크롤 영역 */}
+      <div ref={scrollRef} className="border rounded flex-1 min-h-0 overflow-auto">
+        {/* 헤더 — 본문과 동일한 flex 구조 사용 */}
+        <div className="sticky top-0 z-10 flex bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground" style={{ width: TABLE_W, minWidth: TABLE_W }}>
+          <div className="px-3 py-2 border-r" style={{ width: COL.name }}>이름</div>
+          <div className="px-2 py-2 border-r" style={{ width: COL.status }}>상태</div>
+          <div className="px-2 py-2 border-r" style={{ width: COL.field }}>분야</div>
+          <div className="px-2 py-2 border-r" style={{ width: COL.assignee }}>담당자</div>
+          <div className="px-2 py-2 border-r text-center" style={{ width: COL.wave }}>1차</div>
+          <div className="px-2 py-2 border-r text-center" style={{ width: COL.wave }}>2차</div>
+          <div className="px-2 py-2 border-r text-center" style={{ width: COL.wave }}>3차</div>
+          <div className="px-2 py-2 border-r" style={{ width: COL.final }}>최종</div>
+          <div className="px-2 py-2" style={{ width: COL.action }}></div>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-auto">
-          {filtered.length === 0 ? (
-            <div className="text-center py-12 text-sm text-muted-foreground">해당하는 강사가 없습니다.</div>
-          ) : (
-            <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-              {virtualizer.getVirtualItems().map((vRow) => {
-                const i = filtered[vRow.index];
-                const idx = vRow.index;
-                return (
+        {filtered.length === 0 ? (
+          <div className="text-center py-12 text-sm text-muted-foreground">해당하는 강사가 없습니다.</div>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: TABLE_W, minWidth: TABLE_W }}>
+            {virtualizer.getVirtualItems().map((vRow) => {
+              const i = filtered[vRow.index];
+              const idx = vRow.index;
+              return (
+                <div
+                  key={i.id}
+                  className={`flex border-b text-sm ${idx % 2 === 0 ? "bg-white" : "bg-[#f8f9fa]/50"}`}
+                  style={{ position: "absolute", top: 0, left: 0, height: ROW_H, width: TABLE_W, transform: `translateY(${vRow.start}px)` }}
+                >
                   <div
-                    key={i.id}
-                    className={`flex border-b text-sm ${idx % 2 === 0 ? "bg-white" : "bg-[#f8f9fa]/50"}`}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, height: ROW_H, transform: `translateY(${vRow.start}px)` }}
+                    className="px-3 border-r flex items-center font-medium cursor-pointer hover:underline"
+                    style={{ width: COL.name }}
+                    onClick={() => {
+                      dispatch({ type: "SET_TAB", tab: "instructors" });
+                      setTimeout(() => {
+                        dispatch({ type: "SET_FILTER", filters: { status: "전체", search: "" } });
+                        dispatch({ type: "SELECT_INSTRUCTOR", id: i.id });
+                      }, 50);
+                    }}
                   >
-                    <div
-                      className="w-[100px] px-2 border-r flex items-center font-medium cursor-pointer hover:underline truncate"
-                      onClick={() => {
-                        dispatch({ type: "SET_TAB", tab: "instructors" });
-                        setTimeout(() => {
-                          dispatch({ type: "SET_FILTER", filters: { status: "전체", search: "" } });
-                          dispatch({ type: "SELECT_INSTRUCTOR", id: i.id });
-                        }, 50);
-                      }}
-                    >
-                      {i.name}
-                    </div>
-                    <div className="w-[76px] px-2 border-r flex items-center">
-                      <Badge className={`text-xs px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
-                    </div>
-                    <div className="w-[120px] px-2 border-r flex items-center text-muted-foreground truncate">
-                      <span className="truncate">{i.field || ""}</span>
-                    </div>
-                    <div className="w-[72px] px-2 border-r flex items-center text-muted-foreground">{i.assignee}</div>
-                    {[1, 2, 3].map((n) => {
-                      const w = getWave(i.id, n);
-                      const text = formatWave(w);
-                      const color = waveColor(w);
-                      return (
-                        <div
-                          key={n}
-                          className={`flex-1 min-w-[100px] px-2 border-r flex items-center justify-center cursor-pointer hover:bg-blue-50/60 transition-colors ${color}`}
-                          onClick={(e) => handleCellClick(e, i.id, n)}
-                        >
-                          <span className="text-sm truncate">{text}</span>
-                        </div>
-                      );
-                    })}
-                    <div className="w-[72px] px-2 border-r flex items-center text-muted-foreground">{i.final_status || "-"}</div>
-                    <div className="w-[60px] px-1.5 flex items-center justify-center">
-                      {i.status === "발송 예정" && (
-                        <Button size="sm" className="h-7 text-xs px-2" onClick={() => handleStartOutreach(i)}>
-                          <Send className="h-3 w-3 mr-0.5" />발송
-                        </Button>
-                      )}
-                    </div>
+                    <span className="truncate">{i.name}</span>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  <div className="px-2 border-r flex items-center" style={{ width: COL.status }}>
+                    <Badge className={`text-xs px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
+                  </div>
+                  <div className="px-2 border-r flex items-center text-muted-foreground" style={{ width: COL.field }}>
+                    <span className="truncate">{i.field || ""}</span>
+                  </div>
+                  <div className="px-2 border-r flex items-center text-muted-foreground" style={{ width: COL.assignee }}>
+                    <span className="truncate">{i.assignee || ""}</span>
+                  </div>
+                  {[1, 2, 3].map((n) => {
+                    const w = getWave(i.id, n);
+                    const text = formatWave(w);
+                    const color = waveColor(w);
+                    return (
+                      <div
+                        key={n}
+                        className={`px-2 border-r flex items-center justify-center cursor-pointer hover:bg-blue-50/60 transition-colors ${color}`}
+                        style={{ width: COL.wave }}
+                        onClick={(e) => handleCellClick(e, i.id, n)}
+                      >
+                        <span className="text-sm whitespace-nowrap">{text}</span>
+                      </div>
+                    );
+                  })}
+                  <div className="px-2 border-r flex items-center text-muted-foreground" style={{ width: COL.final }}>
+                    <span className="truncate">{i.final_status || "-"}</span>
+                  </div>
+                  <div className="px-1.5 flex items-center justify-center" style={{ width: COL.action }}>
+                    {i.status === "발송 예정" && (
+                      <Button size="sm" className="h-7 text-xs px-2" onClick={() => handleStartOutreach(i)}>발송</Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 발송 편집 팝오버 */}
@@ -286,7 +301,6 @@ function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose]);
 
-  // 화면 밖으로 나가지 않도록 보정
   const popW = 260;
   const popH = 180;
   const adjustedX = Math.min(x, window.innerWidth - popW - 16);
