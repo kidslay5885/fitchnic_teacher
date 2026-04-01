@@ -44,7 +44,11 @@ export default function ContactTab() {
     if (contactInstructors.length === 0) return;
     try {
       const ids = contactInstructors.map((i) => i.id);
-      const res = await fetch(`/api/outreach/waves-bulk?ids=${ids.join(",")}`);
+      const res = await fetch("/api/outreach/waves-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
       if (res.ok) {
         const data = await res.json();
         const map: Record<string, OutreachWave[]> = {};
