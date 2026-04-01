@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import { Input } from "@/components/ui/input";
@@ -11,22 +11,27 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { STATUSES, STATUS_COLORS } from "@/lib/constants";
+import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
 import BulkActions from "@/components/bulk-actions";
-import { Plus, Search, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Search, ChevronUp, ChevronDown, X } from "lucide-react";
 import { toast } from "sonner";
 
 type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email";
 type SortDir = "asc" | "desc";
 
 const ROW_H = 36;
+// 체크 | 상태 | 분야 | 담당자 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처
+const GRID = "36px 84px 1.2fr 72px 1fr 48px 48px 1fr 48px 48px 1.2fr 1.5fr 60px";
+const MIN_W = 900;
 
 export default function InstructorsTab() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
+  const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -87,6 +92,29 @@ export default function InstructorsTab() {
     } catch (e: any) { toast.error(e.message); }
   };
 
+  const handleStatusClick = (e: React.MouseEvent, instructor: Instructor) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setEditingStatus({ instructor, x: rect.left, y: rect.bottom + 4 });
+  };
+
+  const handleStatusChange = async (instructorId: string, newStatus: InstructorStatus, reason: string) => {
+    try {
+      const inst = state.instructors.find(i => i.id === instructorId);
+      const res = await fetch(`/api/instructors/${instructorId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, _changed_by: inst?.assignee || "", _reason: reason }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const updated = await res.json();
+      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: updated });
+      await loadStats();
+      toast.success(`${inst?.name} → ${newStatus}`);
+      setEditingStatus(null);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
   const toggleAll = () => {
     if (selected.size === sorted.length) setSelected(new Set());
     else setSelected(new Set(sorted.map((i) => i.id)));
@@ -134,74 +162,83 @@ export default function InstructorsTab() {
       </div>
 
       {/* 가상화 테이블 */}
-      <div className="border rounded flex-1 min-h-0 flex flex-col">
-        <div className="flex bg-[#f8f9fa] border-b shrink-0" style={{ minWidth: 1200 }}>
-          <div className="w-10 px-2 py-2 border-r flex items-center">
-            <Checkbox checked={sorted.length > 0 && selected.size === sorted.length} onCheckedChange={toggleAll} />
+      <div ref={scrollRef} className="border rounded flex-1 min-h-0 overflow-auto">
+        {/* 헤더 */}
+        <div
+          className="sticky top-0 z-10 grid items-center bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
+          style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
+        >
+          <div className="px-1 flex justify-center border-r border-gray-200 cursor-pointer" onClick={toggleAll}>
+            <Checkbox checked={sorted.length > 0 && selected.size === sorted.length} />
           </div>
-          <Th label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} w={80} />
-          <Th label="제외사유" w={90} />
-          <Th label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} w={90} />
-          <Th label="담당자" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} w={72} />
-          <Th label="강사이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} w={90} />
-          <Th label="참조링크" w={64} />
-          <Th label="강의이력" col="has_lecture_history" sk={sortKey} sd={sortDir} onSort={handleSort} w={64} />
-          <Th label="강의플랫폼" col="lecture_platform" sk={sortKey} sd={sortDir} onSort={handleSort} w={100} />
-          <Th label="유튜브" w={60} />
-          <Th label="인스타" w={60} />
-          <Th label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} w={150} />
-          <Th label="비고" w={160} />
-          <Th label="출처" col="source" sk={sortKey} sd={sortDir} onSort={handleSort} w={72} last />
+          <HeaderCell label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="담당자" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="참조" />
+          <HeaderCell label="강의" col="has_lecture_history" sk={sortKey} sd={sortDir} onSort={handleSort} center />
+          <HeaderCell label="플랫폼" col="lecture_platform" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="유튜브" />
+          <HeaderCell label="인스타" />
+          <HeaderCell label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="비고" />
+          <HeaderCell label="출처" col="source" sk={sortKey} sd={sortDir} onSort={handleSort} last />
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-auto" style={{ minWidth: 1200 }}>
-          {sorted.length === 0 ? (
-            <div className="text-center py-12 text-sm text-muted-foreground">데이터가 없습니다.</div>
-          ) : (
-            <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
-              {virtualizer.getVirtualItems().map((vRow) => {
-                const i = sorted[vRow.index];
-                const idx = vRow.index;
-                return (
-                  <div
-                    key={i.id}
-                    className={`flex border-b cursor-pointer text-sm ${
-                      i.is_banned ? "bg-red-50/60" : idx % 2 === 0 ? "bg-white" : "bg-[#f8f9fa]/50"
-                    } ${state.selectedId === i.id ? "!bg-blue-50" : "hover:bg-blue-50/40"}`}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, height: ROW_H, transform: `translateY(${vRow.start}px)` }}
-                    onClick={() => dispatch({ type: "SELECT_INSTRUCTOR", id: i.id })}
-                  >
-                    <div className="w-10 px-2 border-r flex items-center" onClick={(e) => e.stopPropagation()}>
-                      <Checkbox checked={selected.has(i.id)} onCheckedChange={() => toggleOne(i.id)} />
-                    </div>
-                    <Cell w={80}><Badge className={`text-xs px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></Cell>
-                    <Cell w={90} muted truncate>{i.exclude_reason}</Cell>
-                    <Cell w={90} truncate>{i.field}</Cell>
-                    <Cell w={72}>{i.assignee}</Cell>
-                    <Cell w={90} bold>
-                      {i.name}
-                      {i.is_banned && <span className="text-red-500 ml-1 text-xs">[금지]</span>}
-                    </Cell>
-                    <Cell w={64}>
-                      {i.ref_link ? <a href={i.ref_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>링크</a> : ""}
-                    </Cell>
-                    <Cell w={64} center>{i.has_lecture_history}</Cell>
-                    <Cell w={100} muted truncate>{i.lecture_platform}</Cell>
-                    <Cell w={60}>
-                      {i.youtube ? <a href={i.youtube} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>YT</a> : ""}
-                    </Cell>
-                    <Cell w={60}>
-                      {i.instagram ? <a href={i.instagram.startsWith("http") ? i.instagram : `https://instagram.com/${i.instagram}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" onClick={(e) => e.stopPropagation()}>IG</a> : ""}
-                    </Cell>
-                    <Cell w={150} muted truncate>{i.email}</Cell>
-                    <Cell w={160} muted truncate>{i.notes}</Cell>
-                    <Cell w={72} muted last>{i.source}</Cell>
+        {/* 본문 */}
+        {sorted.length === 0 ? (
+          <div className="text-center py-12 text-sm text-muted-foreground">데이터가 없습니다.</div>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative", minWidth: MIN_W }}>
+            {virtualizer.getVirtualItems().map((vRow) => {
+              const i = sorted[vRow.index];
+              const idx = vRow.index;
+              const igUrl = i.instagram ? (i.instagram.startsWith("http") ? i.instagram : `https://instagram.com/${i.instagram}`) : "";
+              return (
+                <div
+                  key={i.id}
+                  className={`grid items-center border-b cursor-pointer text-sm ${
+                    i.is_banned ? "bg-red-50/60" : idx % 2 === 0 ? "bg-white" : "bg-[#f8f9fa]/50"
+                  } ${state.selectedId === i.id ? "!bg-blue-50" : "hover:bg-blue-50/40"}`}
+                  style={{ position: "absolute", top: 0, left: 0, right: 0, height: ROW_H, gridTemplateColumns: GRID, transform: `translateY(${vRow.start}px)` }}
+                  onClick={() => dispatch({ type: "SELECT_INSTRUCTOR", id: i.id })}
+                >
+                  <div className="px-1 flex justify-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox checked={selected.has(i.id)} onCheckedChange={() => toggleOne(i.id)} />
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
+                    <Badge
+                      className={`text-xs px-1.5 py-0 cursor-pointer hover:ring-2 hover:ring-primary/30 transition whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}
+                      onClick={(e) => handleStatusClick(e, i)}
+                    >
+                      {i.status}
+                    </Badge>
+                  </div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 overflow-hidden"><span className="truncate">{i.field}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.assignee}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 font-medium overflow-hidden">
+                    <span className="truncate">{i.name}</span>
+                    {i.is_banned && <span className="text-red-500 ml-1 text-xs shrink-0">[금지]</span>}
+                  </div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
+                    {i.ref_link ? <a href={i.ref_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
+                  </div>
+                  <div className="px-2 flex items-center justify-center border-r border-gray-200/60 text-muted-foreground">{i.has_lecture_history}</div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.lecture_platform}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
+                    {i.youtube ? <a href={i.youtube} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
+                  </div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
+                    {igUrl ? <a href={igUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
+                  </div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.email}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.notes}</span></div>
+                  <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate">{i.source}</span></div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {state.selectedId && (
@@ -211,19 +248,28 @@ export default function InstructorsTab() {
         />
       )}
       {showForm && <InstructorForm onClose={() => setShowForm(false)} />}
+
+      {editingStatus && (
+        <StatusPopover
+          instructor={editingStatus.instructor}
+          x={editingStatus.x}
+          y={editingStatus.y}
+          onConfirm={handleStatusChange}
+          onClose={() => setEditingStatus(null)}
+        />
+      )}
     </div>
   );
 }
 
-function Th({ label, col, sk, sd, onSort, w, last }: {
+function HeaderCell({ label, col, sk, sd, onSort, center, last }: {
   label: string; col?: SortKey; sk?: SortKey; sd?: SortDir;
-  onSort?: (k: SortKey) => void; w: number; last?: boolean;
+  onSort?: (k: SortKey) => void; center?: boolean; last?: boolean;
 }) {
   const active = col && sk === col;
   return (
     <div
-      className={`px-2 py-2 text-xs font-semibold text-muted-foreground whitespace-nowrap select-none flex items-center shrink-0 ${!last ? "border-r" : ""} ${col ? "cursor-pointer hover:bg-gray-200/50" : ""}`}
-      style={{ width: w }}
+      className={`px-2 py-2.5 whitespace-nowrap flex items-center ${!last ? "border-r border-gray-200" : ""} ${center ? "justify-center" : ""} ${col ? "cursor-pointer hover:bg-gray-200/50" : ""}`}
       onClick={() => col && onSort?.(col)}
     >
       {label}
@@ -232,16 +278,95 @@ function Th({ label, col, sk, sd, onSort, w, last }: {
   );
 }
 
-function Cell({ children, w, muted, bold, truncate, center, last }: {
-  children?: React.ReactNode; w: number; muted?: boolean; bold?: boolean;
-  truncate?: boolean; center?: boolean; last?: boolean;
+/* ── 상태 변경 팝오버 ── */
+function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
+  instructor: Instructor;
+  x: number; y: number;
+  onConfirm: (id: string, status: InstructorStatus, reason: string) => Promise<void>;
+  onClose: () => void;
 }) {
+  const nextStatuses = STATUSES.filter(s => s !== instructor.status);
+  const [pendingStatus, setPendingStatus] = useState<InstructorStatus | null>(null);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const popW = 220;
+  const adjustedX = Math.min(x, window.innerWidth - popW - 16);
+  const adjustedY = y + 200 > window.innerHeight ? y - 200 - 8 : y;
+
+  const handleSelect = async (status: InstructorStatus) => {
+    if (requiresReason(status)) {
+      setPendingStatus(status);
+      return;
+    }
+    setSaving(true);
+    await onConfirm(instructor.id, status, "");
+    setSaving(false);
+  };
+
+  const handleReasonSubmit = async () => {
+    if (!reason.trim()) { toast.error("사유를 입력하세요."); return; }
+    if (!pendingStatus) return;
+    setSaving(true);
+    await onConfirm(instructor.id, pendingStatus, reason);
+    setSaving(false);
+  };
+
   return (
     <div
-      className={`px-2 flex items-center shrink-0 overflow-hidden ${!last ? "border-r" : ""} ${muted ? "text-muted-foreground" : ""} ${bold ? "font-medium" : ""} ${center ? "justify-center" : ""}`}
-      style={{ width: w }}
+      ref={ref}
+      className="fixed z-50 bg-white border rounded-lg shadow-lg p-3 space-y-2"
+      style={{ left: adjustedX, top: adjustedY, width: popW }}
     >
-      {truncate ? <span className="truncate">{children}</span> : children}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground">
+          {pendingStatus ? `${pendingStatus} 사유` : `${instructor.name} 상태 변경`}
+        </p>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {!pendingStatus ? (
+        <div className="space-y-1">
+          {nextStatuses.map(s => (
+            <button
+              key={s}
+              onClick={() => handleSelect(s)}
+              disabled={saving}
+              className={`w-full text-left px-3 py-1.5 rounded text-sm font-medium transition-colors hover:ring-1 hover:ring-primary/30 ${STATUS_COLORS[s]}`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Input
+            placeholder="사유 입력..."
+            className="h-8 text-sm"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleReasonSubmit(); }}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7 text-xs flex-1" onClick={handleReasonSubmit} disabled={saving}>
+              {saving ? "처리 중..." : "확인"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPendingStatus(null)}>뒤로</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

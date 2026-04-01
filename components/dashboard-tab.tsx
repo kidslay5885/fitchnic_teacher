@@ -116,6 +116,59 @@ export default function DashboardTab() {
         </CardContent>
       </Card>
 
+      {/* 섹션별 반응률 */}
+      {stats.waveRates && (
+        <Card>
+          <CardHeader className="py-3 px-5">
+            <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">섹션별 발송 반응률</CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pb-4">
+            <div className="grid grid-cols-4 gap-3">
+              {(["발송 예정", "진행 중", "제외/보류/거절", "계약 완료"] as const).map((sec) => {
+                const sectionColor: Record<string, string> = {
+                  "발송 예정": "border-l-blue-400",
+                  "진행 중": "border-l-indigo-400",
+                  "제외/보류/거절": "border-l-rose-400",
+                  "계약 완료": "border-l-green-400",
+                };
+                const sectionCount: Record<string, number> = {
+                  "발송 예정": stats.byStatus["발송 예정"] || 0,
+                  "진행 중": stats.byStatus["진행 중"] || 0,
+                  "제외/보류/거절": (stats.byStatus["제외"] || 0) + (stats.byStatus["보류"] || 0) + (stats.byStatus["거절"] || 0),
+                  "계약 완료": stats.byStatus["계약 완료"] || 0,
+                };
+                const waves = stats.waveRates![sec];
+                return (
+                  <div key={sec} className={`border-l-4 ${sectionColor[sec]} bg-muted/30 rounded-r-lg px-3 py-3`}>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="text-sm font-semibold">{sec}</span>
+                      <span className="text-lg font-bold">{sectionCount[sec]}</span>
+                    </div>
+                    <div className="space-y-1">
+                      {waves.map((w, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{idx + 1}차</span>
+                          <div className="flex items-center gap-1.5">
+                            {w.rate !== null ? (
+                              <>
+                                <span className={`font-semibold ${w.rate > 0 ? "text-green-700" : "text-gray-400"}`}>{w.rate}%</span>
+                                <span className="text-muted-foreground">({w.reacted}/{w.sent})</span>
+                              </>
+                            ) : (
+                              <span className="text-gray-300">-</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* 상태별 분포 */}
       <Card>
         <CardHeader className="py-3 px-5">

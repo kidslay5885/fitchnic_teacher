@@ -9,15 +9,15 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { STATUS_COLORS, WAVE_RESULTS } from "@/lib/constants";
-import { getNextStatuses, requiresReason } from "@/lib/status-machine";
+import { STATUSES, STATUS_COLORS, WAVE_RESULTS } from "@/lib/constants";
+import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import { toast } from "sonner";
-import { Send, Clock, AlertCircle, Search, X } from "lucide-react";
+import { Send, Search, X } from "lucide-react";
 
-const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "계약 완료", "보류", "거절"];
-type ViewFilter = "all" | "발송 예정" | "진행 중" | "needs_followup" | "계약 완료" | "보류" | "거절";
+const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "계약 완료", "제외", "보류", "거절"];
+type ViewFilter = "all" | InstructorStatus;
 
 const ROW_H = 40;
 const GRID = "36px 1.5fr 88px 1fr 76px 1fr 1fr 1fr 88px";
@@ -25,9 +25,12 @@ const MIN_W = 820;
 
 // 상태별 행 배경색 (연한 틴트)
 const ROW_BG: Record<string, string> = {
+  미검토: "bg-gray-50/60 hover:bg-gray-100/50",
+  "컨펌 필요": "bg-yellow-50/60 hover:bg-yellow-100/50",
   "발송 예정": "bg-blue-50/70 hover:bg-blue-100/50",
   "진행 중": "bg-indigo-50/60 hover:bg-indigo-100/50",
   "계약 완료": "bg-green-50/60 hover:bg-green-100/50",
+  제외: "bg-red-50/50 hover:bg-red-100/40",
   보류: "bg-orange-50/60 hover:bg-orange-100/50",
   거절: "bg-rose-50/60 hover:bg-rose-100/50",
 };
@@ -48,6 +51,7 @@ export default function ContactTab() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
 
+  // 컨택 대상만 (발송 예정 / 진행 중 / 계약 완료)
   const contactInstructors = useMemo(() =>
     state.instructors.filter((i) => CONTACT_STATUSES.includes(i.status as InstructorStatus)),
   [state.instructors]);
@@ -75,26 +79,16 @@ export default function ContactTab() {
 
   useEffect(() => { loadAllWaves(); }, [loadAllWaves]);
 
-  const needsFollowup = useMemo(() =>
-    contactInstructors.filter((i) => {
-      if (i.status !== "진행 중") return false;
-      const waves = wavesMap[i.id] || [];
-      if (waves.length === 0) return true;
-      const last = waves[waves.length - 1];
-      return last.result === "무응답" && last.wave_number < 3;
-    }),
-  [contactInstructors, wavesMap]);
-
   const filtered = useMemo(() => {
     let list = contactInstructors;
-    if (viewFilter === "needs_followup") list = needsFollowup;
+    if (viewFilter === "제외") list = list.filter((i) => ["제외", "보류", "거절"].includes(i.status));
     else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q));
     }
     return list;
-  }, [contactInstructors, viewFilter, search, needsFollowup]);
+  }, [contactInstructors, viewFilter, search]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -116,9 +110,13 @@ export default function ContactTab() {
     try {
       const existing = (wavesMap[instructorId] || []).find((w) => w.wave_number === waveNumber);
       const body: any = { wave_number: waveNumber, sent_date: existing?.sent_date || null, result: existing?.result || "", [field]: value };
-      await fetch(`/api/instructors/${instructorId}/waves`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch(`/api/instructors/${instructorId}/waves`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "저장 실패");
+      }
       await loadAllWaves();
-    } catch { toast.error("업데이트 실패"); }
+    } catch (e: any) { toast.error(e.message || "업데이트 실패"); }
   };
 
   /* ── 개별 상태 변경 ── */
@@ -196,18 +194,37 @@ export default function ContactTab() {
     finally { setBulkLoading(false); }
   };
 
-  /* ── 선택 / 드래그 ── */
+  /* ── 선택 / 드래그 / Shift 범위선택 ── */
+  const lastClickedIdx = useRef<number | null>(null);
+
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
   const toggleSelectAll = () => {
     setSelectedIds(prev => prev.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));
   };
-  const handleDragStart = (id: string, e: React.MouseEvent) => {
+  const handleCheckClick = (id: string, idx: number, e: React.MouseEvent) => {
+    if (e.shiftKey && lastClickedIdx.current !== null) {
+      // Shift+클릭: 범위 선택
+      const start = Math.min(lastClickedIdx.current, idx);
+      const end = Math.max(lastClickedIdx.current, idx);
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        for (let i = start; i <= end; i++) next.add(filtered[i].id);
+        return next;
+      });
+    } else {
+      toggleSelect(id);
+    }
+    lastClickedIdx.current = idx;
+  };
+  const handleDragStart = (id: string, idx: number, e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    if (e.shiftKey) { handleCheckClick(id, idx, e); return; }
     e.preventDefault();
     const willSelect = !selectedIds.has(id);
     dragRef.current = { active: true, select: willSelect };
+    lastClickedIdx.current = idx;
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (willSelect) next.add(id); else next.delete(id);
@@ -270,24 +287,19 @@ export default function ContactTab() {
 
         <div className="flex gap-2 flex-wrap">
           {([
-            { key: "all" as ViewFilter, label: `전체 (${contactInstructors.length})` },
-            { key: "발송 예정" as ViewFilter, label: `발송 예정 (${cnt("발송 예정")})`, icon: Send },
-            { key: "진행 중" as ViewFilter, label: `진행 중 (${cnt("진행 중")})`, icon: Clock },
-            { key: "needs_followup" as ViewFilter, label: `후속 필요 (${needsFollowup.length})`, icon: AlertCircle, highlight: needsFollowup.length > 0 },
-            { key: "계약 완료" as ViewFilter, label: `계약 (${cnt("계약 완료")})` },
+            { key: "all" as ViewFilter, label: `전체 (${contactInstructors.length})`, active: "bg-gray-200 text-gray-900 border-gray-300", idle: "bg-gray-100 text-gray-600" },
+            { key: "발송 예정" as ViewFilter, label: `발송 예정 (${cnt("발송 예정")})`, active: "bg-blue-200 text-blue-900 border-blue-400", idle: "bg-blue-50 text-blue-700 border-blue-200" },
+            { key: "진행 중" as ViewFilter, label: `진행 중 (${cnt("진행 중")})`, active: "bg-indigo-200 text-indigo-900 border-indigo-400", idle: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+            { key: "제외" as ViewFilter, label: `제외/보류/거절 (${cnt("제외") + cnt("보류") + cnt("거절")})`, active: "bg-rose-200 text-rose-900 border-rose-400", idle: "bg-rose-50 text-rose-700 border-rose-200" },
+            { key: "계약 완료" as ViewFilter, label: `계약 완료 (${cnt("계약 완료")})`, active: "bg-green-200 text-green-900 border-green-400", idle: "bg-green-50 text-green-700 border-green-200" },
           ]).map((f) => (
             <button
               key={f.key}
               onClick={() => setViewFilter(f.key)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                viewFilter === f.key
-                  ? "border-primary/50 bg-primary/10 text-primary"
-                  : f.highlight
-                  ? "border-orange-300 bg-orange-50 text-orange-700"
-                  : "border-transparent bg-muted text-muted-foreground hover:text-foreground"
+              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                viewFilter === f.key ? f.active : f.idle
               }`}
             >
-              {f.icon && <f.icon className="h-3.5 w-3.5" />}
               {f.label}
             </button>
           ))}
@@ -346,7 +358,7 @@ export default function ContactTab() {
                 >
                   {/* 체크박스 */}
                   <div className="px-1 flex justify-center cursor-pointer border-r border-gray-200/60"
-                       onMouseDown={(e) => handleDragStart(i.id, e)}>
+                       onMouseDown={(e) => handleDragStart(i.id, vRow.index, e)}>
                     <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
                       checked={isSelected} readOnly />
                   </div>
@@ -470,7 +482,7 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
   onConfirm: (id: string, status: InstructorStatus, reason: string) => Promise<void>;
   onClose: () => void;
 }) {
-  const nextStatuses = getNextStatuses(instructor.status as InstructorStatus);
+  const nextStatuses = STATUSES.filter(s => s !== instructor.status);
   const [pendingStatus, setPendingStatus] = useState<InstructorStatus | null>(null);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -571,15 +583,21 @@ function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
   const [date, setDate] = useState(wave?.sent_date || "");
   const [result, setResult] = useState(wave?.result || "");
   const [saving, setSaving] = useState(false);
+  const [selectOpen, setSelectOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      // 저장 중이거나 Select 열려있으면 닫지 않음
+      if (savingRef.current || selectOpen) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-radix-popper-content-wrapper]")) return;
+      if (ref.current && !ref.current.contains(target)) onClose();
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [onClose]);
+  }, [onClose, selectOpen]);
 
   const popW = 260;
   const popH = 180;
@@ -588,8 +606,13 @@ function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
 
   const handleSave = async (field: string, value: string) => {
     setSaving(true);
-    await onUpdate(field, value);
-    setSaving(false);
+    savingRef.current = true;
+    try {
+      await onUpdate(field, value);
+    } finally {
+      setSaving(false);
+      savingRef.current = false;
+    }
   };
 
   return (
@@ -620,6 +643,8 @@ function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
           <label className="text-xs text-muted-foreground">결과</label>
           <Select
             value={result || "_none"}
+            open={selectOpen}
+            onOpenChange={setSelectOpen}
             onValueChange={(v) => {
               const val = v === "_none" ? "" : v;
               setResult(val);

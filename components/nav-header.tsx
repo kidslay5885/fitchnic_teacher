@@ -9,7 +9,7 @@ import {
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "dashboard", label: "현황판", icon: LayoutDashboard },
-  { id: "instructors", label: "강사DB", icon: Users },
+  { id: "instructors", label: "강사찾기", icon: Users },
   { id: "contact", label: "컨택관리", icon: MessageSquare },
   { id: "meeting", label: "미팅관리", icon: Calendar },
   { id: "applications", label: "지원서", icon: FileText },

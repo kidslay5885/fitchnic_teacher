@@ -119,6 +119,12 @@ export interface InstructorWithWaves extends Instructor {
   history: StatusHistory[];
 }
 
+export interface WaveRate {
+  sent: number;
+  reacted: number;
+  rate: number | null;
+}
+
 export interface DashboardStats {
   total: number;
   byStatus: Record<InstructorStatus, number>;
@@ -131,6 +137,12 @@ export interface DashboardStats {
     contracted: number;
   };
   pendingApplications: number;
+  waveRates?: {
+    "발송 예정": WaveRate[];
+    "진행 중": WaveRate[];
+    "제외/보류/거절": WaveRate[];
+    "계약 완료": WaveRate[];
+  };
 }
 
 export interface FilterState {

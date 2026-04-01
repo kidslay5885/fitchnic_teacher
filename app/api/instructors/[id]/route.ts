@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
-import { canTransition, requiresReason } from "@/lib/status-machine";
+import { requiresReason } from "@/lib/status-machine";
 import type { InstructorStatus } from "@/lib/types";
 
 export async function GET(
@@ -38,13 +38,6 @@ export async function PATCH(
     if (current && current.status !== body.status) {
       const from = current.status as InstructorStatus;
       const to = body.status as InstructorStatus;
-
-      if (!canTransition(from, to)) {
-        return NextResponse.json(
-          { error: `'${from}' → '${to}' 전환이 허용되지 않습니다.` },
-          { status: 400 }
-        );
-      }
 
       if (requiresReason(to) && !body.exclude_reason && !body._reason) {
         return NextResponse.json(

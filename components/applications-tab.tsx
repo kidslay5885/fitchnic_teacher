@@ -47,7 +47,7 @@ export default function ApplicationsTab() {
       });
       if (!res.ok) throw new Error("Failed");
       dispatch({ type: "ADD_INSTRUCTOR", instructor: await res.json() });
-      toast.success(`${app.applicant_name} 강사DB 추가`);
+      toast.success(`${app.applicant_name} 강사찾기에 추가`);
     } catch { toast.error("추가 실패"); }
   };
 
