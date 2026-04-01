@@ -245,20 +245,29 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     hydrate();
   }, []);
 
-  // 자동 동기화: 10초마다 다른 사용자 변경 반영
+  // 경량 동기화: 변경 여부만 확인 후 필요할 때만 전체 로드
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        loadInstructors();
-        loadStats();
-      }
-    }, 10000);
-    // 탭 다시 활성화 시 즉시 동기화
+    let syncRef = { count: 0, ts: "" };
+    const checkSync = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/sync");
+        if (!res.ok) return;
+        const { count, latest_updated_at } = await res.json();
+        if (syncRef.count !== count || syncRef.ts !== latest_updated_at) {
+          syncRef = { count, ts: latest_updated_at };
+          loadInstructors();
+          loadStats();
+        }
+      } catch {}
+    };
+    // 초기값 세팅
+    fetch("/api/sync").then(r => r.json()).then(d => {
+      syncRef = { count: d.count, ts: d.latest_updated_at };
+    }).catch(() => {});
+    const interval = setInterval(checkSync, 15000);
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        loadInstructors();
-        loadStats();
-      }
+      if (document.visibilityState === "visible") checkSync();
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
