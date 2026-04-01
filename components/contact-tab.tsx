@@ -17,26 +17,22 @@ import { Send, Clock, AlertCircle, Search, X } from "lucide-react";
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "계약 완료", "보류", "거절"];
 type ViewFilter = "all" | "발송 예정" | "진행 중" | "needs_followup" | "계약 완료" | "보류" | "거절";
 
-const ROW_H = 36;
-
-// 컬럼 정의 — 헤더/본문 동일하게 사용
-const COL = {
-  name: 120,
-  status: 80,
-  field: 140,
-  assignee: 80,
-  wave: 130,
-  final: 80,
-  action: 64,
-} as const;
-const TABLE_W = COL.name + COL.status + COL.field + COL.assignee + COL.wave * 3 + COL.final + COL.action;
+const ROW_H = 40;
+// CSS Grid — 가변 컬럼으로 화면 전체 사용
+const GRID = "36px 1.5fr 88px 1fr 76px 1fr 1fr 1fr 88px";
+const MIN_W = 820;
 
 export default function ContactTab() {
-  const { state, dispatch, loadStats } = useOutreach();
+  const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [search, setSearch] = useState("");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
   const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkWaveNum, setBulkWaveNum] = useState("1");
+  const [bulkDate, setBulkDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [bulkResult, setBulkResult] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const contactInstructors = useMemo(() =>
@@ -83,6 +79,9 @@ export default function ContactTab() {
     return list;
   }, [contactInstructors, viewFilter, search, needsFollowup]);
 
+  // 필터 변경 시 선택 초기화
+  useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
+
   const virtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
@@ -90,6 +89,7 @@ export default function ContactTab() {
     overscan: 20,
   });
 
+  /* ── 개별 발송 편집 ── */
   const handleWaveUpdate = async (instructorId: string, waveNumber: number, field: string, value: string) => {
     try {
       const existing = (wavesMap[instructorId] || []).find((w) => w.wave_number === waveNumber);
@@ -99,27 +99,72 @@ export default function ContactTab() {
     } catch { toast.error("업데이트 실패"); }
   };
 
-  const handleStartOutreach = async (i: Instructor) => {
+  /* ── 일괄 발송 기록 ── */
+  const handleBulkWaveApply = async () => {
+    if (selectedIds.size === 0) return;
+    if (!bulkDate && !bulkResult) { toast.error("발송일 또는 결과를 선택하세요."); return; }
+    setBulkLoading(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
-      const res = await fetch(`/api/instructors/${i.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "진행 중", _changed_by: i.assignee, _reason: "발송 시작" }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const updated = await res.json();
-      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: updated });
-      await fetch(`/api/instructors/${i.id}/waves`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wave_number: 1, sent_date: today, result: "" }),
-      });
-      await Promise.all([loadAllWaves(), loadStats()]);
-      toast.success(`${i.name} 발송 시작`);
-    } catch (e: any) { toast.error(e.message); }
+      const ids = Array.from(selectedIds);
+      const waveNum = parseInt(bulkWaveNum);
+      await Promise.all(ids.map(id => {
+        const existing = (wavesMap[id] || []).find(w => w.wave_number === waveNum);
+        return fetch(`/api/instructors/${id}/waves`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wave_number: waveNum,
+            sent_date: bulkDate || existing?.sent_date || null,
+            result: bulkResult || existing?.result || "",
+          }),
+        });
+      }));
+      await loadAllWaves();
+      toast.success(`${ids.length}명 ${bulkWaveNum}차 일괄 업데이트`);
+      setSelectedIds(new Set());
+    } catch { toast.error("일괄 업데이트 실패"); }
+    finally { setBulkLoading(false); }
   };
 
+  /* ── 일괄 발송 시작 (발송 예정 → 진행 중) ── */
+  const handleBulkStartOutreach = async () => {
+    const targets = Array.from(selectedIds).filter(id => {
+      const inst = state.instructors.find(i => i.id === id);
+      return inst?.status === "발송 예정";
+    });
+    if (targets.length === 0) return;
+    setBulkLoading(true);
+    try {
+      const res = await fetch("/api/instructors/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: targets, status: "진행 중", reason: "발송 시작" }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const today = new Date().toISOString().split("T")[0];
+      await Promise.all(targets.map(id =>
+        fetch(`/api/instructors/${id}/waves`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wave_number: 1, sent_date: today, result: "" }),
+        })
+      ));
+      await Promise.all([loadInstructors(), loadAllWaves(), loadStats()]);
+      toast.success(`${targets.length}명 발송 시작`);
+      setSelectedIds(new Set());
+    } catch (e: any) { toast.error(e.message); }
+    finally { setBulkLoading(false); }
+  };
+
+  /* ── 선택 ── */
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => prev.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));
+  };
+
+  /* ── 헬퍼 ── */
   const cnt = (s: string) => contactInstructors.filter((i) => i.status === s).length;
   const getWave = (id: string, n: number) => (wavesMap[id] || []).find((w) => w.wave_number === n);
 
@@ -128,8 +173,7 @@ export default function ContactTab() {
     const d = w.sent_date ? (() => { const p = w.sent_date.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; })() : "";
     const r = w.result || "";
     if (d && r) return `${d} · ${r}`;
-    if (d) return d;
-    return r;
+    return d || r;
   };
 
   const waveColor = (w: OutreachWave | undefined) => {
@@ -147,8 +191,13 @@ export default function ContactTab() {
     setEditingWave({ instructorId, wave, x: rect.left, y: rect.bottom + 4 });
   };
 
+  const readyToSendCount = useMemo(() =>
+    Array.from(selectedIds).filter(id => state.instructors.find(i => i.id === id)?.status === "발송 예정").length,
+  [selectedIds, state.instructors]);
+
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
+      {/* ── 필터 영역 ── */}
       <div className="shrink-0 space-y-3 pb-3">
         <h2 className="text-lg font-semibold">컨택관리</h2>
 
@@ -186,37 +235,65 @@ export default function ContactTab() {
         </div>
       </div>
 
-      {/* 테이블: 헤더+본문 같은 스크롤 영역 */}
+      {/* ── 테이블 ── */}
       <div ref={scrollRef} className="border rounded flex-1 min-h-0 overflow-auto">
-        {/* 헤더 — 본문과 동일한 flex 구조 사용 */}
-        <div className="sticky top-0 z-10 flex bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground" style={{ width: TABLE_W, minWidth: TABLE_W }}>
-          <div className="px-3 py-2 border-r" style={{ width: COL.name }}>이름</div>
-          <div className="px-2 py-2 border-r" style={{ width: COL.status }}>상태</div>
-          <div className="px-2 py-2 border-r" style={{ width: COL.field }}>분야</div>
-          <div className="px-2 py-2 border-r" style={{ width: COL.assignee }}>담당자</div>
-          <div className="px-2 py-2 border-r text-center" style={{ width: COL.wave }}>1차</div>
-          <div className="px-2 py-2 border-r text-center" style={{ width: COL.wave }}>2차</div>
-          <div className="px-2 py-2 border-r text-center" style={{ width: COL.wave }}>3차</div>
-          <div className="px-2 py-2 border-r" style={{ width: COL.final }}>최종</div>
-          <div className="px-2 py-2" style={{ width: COL.action }}></div>
+        {/* 헤더 */}
+        <div
+          className="sticky top-0 z-10 grid items-center bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
+          style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
+        >
+          <div className="px-1 flex justify-center">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 rounded accent-primary cursor-pointer"
+              checked={selectedIds.size === filtered.length && filtered.length > 0}
+              onChange={toggleSelectAll}
+            />
+          </div>
+          <div className="px-3 py-2.5">이름</div>
+          <div className="px-2 py-2.5">상태</div>
+          <div className="px-2 py-2.5">분야</div>
+          <div className="px-2 py-2.5">담당자</div>
+          <div className="px-2 py-2.5 text-center">1차</div>
+          <div className="px-2 py-2.5 text-center">2차</div>
+          <div className="px-2 py-2.5 text-center">3차</div>
+          <div className="px-2 py-2.5">최종</div>
         </div>
 
+        {/* 본문 */}
         {filtered.length === 0 ? (
           <div className="text-center py-12 text-sm text-muted-foreground">해당하는 강사가 없습니다.</div>
         ) : (
-          <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: TABLE_W, minWidth: TABLE_W }}>
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative", minWidth: MIN_W }}>
             {virtualizer.getVirtualItems().map((vRow) => {
               const i = filtered[vRow.index];
-              const idx = vRow.index;
+              const isSelected = selectedIds.has(i.id);
               return (
                 <div
                   key={i.id}
-                  className={`flex border-b text-sm ${idx % 2 === 0 ? "bg-white" : "bg-[#f8f9fa]/50"}`}
-                  style={{ position: "absolute", top: 0, left: 0, height: ROW_H, width: TABLE_W, transform: `translateY(${vRow.start}px)` }}
+                  className={`grid items-center border-b text-sm ${
+                    isSelected ? "bg-blue-50/70" : vRow.index % 2 === 0 ? "bg-white" : "bg-[#fafafa]"
+                  }`}
+                  style={{
+                    position: "absolute", top: 0, left: 0, right: 0,
+                    height: ROW_H,
+                    gridTemplateColumns: GRID,
+                    transform: `translateY(${vRow.start}px)`,
+                  }}
                 >
+                  {/* 체크박스 */}
+                  <div className="px-1 flex justify-center">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded accent-primary cursor-pointer"
+                      checked={isSelected}
+                      onChange={() => toggleSelect(i.id)}
+                    />
+                  </div>
+                  {/* 이름 */}
                   <div
-                    className="px-3 border-r flex items-center font-medium cursor-pointer hover:underline"
-                    style={{ width: COL.name }}
+                    className="px-3 font-medium cursor-pointer hover:underline truncate"
+                    title={i.name}
                     onClick={() => {
                       dispatch({ type: "SET_TAB", tab: "instructors" });
                       setTimeout(() => {
@@ -225,40 +302,33 @@ export default function ContactTab() {
                       }, 50);
                     }}
                   >
-                    <span className="truncate">{i.name}</span>
+                    {i.name}
                   </div>
-                  <div className="px-2 border-r flex items-center" style={{ width: COL.status }}>
-                    <Badge className={`text-xs px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
+                  {/* 상태 */}
+                  <div className="px-2">
+                    <Badge className={`text-xs px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>
+                      {i.status}
+                    </Badge>
                   </div>
-                  <div className="px-2 border-r flex items-center text-muted-foreground" style={{ width: COL.field }}>
-                    <span className="truncate">{i.field || ""}</span>
-                  </div>
-                  <div className="px-2 border-r flex items-center text-muted-foreground" style={{ width: COL.assignee }}>
-                    <span className="truncate">{i.assignee || ""}</span>
-                  </div>
+                  {/* 분야 */}
+                  <div className="px-2 text-muted-foreground truncate" title={i.field || ""}>{i.field || ""}</div>
+                  {/* 담당자 */}
+                  <div className="px-2 text-muted-foreground truncate" title={i.assignee || ""}>{i.assignee || ""}</div>
+                  {/* 1차 2차 3차 */}
                   {[1, 2, 3].map((n) => {
                     const w = getWave(i.id, n);
-                    const text = formatWave(w);
-                    const color = waveColor(w);
                     return (
                       <div
                         key={n}
-                        className={`px-2 border-r flex items-center justify-center cursor-pointer hover:bg-blue-50/60 transition-colors ${color}`}
-                        style={{ width: COL.wave }}
+                        className={`px-2 flex items-center justify-center cursor-pointer hover:bg-blue-50/60 transition-colors rounded-sm ${waveColor(w)}`}
                         onClick={(e) => handleCellClick(e, i.id, n)}
                       >
-                        <span className="text-sm whitespace-nowrap">{text}</span>
+                        <span className="text-sm whitespace-nowrap">{formatWave(w)}</span>
                       </div>
                     );
                   })}
-                  <div className="px-2 border-r flex items-center text-muted-foreground" style={{ width: COL.final }}>
-                    <span className="truncate">{i.final_status || "-"}</span>
-                  </div>
-                  <div className="px-1.5 flex items-center justify-center" style={{ width: COL.action }}>
-                    {i.status === "발송 예정" && (
-                      <Button size="sm" className="h-7 text-xs px-2" onClick={() => handleStartOutreach(i)}>발송</Button>
-                    )}
-                  </div>
+                  {/* 최종 */}
+                  <div className="px-2 text-muted-foreground truncate" title={i.final_status || ""}>{i.final_status || "-"}</div>
                 </div>
               );
             })}
@@ -266,7 +336,51 @@ export default function ContactTab() {
         )}
       </div>
 
-      {/* 발송 편집 팝오버 */}
+      {/* ── 일괄 작업 바 ── */}
+      {selectedIds.size > 0 && (
+        <div className="shrink-0 border-t bg-muted/30 px-4 py-2.5 flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-semibold whitespace-nowrap">{selectedIds.size}명 선택</span>
+          <div className="h-4 w-px bg-border" />
+
+          {/* 발송 차수 일괄 설정 */}
+          <Select value={bulkWaveNum} onValueChange={setBulkWaveNum}>
+            <SelectTrigger className="w-[76px] h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1차</SelectItem>
+              <SelectItem value="2">2차</SelectItem>
+              <SelectItem value="3">3차</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input type="date" className="w-[148px] h-8 text-sm" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
+          <Select value={bulkResult || "_none"} onValueChange={v => setBulkResult(v === "_none" ? "" : v)}>
+            <SelectTrigger className="w-[96px] h-8 text-sm"><SelectValue placeholder="결과" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">미선택</SelectItem>
+              {WAVE_RESULTS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button size="sm" className="h-8 text-sm" onClick={handleBulkWaveApply} disabled={bulkLoading}>
+            {bulkLoading ? "처리 중..." : "일괄 적용"}
+          </Button>
+
+          {/* 발송 예정 → 진행 중 일괄 전환 */}
+          {readyToSendCount > 0 && (
+            <>
+              <div className="h-4 w-px bg-border" />
+              <Button size="sm" className="h-8 text-sm bg-green-600 hover:bg-green-700 text-white" onClick={handleBulkStartOutreach} disabled={bulkLoading}>
+                <Send className="h-3.5 w-3.5 mr-1.5" />발송 시작 ({readyToSendCount}명)
+              </Button>
+            </>
+          )}
+
+          <div className="flex-1" />
+          <Button size="sm" variant="ghost" className="h-8 text-sm text-muted-foreground" onClick={() => setSelectedIds(new Set())}>
+            선택 해제
+          </Button>
+        </div>
+      )}
+
+      {/* ── 발송 편집 팝오버 ── */}
       {editingWave && (
         <WavePopover
           wave={getWave(editingWave.instructorId, editingWave.wave)}
@@ -281,6 +395,7 @@ export default function ContactTab() {
   );
 }
 
+/* ── 발송 편집 팝오버 ── */
 function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
   wave: OutreachWave | undefined;
   waveNumber: number;
