@@ -12,18 +12,19 @@ import {
 import { STATUS_COLORS, WAVE_RESULTS } from "@/lib/constants";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import { toast } from "sonner";
-import { Send, Clock, AlertCircle, Search } from "lucide-react";
+import { Send, Clock, AlertCircle, Search, X } from "lucide-react";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "계약 완료", "보류", "거절"];
 type ViewFilter = "all" | "발송 예정" | "진행 중" | "needs_followup" | "계약 완료" | "보류" | "거절";
 
-const ROW_H = 56;
+const ROW_H = 36;
 
 export default function ContactTab() {
-  const { state, dispatch, loadInstructors, loadStats } = useOutreach();
+  const { state, dispatch, loadStats } = useOutreach();
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [search, setSearch] = useState("");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
+  const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const contactInstructors = useMemo(() =>
@@ -74,7 +75,7 @@ export default function ContactTab() {
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_H,
-    overscan: 15,
+    overscan: 20,
   });
 
   const handleWaveUpdate = async (instructorId: string, waveNumber: number, field: string, value: string) => {
@@ -109,6 +110,30 @@ export default function ContactTab() {
 
   const cnt = (s: string) => contactInstructors.filter((i) => i.status === s).length;
   const getWave = (id: string, n: number) => (wavesMap[id] || []).find((w) => w.wave_number === n);
+
+  const formatWave = (w: OutreachWave | undefined) => {
+    if (!w || (!w.sent_date && !w.result)) return "-";
+    const d = w.sent_date ? (() => { const p = w.sent_date.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; })() : "";
+    const r = w.result || "";
+    if (d && r) return `${d} · ${r}`;
+    if (d) return d;
+    return r;
+  };
+
+  const waveColor = (w: OutreachWave | undefined) => {
+    if (!w?.result) return "";
+    if (w.result === "응답") return "text-green-700 bg-green-50";
+    if (w.result === "거절") return "text-red-600 bg-red-50";
+    if (w.result === "읽씹") return "text-amber-700 bg-amber-50";
+    if (w.result === "무응답") return "text-gray-500 bg-gray-50";
+    return "";
+  };
+
+  const handleCellClick = (e: React.MouseEvent, instructorId: string, wave: number) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setEditingWave({ instructorId, wave, x: rect.left, y: rect.bottom + 4 });
+  };
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
@@ -149,21 +174,21 @@ export default function ContactTab() {
         </div>
       </div>
 
-      {/* 가상화 테이블 */}
+      {/* 테이블 */}
       <div className="border rounded flex-1 min-h-0 flex flex-col">
-        <div className="flex bg-[#f8f9fa] border-b shrink-0 text-xs font-semibold text-muted-foreground" style={{ minWidth: 980 }}>
-          <div className="w-[110px] px-2 py-2 border-r">이름</div>
-          <div className="w-[80px] px-2 py-2 border-r">상태</div>
-          <div className="w-[90px] px-2 py-2 border-r">분야</div>
+        <div className="flex bg-[#f8f9fa] border-b shrink-0 text-xs font-semibold text-muted-foreground">
+          <div className="w-[100px] px-2 py-2 border-r">이름</div>
+          <div className="w-[76px] px-2 py-2 border-r">상태</div>
+          <div className="w-[120px] px-2 py-2 border-r">분야</div>
           <div className="w-[72px] px-2 py-2 border-r">담당자</div>
-          <div className="w-[170px] px-2 py-2 border-r text-center">1차</div>
-          <div className="w-[170px] px-2 py-2 border-r text-center">2차</div>
-          <div className="w-[170px] px-2 py-2 border-r text-center">3차</div>
-          <div className="w-[70px] px-2 py-2 border-r">최종</div>
+          <div className="flex-1 min-w-[100px] px-2 py-2 border-r text-center">1차</div>
+          <div className="flex-1 min-w-[100px] px-2 py-2 border-r text-center">2차</div>
+          <div className="flex-1 min-w-[100px] px-2 py-2 border-r text-center">3차</div>
+          <div className="w-[72px] px-2 py-2 border-r">최종</div>
           <div className="w-[60px] px-2 py-2"></div>
         </div>
 
-        <div ref={scrollRef} className="flex-1 overflow-auto" style={{ minWidth: 980 }}>
+        <div ref={scrollRef} className="flex-1 overflow-auto">
           {filtered.length === 0 ? (
             <div className="text-center py-12 text-sm text-muted-foreground">해당하는 강사가 없습니다.</div>
           ) : (
@@ -178,7 +203,7 @@ export default function ContactTab() {
                     style={{ position: "absolute", top: 0, left: 0, right: 0, height: ROW_H, transform: `translateY(${vRow.start}px)` }}
                   >
                     <div
-                      className="w-[110px] px-2 border-r flex items-center font-medium cursor-pointer hover:underline"
+                      className="w-[100px] px-2 border-r flex items-center font-medium cursor-pointer hover:underline truncate"
                       onClick={() => {
                         dispatch({ type: "SET_TAB", tab: "instructors" });
                         setTimeout(() => {
@@ -189,28 +214,29 @@ export default function ContactTab() {
                     >
                       {i.name}
                     </div>
-                    <div className="w-[80px] px-2 border-r flex items-center">
+                    <div className="w-[76px] px-2 border-r flex items-center">
                       <Badge className={`text-xs px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
                     </div>
-                    <div className="w-[90px] px-2 border-r flex items-center text-muted-foreground truncate">{i.field}</div>
+                    <div className="w-[120px] px-2 border-r flex items-center text-muted-foreground truncate">
+                      <span className="truncate">{i.field || ""}</span>
+                    </div>
                     <div className="w-[72px] px-2 border-r flex items-center text-muted-foreground">{i.assignee}</div>
                     {[1, 2, 3].map((n) => {
                       const w = getWave(i.id, n);
+                      const text = formatWave(w);
+                      const color = waveColor(w);
                       return (
-                        <div key={n} className="w-[170px] px-1.5 border-r flex flex-col items-center justify-center gap-1">
-                          <Input type="date" className="w-[120px] h-6 text-xs" value={w?.sent_date || ""} onChange={(e) => handleWaveUpdate(i.id, n, "sent_date", e.target.value)} />
-                          <Select value={w?.result || "_none"} onValueChange={(v) => handleWaveUpdate(i.id, n, "result", v === "_none" ? "" : v)}>
-                            <SelectTrigger className="w-[90px] h-6 text-xs"><SelectValue placeholder="-" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="_none">-</SelectItem>
-                              {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
+                        <div
+                          key={n}
+                          className={`flex-1 min-w-[100px] px-2 border-r flex items-center justify-center cursor-pointer hover:bg-blue-50/60 transition-colors ${color}`}
+                          onClick={(e) => handleCellClick(e, i.id, n)}
+                        >
+                          <span className="text-sm truncate">{text}</span>
                         </div>
                       );
                     })}
-                    <div className="w-[70px] px-2 border-r flex items-center text-muted-foreground">{i.final_status || "-"}</div>
-                    <div className="w-[60px] px-1.5 flex items-center">
+                    <div className="w-[72px] px-2 border-r flex items-center text-muted-foreground">{i.final_status || "-"}</div>
+                    <div className="w-[60px] px-1.5 flex items-center justify-center">
                       {i.status === "발송 예정" && (
                         <Button size="sm" className="h-7 text-xs px-2" onClick={() => handleStartOutreach(i)}>
                           <Send className="h-3 w-3 mr-0.5" />발송
@@ -224,6 +250,98 @@ export default function ContactTab() {
           )}
         </div>
       </div>
+
+      {/* 발송 편집 팝오버 */}
+      {editingWave && (
+        <WavePopover
+          wave={getWave(editingWave.instructorId, editingWave.wave)}
+          waveNumber={editingWave.wave}
+          x={editingWave.x}
+          y={editingWave.y}
+          onUpdate={(field, value) => handleWaveUpdate(editingWave.instructorId, editingWave.wave, field, value)}
+          onClose={() => setEditingWave(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
+  wave: OutreachWave | undefined;
+  waveNumber: number;
+  x: number; y: number;
+  onUpdate: (field: string, value: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [date, setDate] = useState(wave?.sent_date || "");
+  const [result, setResult] = useState(wave?.result || "");
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  // 화면 밖으로 나가지 않도록 보정
+  const popW = 260;
+  const popH = 180;
+  const adjustedX = Math.min(x, window.innerWidth - popW - 16);
+  const adjustedY = y + popH > window.innerHeight ? y - popH - ROW_H - 8 : y;
+
+  const handleSave = async (field: string, value: string) => {
+    setSaving(true);
+    await onUpdate(field, value);
+    setSaving(false);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-50 bg-white border rounded-lg shadow-lg p-4 space-y-3"
+      style={{ left: adjustedX, top: adjustedY, width: popW }}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold">{waveNumber}차 발송</p>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs text-muted-foreground">발송일</label>
+          <Input
+            type="date"
+            className="h-8 text-sm"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            onBlur={() => { if (date !== (wave?.sent_date || "")) handleSave("sent_date", date); }}
+          />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground">결과</label>
+          <Select
+            value={result || "_none"}
+            onValueChange={(v) => {
+              const val = v === "_none" ? "" : v;
+              setResult(val);
+              handleSave("result", val);
+            }}
+          >
+            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="선택" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_none">미선택</SelectItem>
+              {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {saving && <p className="text-xs text-muted-foreground">저장 중...</p>}
     </div>
   );
 }
