@@ -34,6 +34,7 @@ export default function ContactTab() {
   const [bulkResult, setBulkResult] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef({ active: false, select: true });
 
   const contactInstructors = useMemo(() =>
     state.instructors.filter((i) => CONTACT_STATUSES.includes(i.status as InstructorStatus)),
@@ -81,6 +82,13 @@ export default function ContactTab() {
 
   // 필터 변경 시 선택 초기화
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
+
+  // 드래그 선택 종료 (전역 mouseup)
+  useEffect(() => {
+    const end = () => { dragRef.current.active = false; };
+    document.addEventListener("mouseup", end);
+    return () => document.removeEventListener("mouseup", end);
+  }, []);
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -164,6 +172,27 @@ export default function ContactTab() {
     setSelectedIds(prev => prev.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));
   };
 
+  /* ── 드래그 선택 ── */
+  const handleDragStart = (id: string, e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); // 텍스트 선택 방지
+    const willSelect = !selectedIds.has(id);
+    dragRef.current = { active: true, select: willSelect };
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (willSelect) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+  const handleDragEnter = (id: string) => {
+    if (!dragRef.current.active) return;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (dragRef.current.select) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
   /* ── 헬퍼 ── */
   const cnt = (s: string) => contactInstructors.filter((i) => i.status === s).length;
   const getWave = (id: string, n: number) => (wavesMap[id] || []).find((w) => w.wave_number === n);
@@ -242,13 +271,9 @@ export default function ContactTab() {
           className="sticky top-0 z-10 grid items-center bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
           style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
         >
-          <div className="px-1 flex justify-center">
-            <input
-              type="checkbox"
-              className="h-3.5 w-3.5 rounded accent-primary cursor-pointer"
-              checked={selectedIds.size === filtered.length && filtered.length > 0}
-              onChange={toggleSelectAll}
-            />
+          <div className="px-1 flex justify-center cursor-pointer" onClick={toggleSelectAll}>
+            <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
+              checked={selectedIds.size === filtered.length && filtered.length > 0} readOnly />
           </div>
           <div className="px-3 py-2.5">이름</div>
           <div className="px-2 py-2.5">상태</div>
@@ -280,15 +305,13 @@ export default function ContactTab() {
                     gridTemplateColumns: GRID,
                     transform: `translateY(${vRow.start}px)`,
                   }}
+                  onMouseEnter={() => handleDragEnter(i.id)}
                 >
-                  {/* 체크박스 */}
-                  <div className="px-1 flex justify-center">
-                    <input
-                      type="checkbox"
-                      className="h-3.5 w-3.5 rounded accent-primary cursor-pointer"
-                      checked={isSelected}
-                      onChange={() => toggleSelect(i.id)}
-                    />
+                  {/* 체크박스 — 드래그 시작점 */}
+                  <div className="px-1 flex justify-center cursor-pointer"
+                       onMouseDown={(e) => handleDragStart(i.id, e)}>
+                    <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
+                      checked={isSelected} readOnly />
                   </div>
                   {/* 이름 */}
                   <div
