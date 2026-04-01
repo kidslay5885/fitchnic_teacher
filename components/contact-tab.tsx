@@ -1,24 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { STATUS_COLORS, WAVE_RESULTS } from "@/lib/constants";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
@@ -28,11 +17,14 @@ import { Send, Clock, AlertCircle, Search } from "lucide-react";
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "계약 완료", "보류", "거절"];
 type ViewFilter = "all" | "발송 예정" | "진행 중" | "needs_followup" | "계약 완료" | "보류" | "거절";
 
+const ROW_H = 52;
+
 export default function ContactTab() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [search, setSearch] = useState("");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const contactInstructors = useMemo(() =>
     state.instructors.filter((i) => CONTACT_STATUSES.includes(i.status as InstructorStatus)),
@@ -78,6 +70,13 @@ export default function ContactTab() {
     return list;
   }, [contactInstructors, viewFilter, search, needsFollowup]);
 
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 15,
+  });
+
   const handleWaveUpdate = async (instructorId: string, waveNumber: number, field: string, value: string) => {
     try {
       const existing = (wavesMap[instructorId] || []).find((w) => w.wave_number === waveNumber);
@@ -112,90 +111,94 @@ export default function ContactTab() {
   const getWave = (id: string, n: number) => (wavesMap[id] || []).find((w) => w.wave_number === n);
 
   return (
-    <div className="space-y-3">
-      <h2 className="text-base font-semibold">컨택관리</h2>
+    <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
+      <div className="shrink-0 space-y-2 pb-2">
+        <h2 className="text-base font-semibold">컨택관리</h2>
 
-      {/* 필터 칩 */}
-      <div className="flex gap-1.5 flex-wrap">
-        {([
-          { key: "all" as ViewFilter, label: `전체 (${contactInstructors.length})` },
-          { key: "발송 예정" as ViewFilter, label: `발송 예정 (${cnt("발송 예정")})`, icon: Send },
-          { key: "진행 중" as ViewFilter, label: `진행 중 (${cnt("진행 중")})`, icon: Clock },
-          { key: "needs_followup" as ViewFilter, label: `후속 필요 (${needsFollowup.length})`, icon: AlertCircle, highlight: needsFollowup.length > 0 },
-          { key: "계약 완료" as ViewFilter, label: `계약 (${cnt("계약 완료")})` },
-        ]).map((f) => (
-          <button
-            key={f.key}
-            onClick={() => setViewFilter(f.key)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-              viewFilter === f.key
-                ? "border-primary/50 bg-primary/10 text-primary"
-                : f.highlight
-                ? "border-orange-300 bg-orange-50 text-orange-700"
-                : "border-transparent bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {f.icon && <f.icon className="h-3 w-3" />}
-            {f.label}
-          </button>
-        ))}
+        <div className="flex gap-1.5 flex-wrap">
+          {([
+            { key: "all" as ViewFilter, label: `전체 (${contactInstructors.length})` },
+            { key: "발송 예정" as ViewFilter, label: `발송 예정 (${cnt("발송 예정")})`, icon: Send },
+            { key: "진행 중" as ViewFilter, label: `진행 중 (${cnt("진행 중")})`, icon: Clock },
+            { key: "needs_followup" as ViewFilter, label: `후속 필요 (${needsFollowup.length})`, icon: AlertCircle, highlight: needsFollowup.length > 0 },
+            { key: "계약 완료" as ViewFilter, label: `계약 (${cnt("계약 완료")})` },
+          ]).map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setViewFilter(f.key)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                viewFilter === f.key
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : f.highlight
+                  ? "border-orange-300 bg-orange-50 text-orange-700"
+                  : "border-transparent bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {f.icon && <f.icon className="h-3 w-3" />}
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="relative max-w-xs">
+            <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Input placeholder="이름, 분야, 담당자..." className="h-7 text-xs pl-7" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <span className="text-xs text-muted-foreground">{filtered.length}명</span>
+        </div>
       </div>
 
-      {/* 검색 */}
-      <div className="relative max-w-xs">
-        <Search className="absolute left-2 top-1.5 h-3.5 w-3.5 text-muted-foreground" />
-        <Input placeholder="이름, 분야, 담당자..." className="h-7 text-xs pl-7" value={search} onChange={(e) => setSearch(e.target.value)} />
-      </div>
+      {/* 가상화 테이블 */}
+      <div className="border rounded flex-1 min-h-0 flex flex-col">
+        <div className="flex bg-[#f8f9fa] border-b shrink-0 text-[11px] font-medium text-muted-foreground" style={{ minWidth: 900 }}>
+          <div className="w-[100px] px-1.5 py-1.5 border-r">이름</div>
+          <div className="w-[72px] px-1.5 py-1.5 border-r">상태</div>
+          <div className="w-[80px] px-1.5 py-1.5 border-r">분야</div>
+          <div className="w-[60px] px-1.5 py-1.5 border-r">담당자</div>
+          <div className="w-[160px] px-1.5 py-1.5 border-r text-center">1차</div>
+          <div className="w-[160px] px-1.5 py-1.5 border-r text-center">2차</div>
+          <div className="w-[160px] px-1.5 py-1.5 border-r text-center">3차</div>
+          <div className="w-[60px] px-1.5 py-1.5 border-r">최종</div>
+          <div className="w-[56px] px-1.5 py-1.5"></div>
+        </div>
 
-      <span className="text-xs text-muted-foreground">{filtered.length}명</span>
-
-      {/* 테이블 */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="py-1.5 text-xs">이름</TableHead>
-              <TableHead className="py-1.5 text-xs">상태</TableHead>
-              <TableHead className="py-1.5 text-xs">분야</TableHead>
-              <TableHead className="py-1.5 text-xs">담당자</TableHead>
-              <TableHead className="py-1.5 text-xs text-center">1차</TableHead>
-              <TableHead className="py-1.5 text-xs text-center">2차</TableHead>
-              <TableHead className="py-1.5 text-xs text-center">3차</TableHead>
-              <TableHead className="py-1.5 text-xs">최종</TableHead>
-              <TableHead className="py-1.5 text-xs w-16"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="text-center py-6 text-xs text-muted-foreground">해당하는 강사가 없습니다.</TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((i, idx) => (
-                <TableRow key={i.id} className={idx % 2 === 1 ? "bg-muted/20" : ""}>
-                  <TableCell
-                    className="py-1 text-xs font-medium cursor-pointer hover:underline"
-                    onClick={() => {
-                      dispatch({ type: "SET_TAB", tab: "instructors" });
-                      setTimeout(() => {
-                        dispatch({ type: "SET_FILTER", filters: { status: "전체", search: "" } });
-                        dispatch({ type: "SELECT_INSTRUCTOR", id: i.id });
-                      }, 50);
-                    }}
+        <div ref={scrollRef} className="flex-1 overflow-auto" style={{ minWidth: 900 }}>
+          {filtered.length === 0 ? (
+            <div className="text-center py-8 text-xs text-muted-foreground">해당하는 강사가 없습니다.</div>
+          ) : (
+            <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+              {virtualizer.getVirtualItems().map((vRow) => {
+                const i = filtered[vRow.index];
+                const idx = vRow.index;
+                return (
+                  <div
+                    key={i.id}
+                    className={`flex border-b text-xs ${idx % 2 === 0 ? "bg-white" : "bg-[#f8f9fa]/50"}`}
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, height: ROW_H, transform: `translateY(${vRow.start}px)` }}
                   >
-                    {i.name}
-                  </TableCell>
-                  <TableCell className="py-1">
-                    <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
-                  </TableCell>
-                  <TableCell className="py-1 text-xs text-muted-foreground">{i.field}</TableCell>
-                  <TableCell className="py-1 text-xs text-muted-foreground">{i.assignee}</TableCell>
-                  {[1, 2, 3].map((n) => {
-                    const w = getWave(i.id, n);
-                    return (
-                      <TableCell key={n} className="py-1 text-center" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Input type="date" className="w-[110px] h-6 text-[10px]" value={w?.sent_date || ""} onChange={(e) => handleWaveUpdate(i.id, n, "sent_date", e.target.value)} />
+                    <div
+                      className="w-[100px] px-1.5 border-r flex items-center font-medium cursor-pointer hover:underline"
+                      onClick={() => {
+                        dispatch({ type: "SET_TAB", tab: "instructors" });
+                        setTimeout(() => {
+                          dispatch({ type: "SET_FILTER", filters: { status: "전체", search: "" } });
+                          dispatch({ type: "SELECT_INSTRUCTOR", id: i.id });
+                        }, 50);
+                      }}
+                    >
+                      {i.name}
+                    </div>
+                    <div className="w-[72px] px-1.5 border-r flex items-center">
+                      <Badge className={`text-[10px] px-1 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
+                    </div>
+                    <div className="w-[80px] px-1.5 border-r flex items-center text-muted-foreground truncate">{i.field}</div>
+                    <div className="w-[60px] px-1.5 border-r flex items-center text-muted-foreground">{i.assignee}</div>
+                    {[1, 2, 3].map((n) => {
+                      const w = getWave(i.id, n);
+                      return (
+                        <div key={n} className="w-[160px] px-1 border-r flex flex-col items-center justify-center gap-0.5">
+                          <Input type="date" className="w-[110px] h-5 text-[10px]" value={w?.sent_date || ""} onChange={(e) => handleWaveUpdate(i.id, n, "sent_date", e.target.value)} />
                           <Select value={w?.result || "_none"} onValueChange={(v) => handleWaveUpdate(i.id, n, "result", v === "_none" ? "" : v)}>
                             <SelectTrigger className="w-[80px] h-5 text-[10px]"><SelectValue placeholder="-" /></SelectTrigger>
                             <SelectContent>
@@ -204,22 +207,22 @@ export default function ContactTab() {
                             </SelectContent>
                           </Select>
                         </div>
-                      </TableCell>
-                    );
-                  })}
-                  <TableCell className="py-1 text-xs text-muted-foreground">{i.final_status || "-"}</TableCell>
-                  <TableCell className="py-1">
-                    {i.status === "발송 예정" && (
-                      <Button size="sm" className="h-6 text-[10px] px-2" onClick={() => handleStartOutreach(i)}>
-                        <Send className="h-3 w-3 mr-0.5" />발송
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                      );
+                    })}
+                    <div className="w-[60px] px-1.5 border-r flex items-center text-muted-foreground">{i.final_status || "-"}</div>
+                    <div className="w-[56px] px-1 flex items-center">
+                      {i.status === "발송 예정" && (
+                        <Button size="sm" className="h-5 text-[10px] px-1.5" onClick={() => handleStartOutreach(i)}>
+                          <Send className="h-2.5 w-2.5 mr-0.5" />발송
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
