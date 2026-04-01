@@ -7,15 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { STATUSES, STATUS_COLORS } from "@/lib/constants";
 import type { InstructorStatus } from "@/lib/types";
 import {
-  Users,
-  Send,
-  MessageSquare,
-  Calendar,
-  CheckCircle,
-  ArrowRight,
-  FileText,
-  Clock,
-  UserCheck,
+  Users, Send, MessageSquare, Calendar, CheckCircle,
+  ArrowRight, FileText, Clock, UserCheck,
 } from "lucide-react";
 
 export default function DashboardTab() {
@@ -23,21 +16,21 @@ export default function DashboardTab() {
   const stats = state.stats;
 
   const actionItems = useMemo(() => {
-    const items: { label: string; count: number; icon: any; color: string; tab: string; desc: string }[] = [];
+    const items: { label: string; count: number; icon: any; color: string; tab: string }[] = [];
     const c = (s: string) => state.instructors.filter((i) => i.status === s).length;
 
     if (c("미검토") > 0)
-      items.push({ label: "미검토", count: c("미검토"), icon: UserCheck, color: "border-l-gray-400 bg-gray-50", tab: "instructors", desc: "검토 필요" });
+      items.push({ label: "미검토", count: c("미검토"), icon: UserCheck, color: "border-l-gray-400 bg-gray-50", tab: "instructors" });
     if (c("발송 예정") > 0)
-      items.push({ label: "발송 예정", count: c("발송 예정"), icon: Send, color: "border-l-blue-500 bg-blue-50", tab: "contact", desc: "발송 대기" });
+      items.push({ label: "발송 예정", count: c("발송 예정"), icon: Send, color: "border-l-blue-500 bg-blue-50", tab: "contact" });
     const prog = state.instructors.filter((i) => i.status === "진행 중" && !i.final_status).length;
     if (prog > 0)
-      items.push({ label: "응답 대기", count: prog, icon: Clock, color: "border-l-indigo-500 bg-indigo-50", tab: "contact", desc: "후속 조치 필요" });
+      items.push({ label: "응답 대기", count: prog, icon: Clock, color: "border-l-indigo-500 bg-indigo-50", tab: "contact" });
     const meet = state.instructors.filter((i) => i.meeting_date).length;
     if (meet > 0)
-      items.push({ label: "미팅 예정", count: meet, icon: Calendar, color: "border-l-purple-500 bg-purple-50", tab: "meeting", desc: "미팅 관리" });
+      items.push({ label: "미팅 예정", count: meet, icon: Calendar, color: "border-l-purple-500 bg-purple-50", tab: "meeting" });
     if (stats && stats.pendingApplications > 0)
-      items.push({ label: "지원서 미확인", count: stats.pendingApplications, icon: FileText, color: "border-l-orange-500 bg-orange-50", tab: "applications", desc: "확인 필요" });
+      items.push({ label: "지원서 미확인", count: stats.pendingApplications, icon: FileText, color: "border-l-orange-500 bg-orange-50", tab: "applications" });
 
     return items;
   }, [state.instructors, stats]);
@@ -123,42 +116,22 @@ export default function DashboardTab() {
         </CardContent>
       </Card>
 
-      {/* 상태 분포 + 담당자 */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardHeader className="py-2.5 px-4">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">상태별</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3">
-            <div className="space-y-1">
-              {STATUSES.map((s) => (
-                <div key={s} className="flex items-center justify-between py-1">
-                  <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[s]}`}>{s}</Badge>
-                  <span className="text-sm font-semibold tabular-nums">{stats.byStatus[s] || 0}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="py-2.5 px-4">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">담당자별</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3">
-            <div className="space-y-1">
-              {Object.entries(stats.byAssignee)
-                .sort(([, a], [, b]) => b - a)
-                .map(([name, count]) => (
-                  <div key={name} className="flex items-center justify-between py-1">
-                    <span className="text-xs">{name}</span>
-                    <span className="text-sm font-semibold tabular-nums">{count}</span>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* 상태별 분포 */}
+      <Card>
+        <CardHeader className="py-2.5 px-4">
+          <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">상태별 분포</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
+          <div className="grid grid-cols-4 gap-x-4 gap-y-1">
+            {STATUSES.map((s) => (
+              <div key={s} className="flex items-center justify-between py-1">
+                <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[s]}`}>{s}</Badge>
+                <span className="text-sm font-semibold tabular-nums">{stats.byStatus[s] || 0}</span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
