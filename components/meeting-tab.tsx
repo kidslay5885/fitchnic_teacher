@@ -10,14 +10,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { STATUS_COLORS } from "@/lib/constants";
 import type { Instructor, InstructorStatus } from "@/lib/types";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Save, ExternalLink, MessageSquare, Plus, X, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, ExternalLink, MessageSquare, Plus, X } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function MeetingTab() {
   const { state, dispatch } = useOutreach();
   const [monthOffset, setMonthOffset] = useState(0);
-  const [editingMemo, setEditingMemo] = useState<{ id: string; memo: string } | null>(null);
+  const [editingMeeting, setEditingMeeting] = useState<{ id: string; name: string; date: string; time: string; memo: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const meetings = useMemo(() => state.instructors.filter((i) => i.meeting_date), [state.instructors]);
@@ -51,17 +51,29 @@ export default function MeetingTab() {
 
   const isToday = (date: Date | null) => date?.toDateString() === now.toDateString();
 
-  const handleSaveMemo = async () => {
-    if (!editingMemo) return;
+  const parseMeetingDate = (md: string) => {
+    const dateMatch = md.match(/(\d{4}-\d{2}-\d{2})/);
+    const timeMatch = md.match(/(\d{1,2}:\d{2})/);
+    return { date: dateMatch?.[1] || "", time: timeMatch?.[1] || "" };
+  };
+
+  const openEditMeeting = (i: Instructor) => {
+    const { date, time } = parseMeetingDate(i.meeting_date || "");
+    setEditingMeeting({ id: i.id, name: i.name, date, time, memo: i.meeting_memo || "" });
+  };
+
+  const handleSaveMeeting = async () => {
+    if (!editingMeeting) return;
+    const meetingDate = editingMeeting.time ? `${editingMeeting.date} ${editingMeeting.time}` : editingMeeting.date;
     try {
-      const res = await fetch(`/api/instructors/${editingMemo.id}`, {
+      const res = await fetch(`/api/instructors/${editingMeeting.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meeting_memo: editingMemo.memo }),
+        body: JSON.stringify({ meeting_date: meetingDate, meeting_memo: editingMeeting.memo }),
       });
       if (!res.ok) throw new Error("Failed");
       dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
-      setEditingMemo(null);
-      toast.success("메모 저장 완료");
+      setEditingMeeting(null);
+      toast.success("미팅 수정 완료");
     } catch { toast.error("저장 실패"); }
   };
 
@@ -136,7 +148,7 @@ export default function MeetingTab() {
                           return (
                             <button
                               key={mt.id}
-                              onClick={() => setEditingMemo({ id: mt.id, memo: mt.meeting_memo || "" })}
+                              onClick={() => openEditMeeting(mt)}
                               className="w-full text-left rounded bg-blue-100 border border-blue-200 px-1.5 py-0.5 text-[11px] hover:bg-blue-200 transition-colors truncate"
                             >
                               <span className="font-medium text-blue-900">{mt.name}</span>
@@ -192,7 +204,7 @@ export default function MeetingTab() {
                   </td>
                   <td className="px-3 py-2 text-center">
                     <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => setEditingMemo({ id: i.id, memo: i.meeting_memo || "" })} className="text-xs text-primary hover:underline">메모</button>
+                      <button onClick={() => openEditMeeting(i)} className="text-xs text-primary hover:underline">수정</button>
                       <button onClick={() => handleRemoveMeeting(i.id, i.name)} className="text-xs text-red-500 hover:underline">삭제</button>
                     </div>
                   </td>
@@ -225,16 +237,32 @@ export default function MeetingTab() {
         />
       )}
 
-      {/* 메모 수정 모달 */}
-      {editingMemo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingMemo(null)}>
-          <Card className="w-[400px]" onClick={(e) => e.stopPropagation()}>
-            <CardContent className="p-5 space-y-3">
-              <p className="text-sm font-semibold">미팅 메모 수정</p>
-              <Textarea value={editingMemo.memo} onChange={(e) => setEditingMemo({ ...editingMemo, memo: e.target.value })} rows={4} autoFocus className="text-sm" />
+      {/* 미팅 수정 모달 */}
+      {editingMeeting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingMeeting(null)}>
+          <Card className="w-[440px]" onClick={(e) => e.stopPropagation()}>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">{editingMeeting.name} 미팅 수정</p>
+                <button onClick={() => setEditingMeeting(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
+                  <Input type="date" className="h-9 text-sm" value={editingMeeting.date} onChange={(e) => setEditingMeeting({ ...editingMeeting, date: e.target.value })} />
+                </div>
+                <div className="w-[120px]">
+                  <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
+                  <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">메모</label>
+                <Textarea className="text-sm" rows={3} value={editingMeeting.memo} onChange={(e) => setEditingMeeting({ ...editingMeeting, memo: e.target.value })} autoFocus />
+              </div>
               <div className="flex gap-2">
-                <Button size="sm" className="h-8 text-sm" onClick={handleSaveMemo}><Save className="h-3.5 w-3.5 mr-1" />저장</Button>
-                <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => setEditingMemo(null)}>취소</Button>
+                <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSaveMeeting}><Save className="h-3.5 w-3.5 mr-1" />저장</Button>
+                <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => setEditingMeeting(null)}>취소</Button>
               </div>
             </CardContent>
           </Card>
