@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { STATUSES, STATUS_COLORS, ASSIGNEES, SOURCES } from "@/lib/constants";
+import { STATUSES, STATUS_COLORS } from "@/lib/constants";
 import type { Instructor, InstructorStatus } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
@@ -35,9 +35,6 @@ export default function InstructorsTab() {
     return state.instructors.filter((i) => {
       const f = state.filters;
       if (f.status !== "전체" && i.status !== f.status) return false;
-      if (f.assignee && i.assignee !== f.assignee) return false;
-      if (f.source !== "전체" && i.source !== f.source) return false;
-      if (f.field && !i.field?.includes(f.field)) return false;
       if (f.search) {
         const q = f.search.toLowerCase();
         return (
@@ -118,20 +115,6 @@ export default function InstructorsTab() {
           <SelectContent>
             <SelectItem value="전체">상태: 전체</SelectItem>
             {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={state.filters.assignee || "_all"} onValueChange={(v) => dispatch({ type: "SET_FILTER", filters: { assignee: v === "_all" ? "" : v } })}>
-          <SelectTrigger className="w-[110px] h-8 text-sm"><SelectValue placeholder="담당자" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="_all">담당자: 전체</SelectItem>
-            {ASSIGNEES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={state.filters.source} onValueChange={(v) => dispatch({ type: "SET_FILTER", filters: { source: v as any } })}>
-          <SelectTrigger className="w-[110px] h-8 text-sm"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="전체">출처: 전체</SelectItem>
-            {SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">{sorted.length}명</span>
