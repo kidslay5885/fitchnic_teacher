@@ -10,7 +10,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { STATUS_COLORS, WAVE_RESULTS } from "@/lib/constants";
+import { getNextStatuses, requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
+import InstructorDetail from "@/components/instructor-detail";
 import { toast } from "sonner";
 import { Send, Clock, AlertCircle, Search, X } from "lucide-react";
 
@@ -18,9 +20,17 @@ const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "�
 type ViewFilter = "all" | "발송 예정" | "진행 중" | "needs_followup" | "계약 완료" | "보류" | "거절";
 
 const ROW_H = 40;
-// CSS Grid — 가변 컬럼으로 화면 전체 사용
 const GRID = "36px 1.5fr 88px 1fr 76px 1fr 1fr 1fr 88px";
 const MIN_W = 820;
+
+// 상태별 행 배경색 (연한 틴트)
+const ROW_BG: Record<string, string> = {
+  "발송 예정": "bg-blue-50/70 hover:bg-blue-100/50",
+  "진행 중": "bg-indigo-50/60 hover:bg-indigo-100/50",
+  "계약 완료": "bg-green-50/60 hover:bg-green-100/50",
+  보류: "bg-orange-50/60 hover:bg-orange-100/50",
+  거절: "bg-rose-50/60 hover:bg-rose-100/50",
+};
 
 export default function ContactTab() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
@@ -28,6 +38,8 @@ export default function ContactTab() {
   const [search, setSearch] = useState("");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
   const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
+  const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkWaveNum, setBulkWaveNum] = useState("1");
   const [bulkDate, setBulkDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -84,10 +96,8 @@ export default function ContactTab() {
     return list;
   }, [contactInstructors, viewFilter, search, needsFollowup]);
 
-  // 필터 변경 시 선택 초기화
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
-  // 드래그 선택 종료 (전역 mouseup)
   useEffect(() => {
     const end = () => { dragRef.current.active = false; };
     document.addEventListener("mouseup", end);
@@ -109,6 +119,24 @@ export default function ContactTab() {
       await fetch(`/api/instructors/${instructorId}/waves`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       await loadAllWaves();
     } catch { toast.error("업데이트 실패"); }
+  };
+
+  /* ── 개별 상태 변경 ── */
+  const handleStatusChange = async (instructorId: string, newStatus: InstructorStatus, reason: string) => {
+    try {
+      const inst = state.instructors.find(i => i.id === instructorId);
+      const res = await fetch(`/api/instructors/${instructorId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, _changed_by: inst?.assignee || "", _reason: reason }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const updated = await res.json();
+      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: updated });
+      await loadStats();
+      toast.success(`${inst?.name} → ${newStatus}`);
+      setEditingStatus(null);
+    } catch (e: any) { toast.error(e.message); }
   };
 
   /* ── 일괄 발송 기록 ── */
@@ -138,7 +166,7 @@ export default function ContactTab() {
     finally { setBulkLoading(false); }
   };
 
-  /* ── 일괄 발송 시작 (발송 예정 → 진행 중) ── */
+  /* ── 일괄 발송 시작 ── */
   const handleBulkStartOutreach = async () => {
     const targets = Array.from(selectedIds).filter(id => {
       const inst = state.instructors.find(i => i.id === id);
@@ -168,18 +196,16 @@ export default function ContactTab() {
     finally { setBulkLoading(false); }
   };
 
-  /* ── 선택 ── */
+  /* ── 선택 / 드래그 ── */
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
   const toggleSelectAll = () => {
     setSelectedIds(prev => prev.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));
   };
-
-  /* ── 드래그 선택 ── */
   const handleDragStart = (id: string, e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    e.preventDefault(); // 텍스트 선택 방지
+    e.preventDefault();
     const willSelect = !selectedIds.has(id);
     dragRef.current = { active: true, select: willSelect };
     setSelectedIds(prev => {
@@ -224,9 +250,17 @@ export default function ContactTab() {
     setEditingWave({ instructorId, wave, x: rect.left, y: rect.bottom + 4 });
   };
 
+  const handleStatusClick = (e: React.MouseEvent, instructor: Instructor) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setEditingStatus({ instructor, x: rect.left, y: rect.bottom + 4 });
+  };
+
   const readyToSendCount = useMemo(() =>
     Array.from(selectedIds).filter(id => state.instructors.find(i => i.id === id)?.status === "발송 예정").length,
   [selectedIds, state.instructors]);
+
+  const detailInstructor = detailId ? state.instructors.find(i => i.id === detailId) : null;
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
@@ -297,12 +331,11 @@ export default function ContactTab() {
             {virtualizer.getVirtualItems().map((vRow) => {
               const i = filtered[vRow.index];
               const isSelected = selectedIds.has(i.id);
+              const rowBg = isSelected ? "bg-blue-100/70" : ROW_BG[i.status] || (vRow.index % 2 === 0 ? "bg-white" : "bg-[#fafafa]");
               return (
                 <div
                   key={i.id}
-                  className={`grid items-center border-b text-sm ${
-                    isSelected ? "bg-blue-50/70" : vRow.index % 2 === 0 ? "bg-white" : "bg-[#fafafa]"
-                  }`}
+                  className={`grid items-center border-b text-sm transition-colors ${rowBg}`}
                   style={{
                     position: "absolute", top: 0, left: 0, right: 0,
                     height: ROW_H,
@@ -311,29 +344,23 @@ export default function ContactTab() {
                   }}
                   onMouseEnter={() => handleDragEnter(i.id)}
                 >
-                  {/* 체크박스 — 드래그 시작점 */}
+                  {/* 체크박스 */}
                   <div className="px-1 flex justify-center cursor-pointer"
                        onMouseDown={(e) => handleDragStart(i.id, e)}>
                     <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
                       checked={isSelected} readOnly />
                   </div>
-                  {/* 이름 */}
+                  {/* 이름 — 컨택관리 내 상세 패널 열기 */}
                   <div
                     className="px-3 font-medium cursor-pointer hover:underline truncate"
                     title={i.name}
-                    onClick={() => {
-                      dispatch({ type: "SET_TAB", tab: "instructors" });
-                      setTimeout(() => {
-                        dispatch({ type: "SET_FILTER", filters: { status: "전체", search: "" } });
-                        dispatch({ type: "SELECT_INSTRUCTOR", id: i.id });
-                      }, 50);
-                    }}
+                    onClick={() => setDetailId(i.id)}
                   >
                     {i.name}
                   </div>
-                  {/* 상태 */}
-                  <div className="px-2">
-                    <Badge className={`text-xs px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>
+                  {/* 상태 — 클릭으로 변경 */}
+                  <div className="px-2 cursor-pointer" onClick={(e) => handleStatusClick(e, i)}>
+                    <Badge className={`text-xs px-1.5 py-0 whitespace-nowrap cursor-pointer hover:ring-2 hover:ring-primary/30 transition ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>
                       {i.status}
                     </Badge>
                   </div>
@@ -347,7 +374,7 @@ export default function ContactTab() {
                     return (
                       <div
                         key={n}
-                        className={`px-2 flex items-center justify-center cursor-pointer hover:bg-blue-50/60 transition-colors rounded-sm ${waveColor(w)}`}
+                        className={`px-2 flex items-center justify-center cursor-pointer hover:brightness-95 transition-colors rounded-sm ${waveColor(w)}`}
                         onClick={(e) => handleCellClick(e, i.id, n)}
                       >
                         <span className="text-sm whitespace-nowrap">{formatWave(w)}</span>
@@ -368,8 +395,6 @@ export default function ContactTab() {
         <div className="shrink-0 border-t bg-muted/30 px-4 py-2.5 flex items-center gap-3 flex-wrap">
           <span className="text-sm font-semibold whitespace-nowrap">{selectedIds.size}명 선택</span>
           <div className="h-4 w-px bg-border" />
-
-          {/* 발송 차수 일괄 설정 */}
           <Select value={bulkWaveNum} onValueChange={setBulkWaveNum}>
             <SelectTrigger className="w-[76px] h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -389,8 +414,6 @@ export default function ContactTab() {
           <Button size="sm" className="h-8 text-sm" onClick={handleBulkWaveApply} disabled={bulkLoading}>
             {bulkLoading ? "처리 중..." : "일괄 적용"}
           </Button>
-
-          {/* 발송 예정 → 진행 중 일괄 전환 */}
           {readyToSendCount > 0 && (
             <>
               <div className="h-4 w-px bg-border" />
@@ -399,12 +422,22 @@ export default function ContactTab() {
               </Button>
             </>
           )}
-
           <div className="flex-1" />
           <Button size="sm" variant="ghost" className="h-8 text-sm text-muted-foreground" onClick={() => setSelectedIds(new Set())}>
             선택 해제
           </Button>
         </div>
+      )}
+
+      {/* ── 상태 변경 팝오버 ── */}
+      {editingStatus && (
+        <StatusPopover
+          instructor={editingStatus.instructor}
+          x={editingStatus.x}
+          y={editingStatus.y}
+          onConfirm={handleStatusChange}
+          onClose={() => setEditingStatus(null)}
+        />
       )}
 
       {/* ── 발송 편집 팝오버 ── */}
@@ -417,6 +450,111 @@ export default function ContactTab() {
           onUpdate={(field, value) => handleWaveUpdate(editingWave.instructorId, editingWave.wave, field, value)}
           onClose={() => setEditingWave(null)}
         />
+      )}
+
+      {/* ── 강사 상세 패널 (컨택관리 내) ── */}
+      {detailInstructor && (
+        <InstructorDetail
+          instructor={detailInstructor}
+          onClose={() => setDetailId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── 상태 변경 팝오버 ── */
+function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
+  instructor: Instructor;
+  x: number; y: number;
+  onConfirm: (id: string, status: InstructorStatus, reason: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const nextStatuses = getNextStatuses(instructor.status as InstructorStatus);
+  const [pendingStatus, setPendingStatus] = useState<InstructorStatus | null>(null);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const popW = 220;
+  const adjustedX = Math.min(x, window.innerWidth - popW - 16);
+  const adjustedY = y + 200 > window.innerHeight ? y - 200 - 8 : y;
+
+  const handleSelect = async (status: InstructorStatus) => {
+    if (requiresReason(status)) {
+      setPendingStatus(status);
+      return;
+    }
+    setSaving(true);
+    await onConfirm(instructor.id, status, "");
+    setSaving(false);
+  };
+
+  const handleReasonSubmit = async () => {
+    if (!reason.trim()) { toast.error("사유를 입력하세요."); return; }
+    if (!pendingStatus) return;
+    setSaving(true);
+    await onConfirm(instructor.id, pendingStatus, reason);
+    setSaving(false);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-50 bg-white border rounded-lg shadow-lg p-3 space-y-2"
+      style={{ left: adjustedX, top: adjustedY, width: popW }}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground">
+          {pendingStatus ? `${pendingStatus} 사유` : `${instructor.name} 상태 변경`}
+        </p>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {!pendingStatus ? (
+        nextStatuses.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-2">변경 가능한 상태가 없습니다.</p>
+        ) : (
+          <div className="space-y-1">
+            {nextStatuses.map(s => (
+              <button
+                key={s}
+                onClick={() => handleSelect(s)}
+                disabled={saving}
+                className={`w-full text-left px-3 py-1.5 rounded text-sm font-medium transition-colors hover:ring-1 hover:ring-primary/30 ${STATUS_COLORS[s]}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )
+      ) : (
+        <div className="space-y-2">
+          <Input
+            placeholder="사유 입력..."
+            className="h-8 text-sm"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleReasonSubmit(); }}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7 text-xs flex-1" onClick={handleReasonSubmit} disabled={saving}>
+              {saving ? "처리 중..." : "확인"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPendingStatus(null)}>뒤로</Button>
+          </div>
+        </div>
       )}
     </div>
   );
