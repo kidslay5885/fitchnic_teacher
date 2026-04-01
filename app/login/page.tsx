@@ -5,19 +5,31 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { LOGIN_PASSWORD } from "@/lib/constants";
 
 export default function LoginPage() {
   const [pw, setPw] = useState("");
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleLogin = () => {
-    if (pw === LOGIN_PASSWORD) {
-      document.cookie = "outreach_auth=authenticated; path=/; max-age=604800";
-      router.push("/");
-    } else {
+  const handleLogin = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (res.ok) {
+        document.cookie = "outreach_auth=authenticated; path=/; max-age=604800";
+        router.push("/");
+      } else {
+        setError(true);
+      }
+    } catch {
       setError(true);
+    } finally {
+      setLoading(false);
     }
   };
 

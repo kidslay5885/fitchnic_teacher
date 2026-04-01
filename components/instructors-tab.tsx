@@ -22,20 +22,31 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { STATUSES, STATUS_COLORS, ASSIGNEES, SOURCES } from "@/lib/constants";
-import type { Instructor, InstructorStatus } from "@/lib/types";
+import type { InstructorStatus } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
 import BulkActions from "@/components/bulk-actions";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Filter, Eye } from "lucide-react";
+import { toast } from "sonner";
+
+// 검토 단계 상태 (강사DB 기본 뷰)
+const REVIEW_STATUSES: InstructorStatus[] = ["미검토", "컨펌 필요", "발송 예정"];
 
 export default function InstructorsTab() {
-  const { state, dispatch } = useOutreach();
+  const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const filtered = useMemo(() => {
     return state.instructors.filter((i) => {
       const f = state.filters;
+
+      // 기본: 검토 단계만 표시 (전체보기 끄면)
+      if (!showAll && f.status === "전체") {
+        if (!REVIEW_STATUSES.includes(i.status as InstructorStatus)) return false;
+      }
+
       if (f.status !== "전체" && i.status !== f.status) return false;
       if (f.assignee && i.assignee !== f.assignee) return false;
       if (f.source !== "전체" && i.source !== f.source) return false;
@@ -52,7 +63,37 @@ export default function InstructorsTab() {
       }
       return true;
     });
-  }, [state.instructors, state.filters]);
+  }, [state.instructors, state.filters, showAll]);
+
+  const reviewCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of REVIEW_STATUSES) {
+      counts[s] = state.instructors.filter((i) => i.status === s).length;
+    }
+    return counts;
+  }, [state.instructors]);
+
+  const handleBulkToOutreach = async () => {
+    if (selected.size === 0) return;
+    try {
+      const res = await fetch("/api/instructors/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: Array.from(selected),
+          status: "발송 예정",
+          reason: "",
+          changed_by: "",
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      await Promise.all([loadInstructors(), loadStats()]);
+      toast.success(`${selected.size}명이 발송 예정으로 이동했습니다.`);
+      setSelected(new Set());
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
 
   const toggleAll = () => {
     if (selected.size === filtered.length) {
@@ -71,6 +112,39 @@ export default function InstructorsTab() {
 
   return (
     <div className="space-y-4">
+      {/* 상태 요약 카드 */}
+      <div className="flex gap-2 flex-wrap">
+        {REVIEW_STATUSES.map((s) => (
+          <button
+            key={s}
+            onClick={() => {
+              setShowAll(false);
+              dispatch({ type: "SET_FILTER", filters: { status: s } });
+            }}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+              !showAll && state.filters.status === s
+                ? "border-primary bg-primary/5"
+                : "hover:bg-muted"
+            }`}
+          >
+            <Badge className={STATUS_COLORS[s]}>{s}</Badge>
+            <span className="font-semibold">{reviewCounts[s]}</span>
+          </button>
+        ))}
+        <button
+          onClick={() => {
+            setShowAll(true);
+            dispatch({ type: "SET_FILTER", filters: { status: "전체" } });
+          }}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
+            showAll ? "border-primary bg-primary/5" : "hover:bg-muted"
+          }`}
+        >
+          <Eye className="h-3.5 w-3.5" />
+          전체 보기
+        </button>
+      </div>
+
       {/* 필터바 */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px]">
@@ -84,22 +158,6 @@ export default function InstructorsTab() {
             }
           />
         </div>
-        <Select
-          value={state.filters.status}
-          onValueChange={(v) =>
-            dispatch({ type: "SET_FILTER", filters: { status: v as InstructorStatus | "전체" } })
-          }
-        >
-          <SelectTrigger className="w-[130px]">
-            <SelectValue placeholder="상태" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="전체">전체 상태</SelectItem>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>{s}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select
           value={state.filters.assignee || "_all"}
           onValueChange={(v) =>
@@ -140,12 +198,19 @@ export default function InstructorsTab() {
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>총 {filtered.length}명</span>
-        {selected.size > 0 && (
-          <BulkActions
-            selectedIds={Array.from(selected)}
-            onDone={() => setSelected(new Set())}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          {selected.size > 0 && (
+            <>
+              <Button size="sm" variant="outline" onClick={handleBulkToOutreach}>
+                발송 예정으로 이동 ({selected.size}명)
+              </Button>
+              <BulkActions
+                selectedIds={Array.from(selected)}
+                onDone={() => setSelected(new Set())}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       {/* 테이블 */}
