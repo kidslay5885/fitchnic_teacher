@@ -8,8 +8,8 @@ export async function POST(req: Request) {
 
   const sb = getSupabase();
 
-  // 500개씩 배치 (Supabase IN 절 제한 대비)
-  const BATCH = 500;
+  // 100개씩 배치 (Supabase REST API URL 길이 제한 대비)
+  const BATCH = 100;
   const all: any[] = [];
   for (let i = 0; i < ids.length; i += BATCH) {
     const chunk = ids.slice(i, i + BATCH);
