@@ -3,13 +3,23 @@ import { getSupabase } from "@/lib/supabase";
 
 export async function GET() {
   const sb = getSupabase();
-  const { data, error } = await sb
-    .from("instructors")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data ?? []);
+  // Supabase 서버 기본 한도 1000건 → 페이지네이션으로 전체 조회
+  const PAGE = 1000;
+  const all: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await sb
+      .from("instructors")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return NextResponse.json(all);
 }
 
 export async function POST(req: Request) {
