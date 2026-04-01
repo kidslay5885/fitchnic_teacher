@@ -46,10 +46,10 @@ export default function BulkActions({ selectedIds, onDone }: Props) {
   };
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-xs font-medium">{selectedIds.length}명 선택</span>
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-sm font-medium">{selectedIds.length}명 선택</span>
       <Select value={status || "_pick"} onValueChange={(v) => setStatus(v === "_pick" ? "" : v)}>
-        <SelectTrigger className="w-[100px] h-7 text-xs">
+        <SelectTrigger className="w-[110px] h-8 text-sm">
           <SelectValue placeholder="상태 변경" />
         </SelectTrigger>
         <SelectContent>
@@ -58,7 +58,7 @@ export default function BulkActions({ selectedIds, onDone }: Props) {
         </SelectContent>
       </Select>
       <Select value={changedBy || "_pick"} onValueChange={(v) => setChangedBy(v === "_pick" ? "" : v)}>
-        <SelectTrigger className="w-[90px] h-7 text-xs">
+        <SelectTrigger className="w-[100px] h-8 text-sm">
           <SelectValue placeholder="변경자" />
         </SelectTrigger>
         <SelectContent>
@@ -67,9 +67,9 @@ export default function BulkActions({ selectedIds, onDone }: Props) {
         </SelectContent>
       </Select>
       {status && requiresReason(status as InstructorStatus) && (
-        <Input placeholder="사유" value={reason} onChange={(e) => setReason(e.target.value)} className="w-[130px] h-7 text-xs" />
+        <Input placeholder="사유" value={reason} onChange={(e) => setReason(e.target.value)} className="w-[150px] h-8 text-sm" />
       )}
-      <Button size="sm" className="h-7 text-xs" onClick={handleBulkUpdate} disabled={loading}>
+      <Button size="sm" className="h-8 text-sm" onClick={handleBulkUpdate} disabled={loading}>
         {loading ? "처리 중..." : "일괄 변경"}
       </Button>
     </div>

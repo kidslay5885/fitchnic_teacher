@@ -17,8 +17,8 @@ function MainContent() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex flex-col items-center gap-2">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-xs text-muted-foreground">로딩 중...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">로딩 중...</p>
         </div>
       </div>
     );
@@ -27,7 +27,7 @@ function MainContent() {
   return (
     <div className="min-h-screen bg-background">
       <NavHeader />
-      <main className="ml-48 p-5">
+      <main className="ml-52 p-6">
         <div className="max-w-7xl">
           {state.tab === "dashboard" && <DashboardTab />}
           {state.tab === "instructors" && <InstructorsTab />}

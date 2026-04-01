@@ -36,7 +36,7 @@ export default function DashboardTab() {
   }, [state.instructors, stats]);
 
   if (!stats) {
-    return <div className="text-center py-8 text-xs text-muted-foreground">통계 로딩 중...</div>;
+    return <div className="text-center py-12 text-sm text-muted-foreground">통계 로딩 중...</div>;
   }
 
   const funnel = [
@@ -48,22 +48,22 @@ export default function DashboardTab() {
   const rate = (a: number, b: number) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "-");
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-base font-semibold">현황판</h2>
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold">현황판</h2>
 
       {/* 액션 카드 */}
       {actionItems.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {actionItems.map((a) => (
             <button
               key={a.label}
               onClick={() => dispatch({ type: "SET_TAB", tab: a.tab as any })}
-              className={`flex items-center gap-2.5 p-3 rounded-lg border-l-4 text-left transition-all hover:shadow-sm ${a.color}`}
+              className={`flex items-center gap-3 p-4 rounded-lg border-l-4 text-left transition-all hover:shadow-sm ${a.color}`}
             >
-              <a.icon className="h-4 w-4 flex-shrink-0 opacity-60" />
+              <a.icon className="h-5 w-5 flex-shrink-0 opacity-60" />
               <div className="min-w-0">
-                <p className="text-lg font-bold leading-none">{a.count}</p>
-                <p className="text-[11px] text-muted-foreground truncate">{a.label}</p>
+                <p className="text-2xl font-bold leading-none">{a.count}</p>
+                <p className="text-xs text-muted-foreground mt-1">{a.label}</p>
               </div>
             </button>
           ))}
@@ -71,20 +71,20 @@ export default function DashboardTab() {
       )}
 
       {/* 요약 숫자 */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-4 gap-3">
         {[
           { label: "전체", value: stats.total, icon: Users },
           { label: "계약 완료", value: stats.byStatus["계약 완료"] || 0, icon: CheckCircle },
           { label: "진행 중", value: stats.byStatus["진행 중"] || 0, icon: Clock },
           { label: "제외", value: stats.byStatus["제외"] || 0, icon: Users },
         ].map((c) => (
-          <Card key={c.label} className="py-3">
-            <CardContent className="p-0 px-3 flex items-center justify-between">
+          <Card key={c.label} className="py-4">
+            <CardContent className="p-0 px-4 flex items-center justify-between">
               <div>
-                <p className="text-[11px] text-muted-foreground">{c.label}</p>
-                <p className="text-xl font-bold">{c.value}</p>
+                <p className="text-xs text-muted-foreground">{c.label}</p>
+                <p className="text-2xl font-bold mt-0.5">{c.value}</p>
               </div>
-              <c.icon className="h-5 w-5 text-muted-foreground/30" />
+              <c.icon className="h-6 w-6 text-muted-foreground/30" />
             </CardContent>
           </Card>
         ))}
@@ -92,22 +92,22 @@ export default function DashboardTab() {
 
       {/* 퍼널 */}
       <Card>
-        <CardHeader className="py-3 px-4">
-          <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">모집 퍼널</CardTitle>
+        <CardHeader className="py-4 px-5">
+          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">모집 퍼널</CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="flex items-center justify-center gap-1.5">
+        <CardContent className="px-5 pb-5">
+          <div className="flex items-center justify-center gap-2">
             {funnel.map((f, idx) => (
-              <div key={f.label} className="flex items-center gap-1.5">
-                <div className="flex flex-col items-center px-4 py-2.5 rounded-lg border min-w-[80px]">
-                  <f.icon className={`h-4 w-4 ${f.color} mb-0.5`} />
-                  <p className="text-xl font-bold">{f.value}</p>
-                  <p className="text-[10px] text-muted-foreground">{f.label}</p>
+              <div key={f.label} className="flex items-center gap-2">
+                <div className="flex flex-col items-center px-6 py-3 rounded-lg border min-w-[90px]">
+                  <f.icon className={`h-5 w-5 ${f.color} mb-1`} />
+                  <p className="text-2xl font-bold">{f.value}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{f.label}</p>
                 </div>
                 {idx < funnel.length - 1 && (
-                  <div className="flex flex-col items-center gap-0.5">
-                    <ArrowRight className="h-3 w-3 text-muted-foreground/50" />
-                    <span className="text-[10px] text-muted-foreground">{rate(funnel[idx + 1].value, f.value)}</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <ArrowRight className="h-4 w-4 text-muted-foreground/50" />
+                    <span className="text-xs text-muted-foreground">{rate(funnel[idx + 1].value, f.value)}</span>
                   </div>
                 )}
               </div>
@@ -118,14 +118,14 @@ export default function DashboardTab() {
 
       {/* 상태별 분포 */}
       <Card>
-        <CardHeader className="py-2.5 px-4">
-          <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">상태별 분포</CardTitle>
+        <CardHeader className="py-3 px-5">
+          <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">상태별 분포</CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-3">
-          <div className="grid grid-cols-4 gap-x-4 gap-y-1">
+        <CardContent className="px-5 pb-4">
+          <div className="grid grid-cols-4 gap-x-6 gap-y-2">
             {STATUSES.map((s) => (
-              <div key={s} className="flex items-center justify-between py-1">
-                <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[s]}`}>{s}</Badge>
+              <div key={s} className="flex items-center justify-between py-1.5">
+                <Badge className={`text-xs px-2 py-0.5 ${STATUS_COLORS[s]}`}>{s}</Badge>
                 <span className="text-sm font-semibold tabular-nums">{stats.byStatus[s] || 0}</span>
               </div>
             ))}

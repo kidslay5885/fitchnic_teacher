@@ -42,37 +42,37 @@ export default function MessagesTab() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">메시지 템플릿</h2>
-        <Button size="sm" className="h-7 text-xs" onClick={() => setShowNew(true)}>
-          <Plus className="h-3.5 w-3.5 mr-1" />템플릿 추가
+        <h2 className="text-lg font-semibold">메시지 템플릿</h2>
+        <Button size="sm" className="h-8 text-sm" onClick={() => setShowNew(true)}>
+          <Plus className="h-4 w-4 mr-1" />템플릿 추가
         </Button>
       </div>
 
       {state.templates.length === 0 && !showNew ? (
-        <div className="text-center py-8 text-xs text-muted-foreground">등록된 템플릿이 없습니다.</div>
+        <div className="text-center py-12 text-sm text-muted-foreground">등록된 템플릿이 없습니다.</div>
       ) : (
         Object.entries(grouped).map(([channel, templates]) => (
-          <div key={channel} className="space-y-2">
-            <div className="flex items-center gap-1.5">
-              {channel === "DM" ? <MessageSquare className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{channel}</h3>
+          <div key={channel} className="space-y-3">
+            <div className="flex items-center gap-2">
+              {channel === "DM" ? <MessageSquare className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{channel}</h3>
             </div>
             {templates.map((t) => (
               <Card key={t.id} className="py-0">
-                <CardHeader className="py-2 px-4">
+                <CardHeader className="py-3 px-5">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-xs flex items-center gap-1.5">
+                    <CardTitle className="text-sm flex items-center gap-2">
                       {t.name}
-                      {t.variant_label && <Badge variant="outline" className="text-[10px] px-1 py-0">{t.variant_label}</Badge>}
+                      {t.variant_label && <Badge variant="outline" className="text-xs px-2 py-0">{t.variant_label}</Badge>}
                     </CardTitle>
-                    <button className="text-[10px] text-primary hover:underline" onClick={() => setEditing(t)}>수정</button>
+                    <button className="text-xs text-primary hover:underline" onClick={() => setEditing(t)}>수정</button>
                   </div>
-                  {t.subject && <p className="text-[10px] text-muted-foreground">제목: {t.subject}</p>}
+                  {t.subject && <p className="text-xs text-muted-foreground">제목: {t.subject}</p>}
                 </CardHeader>
-                <CardContent className="px-4 pb-3">
-                  <pre className="text-[11px] whitespace-pre-wrap bg-muted p-2.5 rounded-md max-h-[150px] overflow-y-auto leading-relaxed">{t.body}</pre>
+                <CardContent className="px-5 pb-4">
+                  <pre className="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md max-h-[180px] overflow-y-auto leading-relaxed">{t.body}</pre>
                 </CardContent>
               </Card>
             ))}
@@ -101,24 +101,24 @@ function TemplateEditor({ template, onSave, onClose }: { template: MessageTempla
 
   return (
     <Card className="border-primary py-0">
-      <CardContent className="p-4 space-y-2.5">
-        <p className="text-xs font-semibold">{template ? "템플릿 수정" : "새 템플릿"}</p>
-        <div className="grid grid-cols-3 gap-2">
-          <div><Label className="text-[10px]">이름</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-7 text-xs" placeholder="1차메시지" /></div>
+      <CardContent className="p-5 space-y-3">
+        <p className="text-sm font-semibold">{template ? "템플릿 수정" : "새 템플릿"}</p>
+        <div className="grid grid-cols-3 gap-3">
+          <div><Label className="text-xs">이름</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-8 text-sm" placeholder="1차메시지" /></div>
           <div>
-            <Label className="text-[10px]">채널</Label>
+            <Label className="text-xs">채널</Label>
             <Select value={form.channel} onValueChange={(v) => setForm({ ...form, channel: v })}>
-              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="DM">DM</SelectItem><SelectItem value="이메일">이메일</SelectItem><SelectItem value="SMS">SMS</SelectItem></SelectContent>
             </Select>
           </div>
-          <div><Label className="text-[10px]">변형</Label><Input value={form.variant_label} onChange={(e) => setForm({ ...form, variant_label: e.target.value })} className="h-7 text-xs" /></div>
+          <div><Label className="text-xs">변형</Label><Input value={form.variant_label} onChange={(e) => setForm({ ...form, variant_label: e.target.value })} className="h-8 text-sm" /></div>
         </div>
-        {form.channel === "이메일" && <div><Label className="text-[10px]">제목</Label><Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="h-7 text-xs" /></div>}
-        <div><Label className="text-[10px]">본문</Label><Textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={8} className="text-xs" /></div>
-        <div className="flex gap-1.5">
-          <Button size="sm" className="h-7 text-xs" onClick={handleSubmit} disabled={saving}><Save className="h-3 w-3 mr-1" />{saving ? "저장 중..." : "저장"}</Button>
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onClose}>취소</Button>
+        {form.channel === "이메일" && <div><Label className="text-xs">제목</Label><Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="h-8 text-sm" /></div>}
+        <div><Label className="text-xs">본문</Label><Textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={8} className="text-sm" /></div>
+        <div className="flex gap-2">
+          <Button size="sm" className="h-8 text-sm" onClick={handleSubmit} disabled={saving}><Save className="h-3.5 w-3.5 mr-1" />{saving ? "저장 중..." : "저장"}</Button>
+          <Button size="sm" variant="outline" className="h-8 text-sm" onClick={onClose}>취소</Button>
         </div>
       </CardContent>
     </Card>

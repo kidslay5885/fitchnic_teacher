@@ -20,11 +20,7 @@ interface Props {
 }
 
 interface DuplicateInfo {
-  id: string;
-  name: string;
-  field: string;
-  assignee: string;
-  status: string;
+  id: string; name: string; field: string; assignee: string; status: string;
 }
 
 export default function InstructorForm({ onClose }: Props) {
@@ -47,16 +43,12 @@ export default function InstructorForm({ onClose }: Props) {
         body: JSON.stringify({ ...form, _force: force }),
       });
       const data = await res.json();
-
-      // 중복 이름 경고
       if (data.warning === "duplicate_name" && !force) {
         setDuplicates(data.duplicates);
         setSaving(false);
         return;
       }
-
       if (!res.ok && !data.warning) throw new Error(data.error);
-
       dispatch({ type: "ADD_INSTRUCTOR", instructor: data });
       await loadStats();
       toast.success(`${form.name} 추가 완료`);
@@ -70,21 +62,20 @@ export default function InstructorForm({ onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-sm">강사 추가</DialogTitle>
+          <DialogTitle className="text-base">강사 추가</DialogTitle>
         </DialogHeader>
 
-        {/* 중복 경고 */}
         {duplicates && (
-          <div className="rounded-md border border-orange-300 bg-orange-50 p-3 space-y-2">
-            <div className="flex items-center gap-1.5 text-orange-700">
-              <AlertTriangle className="h-4 w-4" />
-              <p className="text-xs font-semibold">동일한 이름의 강사가 존재합니다</p>
+          <div className="rounded-lg border border-orange-300 bg-orange-50 p-4 space-y-2">
+            <div className="flex items-center gap-2 text-orange-700">
+              <AlertTriangle className="h-5 w-5" />
+              <p className="text-sm font-semibold">동일한 이름의 강사가 존재합니다</p>
             </div>
             <div className="space-y-1">
               {duplicates.map((d) => (
-                <div key={d.id} className="text-[11px] text-orange-800 bg-orange-100 rounded px-2 py-1">
+                <div key={d.id} className="text-sm text-orange-800 bg-orange-100 rounded px-3 py-1.5">
                   <span className="font-medium">{d.name}</span>
                   {d.field && <span> | {d.field}</span>}
                   {d.assignee && <span> | {d.assignee}</span>}
@@ -92,25 +83,25 @@ export default function InstructorForm({ onClose }: Props) {
                 </div>
               ))}
             </div>
-            <p className="text-[11px] text-orange-700">그래도 추가하시겠습니까?</p>
-            <div className="flex gap-1.5">
-              <Button size="sm" className="h-7 text-xs" onClick={() => handleSubmit(true)} disabled={saving}>
+            <p className="text-sm text-orange-700">그래도 추가하시겠습니까?</p>
+            <div className="flex gap-2">
+              <Button size="sm" className="h-8 text-sm" onClick={() => handleSubmit(true)} disabled={saving}>
                 {saving ? "저장 중..." : "그래도 추가"}
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDuplicates(null)}>취소</Button>
+              <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => setDuplicates(null)}>취소</Button>
             </div>
           </div>
         )}
 
         {!duplicates && (
           <>
-            <div className="grid grid-cols-2 gap-2">
-              <div><Label className="text-[10px]">이름 *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="h-7 text-xs" /></div>
-              <div><Label className="text-[10px]">분야</Label><Input value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })} className="h-7 text-xs" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label className="text-xs">이름 *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="h-8 text-sm" /></div>
+              <div><Label className="text-xs">분야</Label><Input value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })} className="h-8 text-sm" /></div>
               <div>
-                <Label className="text-[10px]">담당자</Label>
+                <Label className="text-xs">담당자</Label>
                 <Select value={form.assignee || "_none"} onValueChange={(v) => setForm({ ...form, assignee: v === "_none" ? "" : v })}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="선택" /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="선택" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_none">미지정</SelectItem>
                     {ASSIGNEES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
@@ -118,21 +109,21 @@ export default function InstructorForm({ onClose }: Props) {
                 </Select>
               </div>
               <div>
-                <Label className="text-[10px]">출처</Label>
+                <Label className="text-xs">출처</Label>
                 <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-[10px]">이메일</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-7 text-xs" /></div>
-              <div><Label className="text-[10px]">인스타그램</Label><Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-7 text-xs" /></div>
-              <div><Label className="text-[10px]">유튜브</Label><Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-7 text-xs" /></div>
-              <div><Label className="text-[10px]">전화번호</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-7 text-xs" /></div>
-              <div className="col-span-2"><Label className="text-[10px]">참조 링크</Label><Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-7 text-xs" /></div>
+              <div><Label className="text-xs">이메일</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-8 text-sm" /></div>
+              <div><Label className="text-xs">인스타그램</Label><Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" /></div>
+              <div><Label className="text-xs">유튜브</Label><Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-8 text-sm" /></div>
+              <div><Label className="text-xs">전화번호</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-8 text-sm" /></div>
+              <div className="col-span-2"><Label className="text-xs">참조 링크</Label><Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" /></div>
             </div>
-            <div className="flex justify-end gap-1.5 mt-1">
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onClose}>취소</Button>
-              <Button size="sm" className="h-7 text-xs" onClick={() => handleSubmit(false)} disabled={saving}>{saving ? "저장 중..." : "추가"}</Button>
+            <div className="flex justify-end gap-2 mt-1">
+              <Button variant="outline" size="sm" className="h-8 text-sm" onClick={onClose}>취소</Button>
+              <Button size="sm" className="h-8 text-sm" onClick={() => handleSubmit(false)} disabled={saving}>{saving ? "저장 중..." : "추가"}</Button>
             </div>
           </>
         )}
