@@ -245,6 +245,28 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     hydrate();
   }, []);
 
+  // 자동 동기화: 10초마다 다른 사용자 변경 반영
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadInstructors();
+        loadStats();
+      }
+    }, 10000);
+    // 탭 다시 활성화 시 즉시 동기화
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadInstructors();
+        loadStats();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loadInstructors, loadStats]);
+
   return React.createElement(
     Ctx.Provider,
     {

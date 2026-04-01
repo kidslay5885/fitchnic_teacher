@@ -54,11 +54,21 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
       const res = await fetch(`/api/instructors/${instructor.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, _expected_updated_at: instructor.updated_at }),
       });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const updated = await res.json();
-      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: updated });
+      const data = await res.json();
+      if (res.status === 409) {
+        toast.error("다른 사용자가 이미 수정했습니다. 새로고침합니다.");
+        const refreshRes = await fetch(`/api/instructors/${instructor.id}`);
+        if (refreshRes.ok) {
+          const refreshed = await refreshRes.json();
+          dispatch({ type: "UPDATE_INSTRUCTOR", instructor: refreshed });
+          setForm(refreshed);
+        }
+        return;
+      }
+      if (!res.ok) throw new Error(data.error);
+      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: data });
       setEditing(false);
       toast.success("저장되었습니다.");
     } catch (e: any) {
@@ -73,6 +83,7 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
         status: statusChange.to,
         _changed_by: statusChange.changed_by,
         _reason: statusChange.reason,
+        _expected_updated_at: instructor.updated_at,
       };
       if (requiresReason(statusChange.to as InstructorStatus)) {
         body.exclude_reason = statusChange.reason;
@@ -82,9 +93,19 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const updated = await res.json();
-      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: updated });
+      const data = await res.json();
+      if (res.status === 409) {
+        toast.error("다른 사용자가 이미 수정했습니다. 새로고침합니다.");
+        const refreshRes = await fetch(`/api/instructors/${instructor.id}`);
+        if (refreshRes.ok) {
+          const refreshed = await refreshRes.json();
+          dispatch({ type: "UPDATE_INSTRUCTOR", instructor: refreshed });
+          setForm(refreshed);
+        }
+        return;
+      }
+      if (!res.ok) throw new Error(data.error);
+      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: data });
       await Promise.all([loadDetails(), loadStats()]);
       setStatusChange({ to: "", reason: "", changed_by: "" });
       toast.success(`상태가 '${statusChange.to}'(으)로 변경되었습니다.`);

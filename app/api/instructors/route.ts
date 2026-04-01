@@ -15,10 +15,26 @@ export async function GET() {
 export async function POST(req: Request) {
   const sb = getSupabase();
   const body = await req.json();
+  const { _force, ...insertData } = body;
+
+  // 중복 이름 체크
+  if (insertData.name && !_force) {
+    const { data: duplicates } = await sb
+      .from("instructors")
+      .select("id, name, field, assignee, status")
+      .eq("name", insertData.name.trim());
+
+    if (duplicates && duplicates.length > 0) {
+      return NextResponse.json(
+        { warning: "duplicate_name", duplicates },
+        { status: 200 }
+      );
+    }
+  }
 
   const { data, error } = await sb
     .from("instructors")
-    .insert(body)
+    .insert(insertData)
     .select()
     .single();
 
@@ -29,7 +45,7 @@ export async function POST(req: Request) {
     instructor_id: data.id,
     from_status: "",
     to_status: data.status || "미검토",
-    changed_by: body.assignee || "",
+    changed_by: insertData.assignee || "",
     reason: "신규 등록",
   });
 

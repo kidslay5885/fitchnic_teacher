@@ -65,7 +65,23 @@ export async function PATCH(
   }
 
   // 내부 필드 제거
-  const { _reason, _changed_by, ...updateData } = body;
+  const { _reason, _changed_by, _expected_updated_at, ...updateData } = body;
+
+  // 충돌 감지: updated_at 비교
+  if (_expected_updated_at) {
+    const { data: current } = await sb
+      .from("instructors")
+      .select("updated_at")
+      .eq("id", id)
+      .single();
+
+    if (current && current.updated_at !== _expected_updated_at) {
+      return NextResponse.json(
+        { error: "다른 사용자가 이미 수정했습니다. 새로고침 후 다시 시도하세요.", code: "CONFLICT" },
+        { status: 409 }
+      );
+    }
+  }
 
   const { data, error } = await sb
     .from("instructors")
