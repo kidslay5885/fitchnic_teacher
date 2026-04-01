@@ -12,42 +12,54 @@ import {
   Mail,
 } from "lucide-react";
 
-const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
-  { id: "dashboard", label: "현황판", icon: <LayoutDashboard className="h-4 w-4" /> },
-  { id: "instructors", label: "강사DB", icon: <Users className="h-4 w-4" /> },
-  { id: "contact", label: "컨택관리", icon: <MessageSquare className="h-4 w-4" /> },
-  { id: "meeting", label: "미팅관리", icon: <Calendar className="h-4 w-4" /> },
-  { id: "applications", label: "지원서", icon: <FileText className="h-4 w-4" /> },
-  { id: "banned", label: "연락금지", icon: <Ban className="h-4 w-4" /> },
-  { id: "messages", label: "메시지", icon: <Mail className="h-4 w-4" /> },
+const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
+  { id: "dashboard", label: "현황판", icon: LayoutDashboard },
+  { id: "instructors", label: "강사DB", icon: Users },
+  { id: "contact", label: "컨택관리", icon: MessageSquare },
+  { id: "meeting", label: "미팅관리", icon: Calendar },
+  { id: "applications", label: "지원서", icon: FileText },
+  { id: "banned", label: "연락금지", icon: Ban },
+  { id: "messages", label: "메시지", icon: Mail },
 ];
 
 export default function NavHeader() {
   const { state, dispatch } = useOutreach();
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-14 items-center px-4 gap-6">
-        <h1 className="text-base font-bold whitespace-nowrap">
-          핏크닉 아웃리치
-        </h1>
-        <nav className="flex items-center gap-1 overflow-x-auto">
-          {TABS.map((t) => (
+    <aside className="fixed inset-y-0 left-0 z-40 w-48 border-r bg-card flex flex-col">
+      {/* 로고 */}
+      <div className="h-12 flex items-center px-4 border-b">
+        <h1 className="text-sm font-bold tracking-tight">핏크닉 아웃리치</h1>
+      </div>
+
+      {/* 네비 */}
+      <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const active = state.tab === t.id;
+          return (
             <button
               key={t.id}
               onClick={() => dispatch({ type: "SET_TAB", tab: t.id })}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
-                state.tab === t.id
+              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+                active
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
-              {t.icon}
+              <Icon className="h-4 w-4 flex-shrink-0" />
               {t.label}
             </button>
-          ))}
-        </nav>
+          );
+        })}
+      </nav>
+
+      {/* 하단 */}
+      <div className="border-t px-4 py-2">
+        <p className="text-[11px] text-muted-foreground">
+          {state.instructors.length}명 관리 중
+        </p>
       </div>
-    </header>
+    </aside>
   );
 }

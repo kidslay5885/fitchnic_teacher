@@ -52,5 +52,3 @@ export const BANNED_PLATFORMS = [
 ];
 
 export const SOURCES = ["강사모집", "콘텐츠팀", "지원서"] as const;
-
-export const LOGIN_PASSWORD = "fitchnic2024";

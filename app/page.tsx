@@ -16,9 +16,9 @@ function MainContent() {
   if (!state.hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">데이터 로딩 중...</p>
+        <div className="flex flex-col items-center gap-2">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-xs text-muted-foreground">로딩 중...</p>
         </div>
       </div>
     );
@@ -27,14 +27,16 @@ function MainContent() {
   return (
     <div className="min-h-screen bg-background">
       <NavHeader />
-      <main className="p-4">
-        {state.tab === "dashboard" && <DashboardTab />}
-        {state.tab === "instructors" && <InstructorsTab />}
-        {state.tab === "contact" && <ContactTab />}
-        {state.tab === "meeting" && <MeetingTab />}
-        {state.tab === "applications" && <ApplicationsTab />}
-        {state.tab === "banned" && <BannedTab />}
-        {state.tab === "messages" && <MessagesTab />}
+      <main className="ml-48 p-5">
+        <div className="max-w-7xl">
+          {state.tab === "dashboard" && <DashboardTab />}
+          {state.tab === "instructors" && <InstructorsTab />}
+          {state.tab === "contact" && <ContactTab />}
+          {state.tab === "meeting" && <MeetingTab />}
+          {state.tab === "applications" && <ApplicationsTab />}
+          {state.tab === "banned" && <BannedTab />}
+          {state.tab === "messages" && <MessagesTab />}
+        </div>
       </main>
     </div>
   );
