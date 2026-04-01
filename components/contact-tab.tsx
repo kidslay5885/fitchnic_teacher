@@ -309,17 +309,17 @@ export default function ContactTab() {
           className="sticky top-0 z-10 grid items-center bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
           style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
         >
-          <div className="px-1 flex justify-center cursor-pointer" onClick={toggleSelectAll}>
+          <div className="px-1 flex justify-center cursor-pointer border-r border-gray-200" onClick={toggleSelectAll}>
             <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
               checked={selectedIds.size === filtered.length && filtered.length > 0} readOnly />
           </div>
-          <div className="px-3 py-2.5">이름</div>
-          <div className="px-2 py-2.5">상태</div>
-          <div className="px-2 py-2.5">분야</div>
-          <div className="px-2 py-2.5">담당자</div>
-          <div className="px-2 py-2.5 text-center">1차</div>
-          <div className="px-2 py-2.5 text-center">2차</div>
-          <div className="px-2 py-2.5 text-center">3차</div>
+          <div className="px-3 py-2.5 border-r border-gray-200">이름</div>
+          <div className="px-2 py-2.5 border-r border-gray-200">상태</div>
+          <div className="px-2 py-2.5 border-r border-gray-200">분야</div>
+          <div className="px-2 py-2.5 border-r border-gray-200">담당자</div>
+          <div className="px-2 py-2.5 text-center border-r border-gray-200">1차</div>
+          <div className="px-2 py-2.5 text-center border-r border-gray-200">2차</div>
+          <div className="px-2 py-2.5 text-center border-r border-gray-200">3차</div>
           <div className="px-2 py-2.5">최종</div>
         </div>
 
@@ -345,36 +345,36 @@ export default function ContactTab() {
                   onMouseEnter={() => handleDragEnter(i.id)}
                 >
                   {/* 체크박스 */}
-                  <div className="px-1 flex justify-center cursor-pointer"
+                  <div className="px-1 flex justify-center cursor-pointer border-r border-gray-200/60"
                        onMouseDown={(e) => handleDragStart(i.id, e)}>
                     <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
                       checked={isSelected} readOnly />
                   </div>
-                  {/* 이름 — 컨택관리 내 상세 패널 열기 */}
+                  {/* 이름 */}
                   <div
-                    className="px-3 font-medium cursor-pointer hover:underline truncate"
+                    className="px-3 font-medium cursor-pointer hover:underline truncate border-r border-gray-200/60"
                     title={i.name}
                     onClick={() => setDetailId(i.id)}
                   >
                     {i.name}
                   </div>
-                  {/* 상태 — 클릭으로 변경 */}
-                  <div className="px-2 cursor-pointer" onClick={(e) => handleStatusClick(e, i)}>
+                  {/* 상태 */}
+                  <div className="px-2 cursor-pointer border-r border-gray-200/60" onClick={(e) => handleStatusClick(e, i)}>
                     <Badge className={`text-xs px-1.5 py-0 whitespace-nowrap cursor-pointer hover:ring-2 hover:ring-primary/30 transition ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>
                       {i.status}
                     </Badge>
                   </div>
                   {/* 분야 */}
-                  <div className="px-2 text-muted-foreground truncate" title={i.field || ""}>{i.field || ""}</div>
+                  <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60" title={i.field || ""}>{i.field || ""}</div>
                   {/* 담당자 */}
-                  <div className="px-2 text-muted-foreground truncate" title={i.assignee || ""}>{i.assignee || ""}</div>
+                  <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60" title={i.assignee || ""}>{i.assignee || ""}</div>
                   {/* 1차 2차 3차 */}
                   {[1, 2, 3].map((n) => {
                     const w = getWave(i.id, n);
                     return (
                       <div
                         key={n}
-                        className={`px-2 flex items-center justify-center cursor-pointer hover:brightness-95 transition-colors rounded-sm ${waveColor(w)}`}
+                        className={`px-2 flex items-center justify-center cursor-pointer hover:brightness-95 transition-colors border-r border-gray-200/60 ${waveColor(w)}`}
                         onClick={(e) => handleCellClick(e, i.id, n)}
                       >
                         <span className="text-sm whitespace-nowrap">{formatWave(w)}</span>
