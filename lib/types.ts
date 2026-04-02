@@ -29,6 +29,7 @@ export interface Instructor {
   ref_link: string;
   has_lecture_history: string;
   lecture_platform: string;
+  lecture_platform_url: string;
   youtube: string;
   instagram: string;
   email: string;

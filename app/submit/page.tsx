@@ -256,7 +256,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
   const [form, setForm] = useState({
     name: "", field: "", assignee: "", email: "",
     instagram: "", youtube: "", phone: "", ref_link: "",
-    has_lecture_history: "", lecture_platform: "",
+    has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
     source: "강사모집" as string, notes: "",
   });
   const [saving, setSaving] = useState(false);
@@ -285,6 +285,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
     setForm({
       name: "", field: "", assignee: "", email: "",
       instagram: "", youtube: "", phone: "", ref_link: "",
+      has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
       source: "강사모집", notes: "",
     });
   };
@@ -363,10 +364,6 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
           <Input value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })} className="h-8 text-sm" />
         </div>
         <div>
-          <Label className="text-xs">참조 링크</Label>
-          <Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" />
-        </div>
-        <div>
           <Label className="text-xs">강의 여부</Label>
           <div className="flex gap-1.5 mt-1">
             {["O", "X", "?"].map((v) => (
@@ -387,7 +384,18 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
         </div>
         <div>
           <Label className="text-xs">강의 플랫폼</Label>
-          <Input value={form.lecture_platform} onChange={(e) => setForm({ ...form, lecture_platform: e.target.value })} className="h-8 text-sm" />
+          <Input
+            value={form.lecture_platform}
+            onChange={(e) => setForm({ ...form, lecture_platform: e.target.value })}
+            className="h-8 text-sm"
+            placeholder="플랫폼 이름"
+          />
+          <Input
+            value={form.lecture_platform_url}
+            onChange={(e) => setForm({ ...form, lecture_platform_url: e.target.value })}
+            className="h-8 text-sm mt-1.5"
+            placeholder="주소 (URL)"
+          />
         </div>
         <div>
           <Label className="text-xs">유튜브</Label>
@@ -396,6 +404,10 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
         <div>
           <Label className="text-xs">인스타그램</Label>
           <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" />
+        </div>
+        <div>
+          <Label className="text-xs">참조 링크</Label>
+          <Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" />
         </div>
         <div>
           <Label className="text-xs">이메일</Label>
