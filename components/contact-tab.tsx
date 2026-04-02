@@ -51,9 +51,9 @@ export default function ContactTab() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
 
-  // 컨택 대상만 (발송 예정 / 진행 중 / 계약 완료)
+  // 컨택 대상만 (발송 예정 / 진행 중 / 계약 완료), 연락 금지 제외
   const contactInstructors = useMemo(() =>
-    state.instructors.filter((i) => CONTACT_STATUSES.includes(i.status as InstructorStatus)),
+    state.instructors.filter((i) => !i.is_banned && CONTACT_STATUSES.includes(i.status as InstructorStatus)),
   [state.instructors]);
 
   const loadAllWaves = useCallback(async () => {
