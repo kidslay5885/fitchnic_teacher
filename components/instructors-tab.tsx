@@ -27,6 +27,17 @@ const ROW_H = 36;
 const GRID = "36px 84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px";
 const MIN_W = 940;
 
+const ROW_BG: Record<string, string> = {
+  미검토: "bg-gray-50",
+  "컨펌 필요": "bg-yellow-50",
+  "발송 예정": "bg-blue-50",
+  "진행 중": "bg-indigo-50",
+  "계약 완료": "bg-green-50",
+  제외: "bg-red-50",
+  보류: "bg-orange-50",
+  거절: "bg-rose-50",
+};
+
 export default function InstructorsTab() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -200,8 +211,8 @@ export default function InstructorsTab() {
                 <div
                   key={i.id}
                   className={`grid items-center border-b cursor-pointer text-sm ${
-                    i.is_banned ? "bg-red-50/60" : idx % 2 === 0 ? "bg-white" : "bg-[#f8f9fa]/50"
-                  } ${state.selectedId === i.id ? "!bg-blue-50" : "hover:bg-blue-50/40"}`}
+                    ROW_BG[i.status] || "bg-white"
+                  } ${state.selectedId === i.id ? "!bg-blue-100" : "hover:brightness-95"}`}
                   style={{ position: "absolute", top: 0, left: 0, right: 0, height: ROW_H, gridTemplateColumns: GRID, transform: `translateY(${vRow.start}px)` }}
                   onClick={() => dispatch({ type: "SELECT_INSTRUCTOR", id: i.id })}
                 >
