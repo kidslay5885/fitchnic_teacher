@@ -24,8 +24,8 @@ type SortDir = "asc" | "desc";
 
 const ROW_H = 36;
 // 체크 | 상태 | 분야 | 담당자 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처
-const GRID = "36px 84px 1.2fr 72px 1fr 48px 48px 1fr 48px 48px 1.2fr 1.5fr 60px";
-const MIN_W = 900;
+const GRID = "36px 84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px";
+const MIN_W = 940;
 
 export default function InstructorsTab() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
@@ -38,6 +38,8 @@ export default function InstructorsTab() {
 
   const filtered = useMemo(() => {
     return state.instructors.filter((i) => {
+      // 연락 금지 강사 기본 제외
+      if (i.is_banned) return false;
       const f = state.filters;
       if (f.status !== "전체" && i.status !== f.status) return false;
       if (f.search) {
