@@ -196,15 +196,28 @@ export default function InstructorForm({ onClose }: Props) {
 
               {/* 담당자 + 출처 */}
               <div className="col-span-2 flex items-end gap-4">
-                <div className="w-[140px] shrink-0">
+                <div className="w-[140px] shrink-0 relative">
                   <Label className="text-xs">담당자</Label>
-                  <Select value={form.assignee || "_none"} onValueChange={(v) => setForm({ ...form, assignee: v === "_none" ? "" : v })}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="선택" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">미지정</SelectItem>
-                      {ASSIGNEES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Input
+                    value={form.assignee}
+                    onChange={(e) => setForm({ ...form, assignee: e.target.value })}
+                    className="h-8 text-sm"
+                    placeholder="이름 입력"
+                  />
+                  {form.assignee && !ASSIGNEES.includes(form.assignee) && (
+                    <div className="absolute z-10 mt-0.5 w-full bg-white border rounded shadow-md">
+                      {ASSIGNEES.filter((a) => a.includes(form.assignee)).map((a) => (
+                        <button
+                          key={a}
+                          type="button"
+                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100"
+                          onClick={() => setForm({ ...form, assignee: a })}
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex-1">
                   <Label className="text-xs">출처</Label>
