@@ -5,11 +5,28 @@ import type { Instructor, InstructorStatus, DashboardStats } from "@/lib/types";
 
 export async function GET() {
   const sb = getSupabase();
-  const [{ data: instructors }, { data: apps }, { data: waves }] = await Promise.all([
-    sb.from("instructors").select("id, status, assignee, source, final_status, meeting_date"),
+  // 강사 전체 페이지네이션 조회 (Supabase 1000건 제한 우회)
+  const PAGE = 1000;
+  const allInstructors: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await sb
+      .from("instructors")
+      .select("id, status, assignee, source, final_status, meeting_date")
+      .eq("is_banned", false)
+      .range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    allInstructors.push(...data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+
+  const [{ data: apps }, { data: waves }] = await Promise.all([
     sb.from("applications").select("review_status"),
     sb.from("outreach_waves").select("instructor_id, wave_number, sent_date, result"),
   ]);
+
+  const instructors = allInstructors;
 
   const list = (instructors ?? []) as Pick<Instructor, "id" | "status" | "assignee" | "source" | "final_status" | "meeting_date">[];
   const appList = (apps ?? []) as { review_status: string }[];

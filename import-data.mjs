@@ -1,11 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import XLSX from "xlsx";
 
-const SUPABASE_URL = "https://mfavpyjbpxozpeqvsbzq.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1mYXZweWpicHhvenBlcXZzYnpxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTAyMzY4NiwiZXhwIjoyMDkwNTk5Njg2fQ.DWNVnvWRCpuLB_2vEUYRfk19vv5GX3eNxC_iW_h3jcc";
+const SUPABASE_URL = "https://qtjovidfuxlwqzsgczvm.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF0am92aWRmdXhsd3F6c2djenZtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTExMDY0NCwiZXhwIjoyMDkwNjg2NjQ0fQ.QUAciM2aovuFVVNoErWLdWzru-Gs1GIWTmHl8Ja8TYk";
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
-const wb = XLSX.readFile("data.xlsx");
+const wb = XLSX.readFile("C:/Users/User/Downloads/강사 모집 TOOL 리뉴얼 (최종).xlsx");
 
 function str(v) {
   if (v == null) return "";
