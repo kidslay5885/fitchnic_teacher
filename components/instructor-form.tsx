@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { ASSIGNEES, SOURCES } from "@/lib/constants";
+import { ASSIGNEES, SOURCES, STATUSES } from "@/lib/constants";
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 
@@ -28,7 +28,8 @@ export default function InstructorForm({ onClose }: Props) {
   const [form, setForm] = useState({
     name: "", field: "", assignee: "", email: "",
     instagram: "", youtube: "", phone: "", ref_link: "",
-    source: "강사모집", notes: "",
+    has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
+    source: "강사모집", notes: "", status: "미검토",
   });
   const [saving, setSaving] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null);
@@ -62,7 +63,7 @@ export default function InstructorForm({ onClose }: Props) {
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-base">강사 추가</DialogTitle>
         </DialogHeader>
@@ -95,35 +96,143 @@ export default function InstructorForm({ onClose }: Props) {
 
         {!duplicates && (
           <>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="text-xs">이름 *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="h-8 text-sm" /></div>
-              <div><Label className="text-xs">분야</Label><Input value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })} className="h-8 text-sm" /></div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+              {/* 이름 */}
+              <div className="col-span-2">
+                <Label className="text-xs">이름 *</Label>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="h-8 text-sm" />
+              </div>
+
+              {/* 분야 */}
               <div>
-                <Label className="text-xs">담당자</Label>
-                <Select value={form.assignee || "_none"} onValueChange={(v) => setForm({ ...form, assignee: v === "_none" ? "" : v })}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="선택" /></SelectTrigger>
+                <Label className="text-xs">분야</Label>
+                <Input value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })} className="h-8 text-sm" />
+              </div>
+
+              {/* 상태 */}
+              <div>
+                <Label className="text-xs">상태</Label>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_none">미지정</SelectItem>
-                    {ASSIGNEES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                    {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label className="text-xs">출처</Label>
-                <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>{SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
+
+              {/* 강의 여부 */}
+              <div className="col-span-2">
+                <Label className="text-xs">강의 여부</Label>
+                <div className="flex gap-1.5 mt-1">
+                  {["O", "X", "?"].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setForm({ ...form, has_lecture_history: form.has_lecture_history === v ? "" : v })}
+                      className={`h-8 w-10 rounded border text-sm font-medium transition-colors ${
+                        form.has_lecture_history === v
+                          ? "bg-primary text-white border-primary"
+                          : "bg-white text-muted-foreground border-gray-200 hover:border-gray-400"
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div><Label className="text-xs">이메일</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-8 text-sm" /></div>
-              <div><Label className="text-xs">인스타그램</Label><Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" /></div>
-              <div><Label className="text-xs">유튜브</Label><Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-8 text-sm" /></div>
-              <div><Label className="text-xs">전화번호</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-8 text-sm" /></div>
-              <div className="col-span-2"><Label className="text-xs">참조 링크</Label><Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" /></div>
+
+              {/* 강의 플랫폼 */}
+              <div className="col-span-2">
+                <Label className="text-xs">강의 플랫폼</Label>
+                <Input
+                  value={form.lecture_platform}
+                  onChange={(e) => setForm({ ...form, lecture_platform: e.target.value })}
+                  className="h-8 text-sm"
+                  placeholder="플랫폼 이름"
+                />
+                <Input
+                  value={form.lecture_platform_url}
+                  onChange={(e) => setForm({ ...form, lecture_platform_url: e.target.value })}
+                  className="h-8 text-sm mt-1.5"
+                  placeholder="주소 (URL)"
+                />
+              </div>
+
+              {/* 유튜브 */}
+              <div>
+                <Label className="text-xs">유튜브</Label>
+                <Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-8 text-sm" />
+              </div>
+
+              {/* 인스타그램 */}
+              <div>
+                <Label className="text-xs">인스타그램</Label>
+                <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" />
+              </div>
+
+              {/* 참조 링크 */}
+              <div className="col-span-2">
+                <Label className="text-xs">참조 링크</Label>
+                <Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" />
+              </div>
+
+              {/* 이메일 */}
+              <div>
+                <Label className="text-xs">이메일</Label>
+                <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-8 text-sm" />
+              </div>
+
+              {/* 전화번호 */}
+              <div>
+                <Label className="text-xs">전화번호</Label>
+                <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-8 text-sm" />
+              </div>
+
+              {/* 비고 */}
+              <div className="col-span-2">
+                <Label className="text-xs">비고</Label>
+                <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="h-8 text-sm" />
+              </div>
+
+              {/* 담당자 + 출처 */}
+              <div className="col-span-2 flex items-end gap-4">
+                <div className="w-[140px] shrink-0">
+                  <Label className="text-xs">담당자</Label>
+                  <Select value={form.assignee || "_none"} onValueChange={(v) => setForm({ ...form, assignee: v === "_none" ? "" : v })}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="선택" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">미지정</SelectItem>
+                      {ASSIGNEES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1">
+                  <Label className="text-xs">출처</Label>
+                  <div className="flex gap-1.5 mt-1">
+                    {SOURCES.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setForm({ ...form, source: s })}
+                        className={`h-8 px-2.5 rounded border text-xs font-medium transition-colors whitespace-nowrap ${
+                          form.source === s
+                            ? "bg-primary text-white border-primary"
+                            : "bg-white text-muted-foreground border-gray-200 hover:border-gray-400"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
+
             <div className="flex justify-end gap-2 mt-1">
               <Button variant="outline" size="sm" className="h-8 text-sm" onClick={onClose}>취소</Button>
-              <Button size="sm" className="h-8 text-sm" onClick={() => handleSubmit(false)} disabled={saving}>{saving ? "저장 중..." : "추가"}</Button>
+              <Button size="sm" className="h-8 text-sm" onClick={() => handleSubmit(false)} disabled={saving}>
+                {saving ? "저장 중..." : "추가"}
+              </Button>
             </div>
           </>
         )}

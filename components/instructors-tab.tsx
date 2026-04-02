@@ -16,7 +16,7 @@ import type { Instructor, InstructorStatus } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
 import BulkActions from "@/components/bulk-actions";
-import { Plus, Search, ChevronUp, ChevronDown, X } from "lucide-react";
+import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
 type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email";
@@ -171,6 +171,14 @@ export default function InstructorsTab() {
           <Button onClick={() => setShowForm(true)} size="sm" className="h-8 text-sm">
             <Plus className="h-4 w-4 mr-1" />추가
           </Button>
+          <a
+            href="/submit"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center h-8 px-3 rounded-md border border-input bg-background text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            <ExternalLink className="h-4 w-4 mr-1" />공개 폼
+          </a>
         </div>
       </div>
 
