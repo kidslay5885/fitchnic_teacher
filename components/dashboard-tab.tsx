@@ -72,7 +72,7 @@ export default function DashboardTab() {
       {actionItems.length > 0 && (
         <section>
           <h3 className={SECTION_TITLE}>액션 필요</h3>
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             {actionItems.map((a) => (
               <button
                 key={a.label}
@@ -87,10 +87,6 @@ export default function DashboardTab() {
                   <p className="text-xs text-muted-foreground mt-1">{a.label}</p>
                 </div>
               </button>
-            ))}
-            {/* 빈 칸 채우기 (5컬럼 유지) */}
-            {Array.from({ length: 5 - actionItems.length }).map((_, i) => (
-              <div key={i} />
             ))}
           </div>
         </section>
@@ -150,11 +146,11 @@ export default function DashboardTab() {
       </section>
 
       {/* 하단: 상태별 분포 + 섹션별 반응률 */}
-      <section className="grid grid-cols-2 gap-3">
+      <section className="grid grid-cols-2 gap-3 items-stretch">
         {/* 상태별 분포 */}
-        <div>
+        <div className="flex flex-col">
           <h3 className={SECTION_TITLE}>상태별 분포</h3>
-          <div className={`${CARD} p-5 space-y-3`}>
+          <div className={`${CARD} p-5 space-y-3 flex-1`}>
             {STATUSES.map((s) => {
               const count = stats.byStatus[s] || 0;
               const pct = total > 0 ? (count / total) * 100 : 0;
@@ -173,9 +169,9 @@ export default function DashboardTab() {
 
         {/* 섹션별 발송 반응률 */}
         {stats.waveRates && (
-          <div>
+          <div className="flex flex-col">
             <h3 className={SECTION_TITLE}>섹션별 발송 반응률</h3>
-            <div className={`${CARD} p-5 space-y-4`}>
+            <div className={`${CARD} p-5 flex flex-col justify-between flex-1`}>
               {sectionWaveConfig.map(({ key, dot, count }) => {
                 const waves = stats.waveRates![key];
                 return (
