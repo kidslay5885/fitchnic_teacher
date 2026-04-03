@@ -22,9 +22,13 @@ export default function MeetingTab() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [editingMeeting, setEditingMeeting] = useState<{
     instructor: Instructor; date: string; time: string; memo: string;
-    confirmed: boolean; postSpecial: string; postPositive: string; postNegative: string;
+    confirmed: boolean; remindDate: string;
+    postSpecial: string; postPositive: string; postNegative: string;
   } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [remindModal, setRemindModal] = useState<Instructor | null>(null);
+  const [remindDate, setRemindDate] = useState("");
+  const [remindDone, setRemindDone] = useState(false);
   const [search, setSearch] = useState("");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
 
@@ -133,16 +137,13 @@ export default function MeetingTab() {
     return null;
   };
 
-  // 미팅일 + 1달 후 리마인드 대상 조회
+  // 리마인드 대상 조회: remind_date가 있으면 그걸 사용, 없으면 미팅일+1달(주말→금)
   const getRemindersForDate = (date: Date | null) => {
     if (!date) return [];
     const targetIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     return meetings.filter((mt) => {
-      const meetDate = extractDate(mt.meeting_date || "");
-      if (!meetDate) return false;
-      meetDate.setMonth(meetDate.getMonth() + 1);
-      const remindIso = `${meetDate.getFullYear()}-${String(meetDate.getMonth() + 1).padStart(2, "0")}-${String(meetDate.getDate()).padStart(2, "0")}`;
-      return remindIso === targetIso;
+      if (mt.remind_date) return mt.remind_date === targetIso;
+      return calcRemindDate(mt.meeting_date || "") === targetIso;
     });
   };
 
@@ -165,6 +166,17 @@ export default function MeetingTab() {
     return time ? `${m}/${day}(${dow}) ${time}` : `${m}/${day}(${dow})`;
   };
 
+  // 리마인드 기본 날짜 계산: 1달 후, 주말이면 금요일로
+  const calcRemindDate = (meetingDate: string) => {
+    const d = extractDate(meetingDate);
+    if (!d) return "";
+    d.setMonth(d.getMonth() + 1);
+    const day = d.getDay();
+    if (day === 6) d.setDate(d.getDate() - 1); // 토 → 금
+    if (day === 0) d.setDate(d.getDate() - 2); // 일 → 금
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
   const parsePostInfo = (raw: string) => {
     try { const p = JSON.parse(raw); return { special: p.special || "", positive: p.positive || "", negative: p.negative || "" }; }
     catch { return { special: raw || "", positive: "", negative: "" }; }
@@ -173,9 +185,10 @@ export default function MeetingTab() {
   const openEdit = (i: Instructor) => {
     const { date, time } = parseMeetingDate(i.meeting_date || "");
     const post = parsePostInfo(i.post_info || "");
+    const remindDate = i.remind_date || (i.meeting_date ? calcRemindDate(i.meeting_date) : "");
     setEditingMeeting({
       instructor: i, date, time, memo: i.meeting_memo || "",
-      confirmed: !!i.meeting_confirmed,
+      confirmed: !!i.meeting_confirmed, remindDate,
       postSpecial: post.special, postPositive: post.positive, postNegative: post.negative,
     });
   };
@@ -192,6 +205,7 @@ export default function MeetingTab() {
         body: JSON.stringify({
           meeting_date: meetingDate, meeting_memo: editingMeeting.memo,
           meeting_confirmed: editingMeeting.confirmed,
+          remind_date: editingMeeting.remindDate || "",
           post_info: JSON.stringify({ special: editingMeeting.postSpecial, positive: editingMeeting.postPositive, negative: editingMeeting.postNegative }),
         }),
       });
@@ -396,10 +410,16 @@ export default function MeetingTab() {
                             {dayReminders.map((mt) => (
                               <button
                                 key={`remind-${mt.id}`}
-                                onClick={() => openEdit(mt)}
-                                className="w-full text-left rounded bg-orange-100 border border-orange-200 px-1.5 py-0.5 text-[11px] hover:bg-orange-200 transition-colors truncate"
+                                onClick={() => { setRemindModal(mt); setRemindDate(mt.remind_date || calcRemindDate(mt.meeting_date || "")); setRemindDone(!!mt.remind_done); }}
+                                className={`w-full text-left rounded px-1.5 py-0.5 text-[11px] transition-colors truncate border ${
+                                  mt.remind_done
+                                    ? "bg-green-50 border-green-200 hover:bg-green-100"
+                                    : "bg-orange-100 border-orange-200 hover:bg-orange-200"
+                                }`}
                               >
-                                <span className="font-medium text-orange-800">📞 {mt.name}</span>
+                                <span className={`font-medium ${mt.remind_done ? "text-green-700 line-through" : "text-orange-800"}`}>
+                                  {mt.remind_done ? "✓" : "📞"} {mt.name}
+                                </span>
                               </button>
                             ))}
                           </div>
@@ -465,11 +485,34 @@ export default function MeetingTab() {
                     <div className="flex gap-3">
                       <div className="flex-1">
                         <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
-                        <Input type="date" className="h-9 text-sm" value={editingMeeting.date} onChange={(e) => setEditingMeeting({ ...editingMeeting, date: e.target.value })} />
+                        <Input type="date" className="h-9 text-sm" value={editingMeeting.date} onChange={(e) => {
+                          const newDate = e.target.value;
+                          setEditingMeeting({ ...editingMeeting, date: newDate, remindDate: newDate ? calcRemindDate(newDate) : "" });
+                        }} />
                       </div>
                       <div className="w-[110px]">
                         <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
                         <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
+                      </div>
+                    </div>
+
+                    {/* 리마인드 날짜 */}
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">리마인드 날짜</label>
+                      <div className="flex gap-2 items-center">
+                        <Input
+                          type="date" className="h-9 text-sm flex-1"
+                          value={editingMeeting.remindDate}
+                          onChange={(e) => setEditingMeeting({ ...editingMeeting, remindDate: e.target.value })}
+                        />
+                        {editingMeeting.date && (
+                          <button
+                            className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+                            onClick={() => setEditingMeeting({ ...editingMeeting, remindDate: calcRemindDate(editingMeeting.date) })}
+                          >
+                            자동 계산
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -530,6 +573,96 @@ export default function MeetingTab() {
                     <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600" onClick={handleRemove}>삭제</Button>
                   )}
                   <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => setEditingMeeting(null)}>취소</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
+      {/* ── 리마인드 모달 ── */}
+      {remindModal && (() => {
+        const inst = remindModal;
+        const igUrl = inst.instagram ? (inst.instagram.startsWith("http") ? inst.instagram : `https://instagram.com/${inst.instagram}`) : "";
+        const handleRemindSave = async () => {
+          try {
+            const res = await fetch(`/api/instructors/${inst.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ remind_date: remindDate, remind_done: remindDone }),
+            });
+            if (!res.ok) throw new Error("Failed");
+            dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
+            setRemindModal(null);
+            toast.success("리마인드 날짜 저장 완료");
+          } catch { toast.error("저장 실패"); }
+        };
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRemindModal(null)}>
+            <Card className="w-[440px]" onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-orange-600">📞</span>
+                    <p className="text-base font-semibold">{inst.name} 리마인드</p>
+                    <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[inst.status as InstructorStatus] || ""}`}>{inst.status}</Badge>
+                  </div>
+                  <button onClick={() => setRemindModal(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+                </div>
+
+                {/* 연락처 정보 */}
+                <div className="border rounded-lg p-4 space-y-2.5 bg-gray-50/50">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">연락처</p>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-muted-foreground w-16 shrink-0">전화</span>
+                    {inst.phone ? <a href={`tel:${inst.phone}`} className="text-blue-600 hover:underline font-medium">{inst.phone}</a> : <span className="text-muted-foreground">-</span>}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-muted-foreground w-16 shrink-0">이메일</span>
+                    {inst.email ? <a href={`mailto:${inst.email}`} className="text-blue-600 hover:underline font-medium">{inst.email}</a> : <span className="text-muted-foreground">-</span>}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-muted-foreground w-16 shrink-0">유튜브</span>
+                    {inst.youtube ? <a href={inst.youtube} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-0.5">링크<ExternalLink className="h-3 w-3" /></a> : <span className="text-muted-foreground">-</span>}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-muted-foreground w-16 shrink-0">인스타</span>
+                    {igUrl ? <a href={igUrl} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:underline flex items-center gap-0.5">링크<ExternalLink className="h-3 w-3" /></a> : <span className="text-muted-foreground">-</span>}
+                  </div>
+                </div>
+
+                {/* 미팅 정보 요약 */}
+                <div className="text-sm text-muted-foreground">
+                  <span>미팅일: </span>
+                  <span className="font-medium text-foreground">{inst.meeting_date ? formatMeetingDate(inst.meeting_date) : "-"}</span>
+                </div>
+
+                {/* 리마인드 날짜 변경 */}
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">리마인드 날짜</label>
+                  <div className="flex gap-2 items-center">
+                    <Input type="date" className="h-9 text-sm flex-1" value={remindDate} onChange={(e) => setRemindDate(e.target.value)} />
+                    {inst.meeting_date && (
+                      <button className="text-xs text-blue-600 hover:underline whitespace-nowrap" onClick={() => setRemindDate(calcRemindDate(inst.meeting_date))}>
+                        자동 계산
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 리마인드 완료 체크 */}
+                <div
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    remindDone ? "bg-green-50 border-green-300" : "bg-gray-50 border-gray-200"
+                  }`}
+                  onClick={() => setRemindDone(!remindDone)}
+                >
+                  <input type="checkbox" className="h-4 w-4 rounded accent-green-600 pointer-events-none" checked={remindDone} readOnly />
+                  <span className={`text-sm font-medium ${remindDone ? "text-green-800" : "text-gray-500"}`}>리마인드 완료</span>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button size="sm" className="h-9 text-sm flex-1" onClick={handleRemindSave}><Save className="h-3.5 w-3.5 mr-1" />저장</Button>
+                  <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => setRemindModal(null)}>닫기</Button>
                 </div>
               </CardContent>
             </Card>
