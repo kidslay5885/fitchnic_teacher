@@ -14,12 +14,37 @@ import {
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
+const PRE_QUESTIONS = [
+  { section: "기본 확인 사항", questions: [
+    "핏크닉을 알고 있었는지, 이번에 연락이 닿아서 알게 되었는지",
+    "'강의' 형태로 진행 여부 (온라인/오프라인, 기수제/상시판매/웨비나 등)",
+  ]},
+  { section: "콘텐츠 관련 확인사항", questions: [
+    "수익을 내고 있는 콘텐츠",
+    "현재 수익 규모",
+    "유사 콘텐츠 강의와 다른점 (소구점, 고객 어필 포인트)",
+    "AI를 활용하고 있는지, 어떻게 활용하는지",
+  ]},
+  { section: "강의 관련 확인 사항", questions: [
+    "수강생 연령대, 타깃 고객",
+    "강의 커리큘럼 (보유 여부, 진행 주차 등)",
+    "수강생 실제 수익화 여부, 수익 발생 기간",
+    "한번에 가능한 수강생 수 (우리는 한 기수당 100명, 강의금액 2~3백만원 대 감당 가능한지)",
+  ]},
+  { section: "위험 방어", questions: [
+    "강의 진행 시 수강생 불만/항의 경험 및 해결방법",
+    "콘텐츠로 수익을 내면서 플랫폼에서 알아야 할 위험요소",
+  ]},
+  { section: "기타", questions: [""] },
+];
+
 export default function MeetingReportPage() {
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [loading, setLoading] = useState(true);
   const [monthOffset, setMonthOffset] = useState(0);
   const [search, setSearch] = useState("");
   const [detailInstructor, setDetailInstructor] = useState<Instructor | null>(null);
+  const [detailTab, setDetailTab] = useState<"before" | "questions" | "after">("before");
 
   // 데이터 로드
   const loadData = useCallback(async () => {
@@ -193,7 +218,7 @@ export default function MeetingReportPage() {
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 ({confirmedWithDate.length})</span>
                     </td></tr>
                     {confirmedWithDate.map((i, idx) => (
-                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => setDetailInstructor(i)}>
+                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab("before"); }}>
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -210,7 +235,7 @@ export default function MeetingReportPage() {
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 · 날짜 미정 ({confirmedNoDate.length})</span>
                     </td></tr>
                     {confirmedNoDate.map((i, idx) => (
-                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => setDetailInstructor(i)}>
+                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab("before"); }}>
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -227,7 +252,7 @@ export default function MeetingReportPage() {
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 예정 ({notConfirmed.length})</span>
                     </td></tr>
                     {notConfirmed.map((i, idx) => (
-                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => setDetailInstructor(i)}>
+                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab("before"); }}>
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -288,7 +313,7 @@ export default function MeetingReportPage() {
                               {dayMeetings.map((mt) => {
                                 const time = mt.meeting_date?.match(/\d{1,2}:\d{2}/)?.[0];
                                 return (
-                                  <button key={mt.id} onClick={() => setDetailInstructor(mt)}
+                                  <button key={mt.id} onClick={() => { setDetailInstructor(mt); setDetailTab("before"); }}
                                     className="w-full text-left rounded bg-blue-100 border border-blue-200 px-1.5 py-0.5 text-[11px] hover:bg-blue-200 transition-colors truncate">
                                     <span className="font-medium text-blue-900">{mt.name}</span>
                                     {time && <span className="text-blue-500 ml-1">{time}</span>}
@@ -378,28 +403,78 @@ export default function MeetingReportPage() {
                   </div>
                 </div>
 
-                {/* 중앙: 사전 정보 */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-muted-foreground mb-1">사전 정보</p>
-                  <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap h-[calc(100%-20px)] overflow-y-auto">
-                    {inst.pre_info || "입력된 사전 정보가 없습니다."}
+                {/* 오른쪽: 탭 전환 영역 (읽기 전용) */}
+                <div className="flex-1 min-w-0 flex flex-col">
+                  {/* 탭 헤더 */}
+                  <div className="flex border-b mb-3">
+                    {([
+                      { id: "before" as const, label: "미팅 전" },
+                      { id: "questions" as const, label: "미팅 질문" },
+                      { id: "after" as const, label: "미팅 후" },
+                    ]).map((tab) => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setDetailTab(tab.id)}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                          detailTab === tab.id
+                            ? "border-primary text-primary"
+                            : "border-transparent text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
                   </div>
-                </div>
 
-                {/* 오른쪽: 사후 정보 */}
-                <div className="flex-1 min-w-0 space-y-3">
-                  <p className="text-xs font-semibold text-muted-foreground">사후 정보</p>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">특이사항</p>
-                    <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap min-h-[80px]">{post.special || "-"}</div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">긍정적인 점</p>
-                    <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap min-h-[60px]">{post.positive || "-"}</div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">부정적인 점</p>
-                    <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap min-h-[60px]">{post.negative || "-"}</div>
+                  {/* 탭 내용 */}
+                  <div className="flex-1 min-h-0 overflow-y-auto">
+                    {detailTab === "before" && (
+                      <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap h-full overflow-y-auto">
+                        {inst.pre_info || "입력된 사전 정보가 없습니다."}
+                      </div>
+                    )}
+
+                    {detailTab === "questions" && (() => {
+                      let preQ: Record<string, string> = {};
+                      try { if (inst.pre_questions) preQ = JSON.parse(inst.pre_questions); } catch {}
+                      return (
+                        <div className="space-y-4">
+                          {PRE_QUESTIONS.map((section, si) => (
+                            <div key={si} className="space-y-2">
+                              <p className="text-sm font-semibold border-b pb-1">{si + 1}. {section.section}</p>
+                              {section.questions.map((q, qi) => {
+                                const answer = preQ[`${si}_${qi}`] || "";
+                                return (
+                                  <div key={qi}>
+                                    {q && <p className="text-xs text-muted-foreground mb-1">{q}</p>}
+                                    <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap min-h-[36px]">
+                                      {answer || "-"}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+
+                    {detailTab === "after" && (
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">특이사항</p>
+                          <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap min-h-[80px]">{post.special || "-"}</div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">긍정적인 점</p>
+                          <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap min-h-[60px]">{post.positive || "-"}</div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">부정적인 점</p>
+                          <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap min-h-[60px]">{post.negative || "-"}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

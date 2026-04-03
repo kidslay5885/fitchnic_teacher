@@ -473,7 +473,7 @@ export default function MeetingTab() {
         const inst = editingMeeting.instructor;
         const igUrl = inst.instagram ? (inst.instagram.startsWith("http") ? inst.instagram : `https://instagram.com/${inst.instagram}`) : "";
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingMeeting(null)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <Card className="w-[1100px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
               <CardContent className="p-6 flex flex-col overflow-hidden">
                 {/* 헤더 */}
