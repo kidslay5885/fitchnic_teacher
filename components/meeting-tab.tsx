@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Save, ExternalLink,
-  MessageSquare, X, Search, Calendar, Clock, Plus, ArrowUpRight, ClipboardList,
+  MessageSquare, X, Search, Calendar, Clock, Plus, ArrowUpRight,
 } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
@@ -67,12 +67,13 @@ export default function MeetingTab() {
     instructor: Instructor; date: string; time: string; memo: string;
     confirmed: boolean; remindDate: string; meetingType: string;
     postSpecial: string; postPositive: string; postNegative: string;
+    modalTab: "before" | "questions" | "after";
+    preQuestions: Record<string, string>;
   } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [remindModal, setRemindModal] = useState<Instructor | null>(null);
   const [remindDate, setRemindDate] = useState("");
   const [remindDone, setRemindDone] = useState(false);
-  const [preQModal, setPreQModal] = useState<Instructor | null>(null);
   const [search, setSearch] = useState("");
 
   // 응답을 받은 강사 (거절/제외/보류 제외) + 미팅 관련 강사
@@ -201,10 +202,13 @@ export default function MeetingTab() {
     const { date, time } = parseMeetingDate(i.meeting_date || "");
     const post = parsePostInfo(i.post_info || "");
     const remindDate = i.remind_date || (i.meeting_date ? calcRemindDate(i.meeting_date) : "");
+    let preQ: Record<string, string> = {};
+    try { if (i.pre_questions) preQ = JSON.parse(i.pre_questions); } catch {}
     setEditingMeeting({
       instructor: i, date, time, memo: i.meeting_memo || "",
       confirmed: !!i.meeting_confirmed, remindDate, meetingType: i.meeting_type || "",
       postSpecial: post.special, postPositive: post.positive, postNegative: post.negative,
+      modalTab: "before", preQuestions: preQ,
     });
   };
 
@@ -222,6 +226,7 @@ export default function MeetingTab() {
           meeting_confirmed: editingMeeting.confirmed,
           remind_date: editingMeeting.remindDate || "",
           meeting_type: editingMeeting.meetingType || "",
+          pre_questions: JSON.stringify(editingMeeting.preQuestions),
           post_info: JSON.stringify({ special: editingMeeting.postSpecial, positive: editingMeeting.postPositive, negative: editingMeeting.postNegative }),
         }),
       });
@@ -258,14 +263,6 @@ export default function MeetingTab() {
     return d ? d.getTime() < now.getTime() : false;
   };
 
-  const hasPreQuestions = (i: Instructor) => {
-    if (!i.pre_questions) return false;
-    try {
-      const parsed = JSON.parse(i.pre_questions);
-      return Object.values(parsed).some((v) => typeof v === "string" && v.trim() !== "");
-    } catch { return false; }
-  };
-
   const renderRows = (list: Instructor[], showDate: boolean) =>
     list.map((i, idx) => (
       <tr key={i.id} className={`border-b hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => openEdit(i)}>
@@ -290,15 +287,6 @@ export default function MeetingTab() {
         </td>
         <td className="px-3 py-2 border-r border-gray-200/60 text-sm text-foreground/70 truncate max-w-[200px]" title={i.meeting_memo || ""}>
           {i.meeting_memo || ""}
-        </td>
-        <td className="px-2 py-2 text-center">
-          <button
-            title="사전 질문"
-            className={`p-1 rounded hover:bg-gray-100 ${hasPreQuestions(i) ? "text-blue-600" : "text-muted-foreground"}`}
-            onClick={(e) => { e.stopPropagation(); setPreQModal(i); }}
-          >
-            <ClipboardList className="h-4 w-4" />
-          </button>
         </td>
       </tr>
     ));
@@ -350,7 +338,6 @@ export default function MeetingTab() {
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">미팅일</th>
                 <th className="text-center px-2 py-2 border-r border-gray-200 whitespace-nowrap">방식</th>
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">메모</th>
-                <th className="text-center px-2 py-2 whitespace-nowrap w-10">질문</th>
               </tr>
             </thead>
             <tbody>
@@ -358,7 +345,7 @@ export default function MeetingTab() {
               {confirmedWithDate.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={8} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
+                    <td colSpan={7} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 ({confirmedWithDate.length})</span>
                     </td>
                   </tr>
@@ -369,7 +356,7 @@ export default function MeetingTab() {
               {confirmedNoDate.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={8} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
+                    <td colSpan={7} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 · 날짜 미정 ({confirmedNoDate.length})</span>
                     </td>
                   </tr>
@@ -380,7 +367,7 @@ export default function MeetingTab() {
               {notConfirmed.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={8} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
+                    <td colSpan={7} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 예정 ({notConfirmed.length})</span>
                     </td>
                   </tr>
@@ -590,45 +577,103 @@ export default function MeetingTab() {
                     </div>
                   </div>
 
-                  {/* ── 중앙: 사전 정보 ── */}
-                  <div className="flex-1 min-w-0">
-                    <label className="text-xs text-muted-foreground mb-1 block">사전 정보</label>
-                    <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 text-foreground/80 whitespace-pre-wrap h-[calc(100%-20px)] overflow-y-auto">
-                      {inst.pre_info || "입력된 사전 정보가 없습니다."}
+                  {/* ── 오른쪽: 탭 전환 영역 ── */}
+                  <div className="flex-1 min-w-0 flex flex-col">
+                    {/* 탭 헤더 */}
+                    <div className="flex border-b mb-3">
+                      {([
+                        { id: "before" as const, label: "미팅 전" },
+                        { id: "questions" as const, label: "미팅 질문" },
+                        { id: "after" as const, label: "미팅 후" },
+                      ]).map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setEditingMeeting({ ...editingMeeting, modalTab: tab.id })}
+                          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                            editingMeeting.modalTab === tab.id
+                              ? "border-primary text-primary"
+                              : "border-transparent text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
                     </div>
-                  </div>
 
-                  {/* ── 오른쪽: 사후 정보 ── */}
-                  <div className="flex-1 min-w-0 space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground">사후 정보</p>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">특이사항</label>
-                      <Textarea
-                        className="text-sm !min-h-[200px]"
-                        placeholder="미팅 중 특이사항..."
-                        value={editingMeeting.postSpecial}
-                        onChange={(e) => setEditingMeeting({ ...editingMeeting, postSpecial: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">긍정적인 점</label>
-                      <Textarea
-                        className="text-sm"
-                        rows={4}
-                        placeholder="긍정적인 점..."
-                        value={editingMeeting.postPositive}
-                        onChange={(e) => setEditingMeeting({ ...editingMeeting, postPositive: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">부정적인 점</label>
-                      <Textarea
-                        className="text-sm"
-                        rows={4}
-                        placeholder="부정적인 점..."
-                        value={editingMeeting.postNegative}
-                        onChange={(e) => setEditingMeeting({ ...editingMeeting, postNegative: e.target.value })}
-                      />
+                    {/* 탭 내용 */}
+                    <div className="flex-1 min-h-0 overflow-y-auto">
+                      {/* 미팅 전 */}
+                      {editingMeeting.modalTab === "before" && (
+                        <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 text-foreground/80 whitespace-pre-wrap h-full overflow-y-auto">
+                          {inst.pre_info || "입력된 사전 정보가 없습니다."}
+                        </div>
+                      )}
+
+                      {/* 미팅 질문 */}
+                      {editingMeeting.modalTab === "questions" && (
+                        <div className="space-y-5">
+                          {PRE_QUESTIONS.map((section, si) => (
+                            <div key={si} className="space-y-2.5">
+                              <p className="text-sm font-semibold text-foreground border-b pb-1">
+                                {si + 1}. {section.section}
+                              </p>
+                              {section.questions.map((q, qi) => {
+                                const key = `${si}_${qi}`;
+                                return (
+                                  <div key={qi}>
+                                    {q && <label className="text-xs text-muted-foreground mb-1 block">{q}</label>}
+                                    <Textarea
+                                      className="text-sm"
+                                      rows={2}
+                                      value={editingMeeting.preQuestions[key] || ""}
+                                      onChange={(e) => setEditingMeeting({
+                                        ...editingMeeting,
+                                        preQuestions: { ...editingMeeting.preQuestions, [key]: e.target.value },
+                                      })}
+                                      placeholder="답변 입력..."
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 미팅 후 */}
+                      {editingMeeting.modalTab === "after" && (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">특이사항</label>
+                            <Textarea
+                              className="text-sm !min-h-[200px]"
+                              placeholder="미팅 중 특이사항..."
+                              value={editingMeeting.postSpecial}
+                              onChange={(e) => setEditingMeeting({ ...editingMeeting, postSpecial: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">긍정적인 점</label>
+                            <Textarea
+                              className="text-sm"
+                              rows={4}
+                              placeholder="긍정적인 점..."
+                              value={editingMeeting.postPositive}
+                              onChange={(e) => setEditingMeeting({ ...editingMeeting, postPositive: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">부정적인 점</label>
+                            <Textarea
+                              className="text-sm"
+                              rows={4}
+                              placeholder="부정적인 점..."
+                              value={editingMeeting.postNegative}
+                              onChange={(e) => setEditingMeeting({ ...editingMeeting, postNegative: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -756,97 +801,6 @@ export default function MeetingTab() {
           onClose={() => setShowAddModal(false)}
         />
       )}
-      {/* ── 사전 질문 모달 ── */}
-      {preQModal && (
-        <PreQuestionsModal
-          instructor={preQModal}
-          onSave={async (data) => {
-            try {
-              const res = await fetch(`/api/instructors/${preQModal.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ pre_questions: JSON.stringify(data) }),
-              });
-              if (!res.ok) throw new Error("Failed");
-              dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
-              toast.success("사전 질문 저장 완료");
-              setPreQModal(null);
-            } catch { toast.error("저장 실패"); }
-          }}
-          onClose={() => setPreQModal(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ── 사전 질문 모달 ── */
-function PreQuestionsModal({ instructor, onSave, onClose }: {
-  instructor: Instructor;
-  onSave: (data: Record<string, string>) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [answers, setAnswers] = useState<Record<string, string>>(() => {
-    try {
-      return instructor.pre_questions ? JSON.parse(instructor.pre_questions) : {};
-    } catch { return {}; }
-  });
-  const [saving, setSaving] = useState(false);
-
-  const getKey = (si: number, qi: number) => `${si}_${qi}`;
-
-  const handleSave = async () => {
-    setSaving(true);
-    try { await onSave(answers); } finally { setSaving(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="w-[700px] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <CardContent className="p-0 flex flex-col overflow-hidden">
-          {/* 헤더 */}
-          <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
-            <div>
-              <p className="text-base font-semibold">{instructor.name} - 사전 질문</p>
-              <p className="text-xs text-muted-foreground">{instructor.field} | {instructor.assignee || "미지정"}</p>
-            </div>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* 질문 목록 */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-            {PRE_QUESTIONS.map((section, si) => (
-              <div key={si} className="space-y-2.5">
-                <p className="text-sm font-semibold text-foreground border-b pb-1">
-                  {si + 1}. {section.section}
-                </p>
-                {section.questions.map((q, qi) => (
-                  <div key={qi}>
-                    <label className="text-xs text-muted-foreground mb-1 block">{q}</label>
-                    <Textarea
-                      className="text-sm"
-                      rows={2}
-                      value={answers[getKey(si, qi)] || ""}
-                      onChange={(e) => setAnswers({ ...answers, [getKey(si, qi)]: e.target.value })}
-                      placeholder="답변 입력..."
-                    />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* 푸터 */}
-          <div className="flex gap-2 px-5 py-3 border-t shrink-0">
-            <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSave} disabled={saving}>
-              <Save className="h-4 w-4 mr-1" />{saving ? "저장 중..." : "저장"}
-            </Button>
-            <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
