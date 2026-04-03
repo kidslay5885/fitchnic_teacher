@@ -54,6 +54,7 @@ export interface Instructor {
   ban_reason: string;
   has_response: boolean;
   pre_questions: string;
+  meeting_type: string;
   created_at: string;
   updated_at: string;
 }

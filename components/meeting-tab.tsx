@@ -65,7 +65,7 @@ export default function MeetingTab() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [editingMeeting, setEditingMeeting] = useState<{
     instructor: Instructor; date: string; time: string; memo: string;
-    confirmed: boolean; remindDate: string;
+    confirmed: boolean; remindDate: string; meetingType: string;
     postSpecial: string; postPositive: string; postNegative: string;
   } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -203,7 +203,7 @@ export default function MeetingTab() {
     const remindDate = i.remind_date || (i.meeting_date ? calcRemindDate(i.meeting_date) : "");
     setEditingMeeting({
       instructor: i, date, time, memo: i.meeting_memo || "",
-      confirmed: !!i.meeting_confirmed, remindDate,
+      confirmed: !!i.meeting_confirmed, remindDate, meetingType: i.meeting_type || "",
       postSpecial: post.special, postPositive: post.positive, postNegative: post.negative,
     });
   };
@@ -221,6 +221,7 @@ export default function MeetingTab() {
           meeting_date: meetingDate, meeting_memo: editingMeeting.memo,
           meeting_confirmed: editingMeeting.confirmed,
           remind_date: editingMeeting.remindDate || "",
+          meeting_type: editingMeeting.meetingType || "",
           post_info: JSON.stringify({ special: editingMeeting.postSpecial, positive: editingMeeting.postPositive, negative: editingMeeting.postNegative }),
         }),
       });
@@ -553,6 +554,26 @@ export default function MeetingTab() {
                             자동 계산
                           </button>
                         )}
+                      </div>
+                    </div>
+
+                    {/* 미팅 방식 */}
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1.5 block">미팅 방식</label>
+                      <div className="flex gap-2">
+                        {(["줌미팅", "대면미팅"] as const).map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => setEditingMeeting({ ...editingMeeting, meetingType: editingMeeting.meetingType === t ? "" : t })}
+                            className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                              editingMeeting.meetingType === t
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                            }`}
+                          >
+                            {t}
+                          </button>
+                        ))}
                       </div>
                     </div>
 

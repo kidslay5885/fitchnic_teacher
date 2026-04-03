@@ -120,9 +120,9 @@ export default function ContactTab() {
   });
 
   /* ── 개별 발송 저장 ── */
-  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; response_method: string; pre_info: string }) => {
+  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string }) => {
     try {
-      const { pre_info, ...waveData } = data;
+      const { pre_info, meeting_type, ...waveData } = data;
       // 발송 기록 저장
       const res = await fetch(`/api/instructors/${instructorId}/waves`, {
         method: "POST",
@@ -130,13 +130,13 @@ export default function ContactTab() {
         body: JSON.stringify({ wave_number: waveNumber, ...waveData }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "저장 실패");
-      // 사전 정보는 강사 테이블에 저장 (1~3차 공유)
+      // 사전 정보 + 미팅 방식은 강사 테이블에 저장 (1~3차 공유)
       const inst = state.instructors.find(i => i.id === instructorId);
-      if (inst?.pre_info !== pre_info) {
+      if (inst?.pre_info !== pre_info || inst?.meeting_type !== meeting_type) {
         const r2 = await fetch(`/api/instructors/${instructorId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pre_info }),
+          body: JSON.stringify({ pre_info, meeting_type }),
         });
         if (r2.ok) dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await r2.json() });
       }
@@ -539,6 +539,7 @@ export default function ContactTab() {
           wave={getWave(editingWave.instructorId, editingWave.wave)}
           waveNumber={editingWave.wave}
           preInfo={state.instructors.find(i => i.id === editingWave.instructorId)?.pre_info || ""}
+          meetingType={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type || ""}
           onSave={(data) => handleWaveSave(editingWave.instructorId, editingWave.wave, data)}
           onDelete={() => handleWaveDelete(editingWave.instructorId, editingWave.wave)}
           onClose={() => setEditingWave(null)}
@@ -667,11 +668,12 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
 /* ── 발송 편집 팝오버 ── */
 const RESPONSE_METHODS = ["전화", "문자", "이메일", "기타"] as const;
 
-function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, onSave, onDelete, onClose }: {
+function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: initialMeetingType, onSave, onDelete, onClose }: {
   wave: OutreachWave | undefined;
   waveNumber: number;
   preInfo: string;
-  onSave: (data: { sent_date: string; result: string; response_method: string; pre_info: string }) => Promise<void>;
+  meetingType: string;
+  onSave: (data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string }) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -679,12 +681,13 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, onSave, onDelete
   const [result, setResult] = useState(wave?.result || "");
   const [responseMethod, setResponseMethod] = useState(wave?.response_method || "");
   const [preInfo, setPreInfo] = useState(initialPreInfo);
+  const [meetingType, setMeetingType] = useState(initialMeetingType);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await onSave({ sent_date: date, result: result || "무응답", response_method: responseMethod, pre_info: preInfo });
+      await onSave({ sent_date: date, result: result || "무응답", response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType });
     } finally { setSaving(false); }
   };
 
@@ -728,6 +731,25 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, onSave, onDelete
                 }`}
               >
                 {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-1.5 block">미팅 방식</label>
+          <div className="flex gap-2">
+            {(["줌미팅", "대면미팅"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setMeetingType(meetingType === t ? "" : t)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                  meetingType === t
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {t}
               </button>
             ))}
           </div>
