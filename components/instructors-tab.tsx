@@ -23,7 +23,7 @@ type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lectur
 type SortDir = "asc" | "desc";
 
 const ROW_H = 36;
-// 체크 | 상태 | 분야 | 담당자 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처 | 컨펌사유
+// 체크 | 상태 | 분야 | 담당자 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처 | 사유
 const GRID = "36px 84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px 1.2fr";
 const MIN_W = 1100;
 
@@ -222,7 +222,7 @@ export default function InstructorsTab() {
           <HeaderCell label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <HeaderCell label="비고" />
           <HeaderCell label="출처" col="source" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <HeaderCell label="컨펌사유" last />
+          <HeaderCell label="사유" last />
         </div>
 
         {/* 본문 */}
@@ -274,7 +274,13 @@ export default function InstructorsTab() {
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.email}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.notes}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.source}</span></div>
-                  <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate" title={i.confirm_reason || ""}>{i.confirm_reason}</span></div>
+                  <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate" title={
+                    i.status === "컨펌 필요" ? (i.confirm_reason || "") :
+                    ["제외", "보류", "거절"].includes(i.status) ? (i.exclude_reason || "") : ""
+                  }>{
+                    i.status === "컨펌 필요" ? (i.confirm_reason || "") :
+                    ["제외", "보류", "거절"].includes(i.status) ? (i.exclude_reason || "") : ""
+                  }</span></div>
                 </div>
               );
             })}
