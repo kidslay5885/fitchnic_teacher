@@ -28,7 +28,7 @@ function MainContent() {
     <div className="min-h-screen bg-background">
       <NavHeader />
       <main className="ml-52 p-6">
-        <div className="max-w-7xl">
+        <div className={state.tab === "meeting" ? "" : "max-w-7xl"}>
           {state.tab === "dashboard" && <DashboardTab />}
           {state.tab === "instructors" && <InstructorsTab />}
           {state.tab === "contact" && <ContactTab />}
