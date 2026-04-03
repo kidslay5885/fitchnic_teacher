@@ -24,8 +24,8 @@ type SortDir = "asc" | "desc";
 
 const ROW_H = 36;
 // 체크 | 상태 | 분야 | 담당자 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처
-const GRID = "36px 84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px";
-const MIN_W = 940;
+const GRID = "36px 84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 2fr 80px";
+const MIN_W = 1100;
 
 const ROW_BG: Record<string, string> = {
   미검토: "bg-gray-50",
@@ -127,10 +127,12 @@ export default function InstructorsTab() {
   const handleStatusChange = async (instructorId: string, newStatus: InstructorStatus, reason: string) => {
     try {
       const inst = state.instructors.find(i => i.id === instructorId);
+      const body: any = { status: newStatus, _changed_by: inst?.assignee || "", _reason: reason };
+      if (newStatus === "컨펌 필요" && reason) body.notes = reason;
       const res = await fetch(`/api/instructors/${instructorId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, _changed_by: inst?.assignee || "", _reason: reason }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json()).error);
       const updated = await res.json();
@@ -340,8 +342,10 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
   const adjustedX = Math.min(x, window.innerWidth - popW - 16);
   const adjustedY = y + 200 > window.innerHeight ? y - 200 - 8 : y;
 
+  const needsInput = (status: InstructorStatus) => requiresReason(status) || status === "컨펌 필요";
+
   const handleSelect = async (status: InstructorStatus) => {
-    if (requiresReason(status)) {
+    if (needsInput(status)) {
       setPendingStatus(status);
       return;
     }
@@ -351,7 +355,7 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
   };
 
   const handleReasonSubmit = async () => {
-    if (!reason.trim()) { toast.error("사유를 입력하세요."); return; }
+    if (requiresReason(pendingStatus!) && !reason.trim()) { toast.error("사유를 입력하세요."); return; }
     if (!pendingStatus) return;
     setSaving(true);
     await onConfirm(instructor.id, pendingStatus, reason);
@@ -366,7 +370,7 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
     >
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-muted-foreground">
-          {pendingStatus ? `${pendingStatus} 사유` : `${instructor.name} 상태 변경`}
+          {pendingStatus ? (pendingStatus === "컨펌 필요" ? "컨펌 필요 메모" : `${pendingStatus} 사유`) : `${instructor.name} 상태 변경`}
         </p>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
           <X className="h-3.5 w-3.5" />
@@ -389,7 +393,7 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
       ) : (
         <div className="space-y-2">
           <Input
-            placeholder="사유 입력..."
+            placeholder={pendingStatus === "컨펌 필요" ? "메모 입력 (선택)..." : "사유 입력..."}
             className="h-8 text-sm"
             value={reason}
             onChange={e => setReason(e.target.value)}
