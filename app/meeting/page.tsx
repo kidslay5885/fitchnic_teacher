@@ -350,7 +350,7 @@ export default function MeetingReportPage() {
         const post = parsePostInfo(inst.post_info || "");
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDetailInstructor(null)}>
-            <div className="bg-white rounded-lg shadow-lg w-[900px] max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-lg shadow-lg w-[900px] max-h-[85vh] overflow-hidden flex flex-col p-6" onClick={(e) => e.stopPropagation()}>
               {/* 헤더 */}
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-2">
@@ -361,9 +361,9 @@ export default function MeetingReportPage() {
                 <button onClick={() => setDetailInstructor(null)} className="text-muted-foreground hover:text-foreground text-lg">✕</button>
               </div>
 
-              <div className="flex gap-6">
+              <div className="flex gap-6 flex-1 min-h-0">
                 {/* 왼쪽: 기본 정보 */}
-                <div className="w-[280px] shrink-0 space-y-4">
+                <div className="w-[280px] shrink-0 space-y-4 overflow-y-auto">
                   <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm border rounded-lg p-3 bg-gray-50/50">
                     <div><span className="text-muted-foreground">분야</span> <span className="ml-1 font-medium">{inst.field || "-"}</span></div>
                     <div><span className="text-muted-foreground">담당자</span> <span className="ml-1 font-medium">{inst.assignee || "-"}</span></div>
