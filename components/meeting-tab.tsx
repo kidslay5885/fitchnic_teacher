@@ -20,7 +20,7 @@ const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 export default function MeetingTab() {
   const { state, dispatch } = useOutreach();
   const [monthOffset, setMonthOffset] = useState(0);
-  const [editingMeeting, setEditingMeeting] = useState<{ id: string; name: string; date: string; time: string; memo: string } | null>(null);
+  const [editingMeeting, setEditingMeeting] = useState<{ id: string; name: string; date: string; time: string; memo: string; confirmed: boolean } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState("");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
@@ -49,12 +49,12 @@ export default function MeetingTab() {
 
   useEffect(() => { loadWaves(); }, [loadWaves]);
 
-  // 응답을 받은 강사 (거절/제외/보류 제외) + 미팅 일정이 있는 강사
+  // 응답을 받은 강사 (거절/제외/보류 제외) + 미팅 관련 강사
   const EXCLUDE_STATUSES = ["거절", "제외", "보류"];
   const respondedInstructors = useMemo(() => {
     return state.instructors.filter((i) => {
-      // 미팅 일정이 있으면 무조건 포함
-      if (i.meeting_date) return true;
+      // 미팅 일정 또는 미팅 확정이면 무조건 포함
+      if (i.meeting_date || i.meeting_confirmed) return true;
       // 거절/제외/보류는 제외
       if (EXCLUDE_STATUSES.includes(i.status)) return false;
       // 응답 받은 강사 포함
@@ -75,11 +75,18 @@ export default function MeetingTab() {
   // 미팅 있는 강사 (캘린더용)
   const meetings = useMemo(() => state.instructors.filter((i) => i.meeting_date), [state.instructors]);
 
-  // 미팅 있는/없는 분리 + 정렬
-  const withMeeting = useMemo(() =>
-    filteredList.filter((i) => i.meeting_date).sort((a, b) => (a.meeting_date || "").localeCompare(b.meeting_date || "")),
+  // 3섹션 분리: 확정+날짜 / 확정+날짜미정 / 미확정
+  // 날짜가 있으면 확정으로 간주
+  const isConfirmed = (i: Instructor) => i.meeting_confirmed || !!i.meeting_date;
+  const confirmedWithDate = useMemo(() =>
+    filteredList.filter((i) => isConfirmed(i) && i.meeting_date).sort((a, b) => (a.meeting_date || "").localeCompare(b.meeting_date || "")),
   [filteredList]);
-  const withoutMeeting = useMemo(() => filteredList.filter((i) => !i.meeting_date), [filteredList]);
+  const confirmedNoDate = useMemo(() =>
+    filteredList.filter((i) => i.meeting_confirmed && !i.meeting_date),
+  [filteredList]);
+  const notConfirmed = useMemo(() =>
+    filteredList.filter((i) => !isConfirmed(i)),
+  [filteredList]);
 
   // 캘린더 계산
   const now = new Date();
@@ -157,7 +164,7 @@ export default function MeetingTab() {
 
   const openEdit = (i: Instructor) => {
     const { date, time } = parseMeetingDate(i.meeting_date || "");
-    setEditingMeeting({ id: i.id, name: i.name, date, time, memo: i.meeting_memo || "" });
+    setEditingMeeting({ id: i.id, name: i.name, date, time, memo: i.meeting_memo || "", confirmed: !!i.meeting_confirmed });
   };
 
   const handleSave = async () => {
@@ -169,7 +176,7 @@ export default function MeetingTab() {
       const res = await fetch(`/api/instructors/${editingMeeting.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meeting_date: meetingDate, meeting_memo: editingMeeting.memo }),
+        body: JSON.stringify({ meeting_date: meetingDate, meeting_memo: editingMeeting.memo, meeting_confirmed: editingMeeting.confirmed }),
       });
       if (!res.ok) throw new Error("Failed");
       dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
@@ -232,7 +239,9 @@ export default function MeetingTab() {
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>응답 {respondedInstructors.length}명</span>
             <span>·</span>
-            <span>미팅 예정 {withMeeting.length}명</span>
+            <span>확정 {confirmedWithDate.length + confirmedNoDate.length}명</span>
+            <span>·</span>
+            <span>예정 {notConfirmed.length}명</span>
           </div>
         </div>
 
@@ -249,26 +258,37 @@ export default function MeetingTab() {
               </tr>
             </thead>
             <tbody>
-              {/* 미팅 예정 섹션 */}
-              {withMeeting.length > 0 && (
+              {/* 미팅 확정 (날짜 O) */}
+              {confirmedWithDate.length > 0 && (
                 <>
                   <tr>
                     <td colSpan={6} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
-                      <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 예정 ({withMeeting.length})</span>
+                      <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 ({confirmedWithDate.length})</span>
                     </td>
                   </tr>
-                  {renderRows(withMeeting, true)}
+                  {renderRows(confirmedWithDate, true)}
                 </>
               )}
-              {/* 미팅 미정 섹션 */}
-              {withoutMeeting.length > 0 && (
+              {/* 미팅 확정 (날짜 미정) */}
+              {confirmedNoDate.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={6} className="bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-600 border-b">
-                      <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 미정 ({withoutMeeting.length})</span>
+                    <td colSpan={6} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
+                      <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 · 날짜 미정 ({confirmedNoDate.length})</span>
                     </td>
                   </tr>
-                  {renderRows(withoutMeeting, false)}
+                  {renderRows(confirmedNoDate, false)}
+                </>
+              )}
+              {/* 미팅 예정 (미확정) */}
+              {notConfirmed.length > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={6} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
+                      <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 예정 ({notConfirmed.length})</span>
+                    </td>
+                  </tr>
+                  {renderRows(notConfirmed, false)}
                 </>
               )}
             </tbody>
@@ -368,16 +388,25 @@ export default function MeetingTab() {
                 <p className="text-sm font-semibold">{editingMeeting.name} 미팅 일정</p>
                 <button onClick={() => setEditingMeeting(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
               </div>
+              <div
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                  editingMeeting.confirmed ? "bg-blue-50 border-blue-300" : "bg-gray-50 border-gray-200"
+                }`}
+                onClick={() => setEditingMeeting({ ...editingMeeting, confirmed: !editingMeeting.confirmed })}
+              >
+                <input type="checkbox" className="h-4 w-4 rounded accent-primary pointer-events-none" checked={editingMeeting.confirmed} readOnly />
+                <span className={`text-sm font-medium ${editingMeeting.confirmed ? "text-blue-800" : "text-gray-500"}`}>미팅 확정</span>
+              </div>
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
-                  <Input type="date" className="h-9 text-sm" value={editingMeeting.date} onChange={(e) => setEditingMeeting({ ...editingMeeting, date: e.target.value })} autoFocus />
+                  <Input type="date" className="h-9 text-sm" value={editingMeeting.date} onChange={(e) => setEditingMeeting({ ...editingMeeting, date: e.target.value })} />
                 </div>
-                <div className="w-[120px]">
-                  <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
-                  <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
+                  <div className="w-[120px]">
+                    <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
+                    <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
+                  </div>
                 </div>
-              </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">메모</label>
                 <Textarea className="text-sm" rows={3} value={editingMeeting.memo} onChange={(e) => setEditingMeeting({ ...editingMeeting, memo: e.target.value })} />
