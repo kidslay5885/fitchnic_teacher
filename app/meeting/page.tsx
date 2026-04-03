@@ -195,7 +195,7 @@ export default function MeetingReportPage() {
 
       <div className="flex gap-4 p-6" style={{ height: "calc(100vh - 70px)" }}>
         {/* ── 좌측: 강사 목록 ── */}
-        <div className="flex flex-col w-[750px] shrink-0">
+        <div className="flex flex-col w-[700px] shrink-0">
           <div className="shrink-0 space-y-3 pb-3">
             <div className="relative">
               <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
