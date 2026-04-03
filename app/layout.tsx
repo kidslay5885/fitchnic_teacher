@@ -16,6 +16,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <head>
+        <link rel="icon" href="/teacher.png" type="image/png" />
         <link
           rel="stylesheet"
           as="style"
