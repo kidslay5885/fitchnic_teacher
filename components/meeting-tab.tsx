@@ -12,7 +12,7 @@ import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import { toast } from "sonner";
 import {
   ChevronLeft, ChevronRight, Save, ExternalLink,
-  MessageSquare, X, Search, Calendar, Clock,
+  MessageSquare, X, Search, Calendar, Clock, Plus,
 } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
@@ -21,6 +21,7 @@ export default function MeetingTab() {
   const { state, dispatch } = useOutreach();
   const [monthOffset, setMonthOffset] = useState(0);
   const [editingMeeting, setEditingMeeting] = useState<{ id: string; name: string; date: string; time: string; memo: string } | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState("");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
 
@@ -48,9 +49,15 @@ export default function MeetingTab() {
 
   useEffect(() => { loadWaves(); }, [loadWaves]);
 
-  // 응답을 받은 강사 목록
+  // 응답을 받은 강사 (거절/제외/보류 제외) + 미팅 일정이 있는 강사
+  const EXCLUDE_STATUSES = ["거절", "제외", "보류"];
   const respondedInstructors = useMemo(() => {
     return state.instructors.filter((i) => {
+      // 미팅 일정이 있으면 무조건 포함
+      if (i.meeting_date) return true;
+      // 거절/제외/보류는 제외
+      if (EXCLUDE_STATUSES.includes(i.status)) return false;
+      // 응답 받은 강사 포함
       const waves = wavesMap[i.id] || [];
       return waves.some((w) => w.result === "응답");
     });
@@ -99,6 +106,33 @@ export default function MeetingTab() {
       const md = mt.meeting_date || "";
       return md.includes(iso) || md.includes(`${m}/${d}`) || md.includes(`${m}월 ${d}일`) ||
         md.includes(`${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}`);
+    });
+  };
+
+  // 미팅 날짜 문자열에서 Date 객체 추출
+  const extractDate = (md: string): Date | null => {
+    // ISO: 2026-04-03
+    const isoMatch = md.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) return new Date(+isoMatch[1], +isoMatch[2] - 1, +isoMatch[3]);
+    // 4/3, 04/03 형식 (올해로 가정)
+    const slashMatch = md.match(/(\d{1,2})\/(\d{1,2})/);
+    if (slashMatch) return new Date(now.getFullYear(), +slashMatch[1] - 1, +slashMatch[2]);
+    // 4월 3일 형식
+    const korMatch = md.match(/(\d{1,2})월\s*(\d{1,2})일/);
+    if (korMatch) return new Date(now.getFullYear(), +korMatch[1] - 1, +korMatch[2]);
+    return null;
+  };
+
+  // 미팅일 + 1달 후 리마인드 대상 조회
+  const getRemindersForDate = (date: Date | null) => {
+    if (!date) return [];
+    const targetIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    return meetings.filter((mt) => {
+      const meetDate = extractDate(mt.meeting_date || "");
+      if (!meetDate) return false;
+      meetDate.setMonth(meetDate.getMonth() + 1);
+      const remindIso = `${meetDate.getFullYear()}-${String(meetDate.getMonth() + 1).padStart(2, "0")}-${String(meetDate.getDate()).padStart(2, "0")}`;
+      return remindIso === targetIso;
     });
   };
 
@@ -168,7 +202,12 @@ export default function MeetingTab() {
       {/* ── 좌측: 전체 미팅 목록 ── */}
       <div className="flex flex-col w-[650px] shrink-0">
         <div className="shrink-0 space-y-3 pb-3">
-          <h2 className="text-lg font-semibold">미팅관리</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">미팅관리</h2>
+            <Button size="sm" className="h-8 text-sm" onClick={() => setShowAddModal(true)}>
+              <Plus className="h-4 w-4 mr-1" />미팅 추가
+            </Button>
+          </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -259,6 +298,7 @@ export default function MeetingTab() {
               <div key={week} className={`grid grid-cols-7 ${week < 5 ? "border-b" : ""}`}>
                 {calendarDays.slice(week * 7, week * 7 + 7).map((cell, ci) => {
                   const dayMeetings = getMeetingsForDate(cell.date);
+                  const dayReminders = getRemindersForDate(cell.date);
                   const today = isToday(cell.date);
                   return (
                     <div
@@ -286,6 +326,15 @@ export default function MeetingTab() {
                                 </button>
                               );
                             })}
+                            {dayReminders.map((mt) => (
+                              <button
+                                key={`remind-${mt.id}`}
+                                onClick={() => openEdit(mt)}
+                                className="w-full text-left rounded bg-orange-100 border border-orange-200 px-1.5 py-0.5 text-[11px] hover:bg-orange-200 transition-colors truncate"
+                              >
+                                <span className="font-medium text-orange-800">📞 {mt.name}</span>
+                              </button>
+                            ))}
                           </div>
                         </>
                       )}
@@ -332,6 +381,140 @@ export default function MeetingTab() {
           </Card>
         </div>
       )}
+      {/* ── 미팅 추가 모달 ── */}
+      {showAddModal && (
+        <AddMeetingModal
+          instructors={state.instructors}
+          onSave={async (id, meetingDate, memo) => {
+            try {
+              const res = await fetch(`/api/instructors/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ meeting_date: meetingDate, meeting_memo: memo || "" }),
+              });
+              if (!res.ok) throw new Error("Failed");
+              dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
+              toast.success("미팅 추가 완료");
+              setShowAddModal(false);
+            } catch { toast.error("추가 실패"); }
+          }}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── 미팅 추가 모달 ── */
+function AddMeetingModal({ instructors, onSave, onClose }: {
+  instructors: Instructor[];
+  onSave: (id: string, meetingDate: string, memo: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [memo, setMemo] = useState("");
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const results = useMemo(() => {
+    if (!search || search.length < 1) return [];
+    const q = search.toLowerCase();
+    return instructors
+      .filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [search, instructors]);
+
+  const selected = selectedId ? instructors.find((i) => i.id === selectedId) : null;
+
+  const handleSubmit = async () => {
+    if (!selectedId || !date) { toast.error("강사와 날짜를 선택하세요."); return; }
+    const meetingDate = time ? `${date} ${time}` : date;
+    setSaving(true);
+    await onSave(selectedId, meetingDate, memo);
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <Card className="w-[440px]" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">미팅 추가</p>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+          </div>
+
+          {/* 강사 검색 */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">강사 검색</label>
+            {selected ? (
+              <div className="flex items-center justify-between border rounded-md px-3 py-2">
+                <div>
+                  <span className="text-sm font-medium">{selected.name}</span>
+                  {selected.field && <span className="text-xs text-muted-foreground ml-2">{selected.field}</span>}
+                </div>
+                <button onClick={() => { setSelectedId(null); setSearch(""); }} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Input
+                  ref={inputRef}
+                  placeholder="이름 또는 분야로 검색..."
+                  className="h-9 text-sm"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {results.length > 0 && (
+                  <div className="absolute z-10 top-full left-0 right-0 mt-1 border rounded-md bg-white shadow-lg max-h-[200px] overflow-auto">
+                    {results.map((i) => (
+                      <button
+                        key={i.id}
+                        onClick={() => { setSelectedId(i.id); setSearch(""); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between border-b last:border-b-0"
+                      >
+                        <span className="font-medium">{i.name}</span>
+                        <span className="text-xs text-muted-foreground">{i.field} · {i.assignee}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 날짜 + 시간 */}
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
+              <Input type="date" className="h-9 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+            </div>
+            <div className="w-[120px]">
+              <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
+              <Input type="time" className="h-9 text-sm" value={time} onChange={(e) => setTime(e.target.value)} />
+            </div>
+          </div>
+
+          {/* 메모 */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">메모 (선택)</label>
+            <Textarea className="text-sm" rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="미팅 관련 메모..." />
+          </div>
+
+          {/* 버튼 */}
+          <div className="flex gap-2">
+            <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSubmit} disabled={saving || !selectedId || !date}>
+              {saving ? "저장 중..." : "미팅 추가"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
