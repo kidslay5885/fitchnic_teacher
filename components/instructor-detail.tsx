@@ -13,8 +13,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { STATUS_COLORS, ASSIGNEES, WAVE_RESULTS } from "@/lib/constants";
-import { getNextStatuses, requiresReason } from "@/lib/status-machine";
+import { STATUS_COLORS, STATUSES, ASSIGNEES, WAVE_RESULTS } from "@/lib/constants";
+import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, StatusHistory, OutreachWave } from "@/lib/types";
 import { toast } from "sonner";
 import { ExternalLink, Clock, Send, Pencil, Trash2 } from "lucide-react";
@@ -143,7 +143,7 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
     }
   };
 
-  const nextStatuses = getNextStatuses(instructor.status as InstructorStatus);
+  const nextStatuses = STATUSES.filter(s => s !== instructor.status);
 
   return (
     <Sheet open onOpenChange={() => onClose()}>
@@ -160,7 +160,7 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
 
         <ScrollArea className="h-[calc(100vh-90px)]">
           <div className="px-5 py-4 space-y-5">
-            {/* 상태 전이 */}
+            {/* 상태 변경 */}
             {nextStatuses.length > 0 && (
               <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
                 <p className="text-sm font-semibold">상태 변경</p>

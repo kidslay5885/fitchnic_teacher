@@ -14,10 +14,13 @@ import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import { toast } from "sonner";
-import { Send, Search, X } from "lucide-react";
+import { Send, Search, X, ChevronUp, ChevronDown } from "lucide-react";
 
-const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "계약 완료", "제외", "보류", "거절"];
+const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
+const FINAL_STATUSES = ["진행 중", "미팅 완료", "계약 완료", "보류", "거절"] as const;
 type ViewFilter = "all" | InstructorStatus;
+type SortKey = "name" | "status" | "field" | "assignee" | "final_status";
+type SortDir = "asc" | "desc";
 
 const ROW_H = 40;
 const GRID = "36px 1.5fr 88px 1fr 76px 1fr 1fr 1fr 88px";
@@ -39,9 +42,12 @@ export default function ContactTab() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
   const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
+  const [editingFinal, setEditingFinal] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkWaveNum, setBulkWaveNum] = useState("1");
@@ -81,14 +87,18 @@ export default function ContactTab() {
 
   const filtered = useMemo(() => {
     let list = contactInstructors;
-    if (viewFilter === "제외") list = list.filter((i) => ["제외", "보류", "거절"].includes(i.status));
-    else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
+    if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q));
     }
-    return list;
-  }, [contactInstructors, viewFilter, search]);
+    return [...list].sort((a, b) => {
+      const av = (a[sortKey] || "") as string;
+      const bv = (b[sortKey] || "") as string;
+      const cmp = av.localeCompare(bv, "ko");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [contactInstructors, viewFilter, search, sortKey, sortDir]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -134,6 +144,22 @@ export default function ContactTab() {
       await loadStats();
       toast.success(`${inst?.name} → ${newStatus}`);
       setEditingStatus(null);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
+  /* ── 최종 상태 변경 ── */
+  const handleFinalStatusChange = async (instructorId: string, finalStatus: string) => {
+    try {
+      const res = await fetch(`/api/instructors/${instructorId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ final_status: finalStatus }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const updated = await res.json();
+      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: updated });
+      toast.success(`최종 → ${finalStatus}`);
+      setEditingFinal(null);
     } catch (e: any) { toast.error(e.message); }
   };
 
@@ -240,6 +266,11 @@ export default function ContactTab() {
     });
   };
 
+  const handleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }, [sortKey, sortDir]);
+
   /* ── 헬퍼 ── */
   const cnt = (s: string) => contactInstructors.filter((i) => i.status === s).length;
   const getWave = (id: string, n: number) => (wavesMap[id] || []).find((w) => w.wave_number === n);
@@ -273,6 +304,12 @@ export default function ContactTab() {
     setEditingStatus({ instructor, x: rect.left, y: rect.bottom + 4 });
   };
 
+  const handleFinalClick = (e: React.MouseEvent, instructor: Instructor) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setEditingFinal({ instructor, x: rect.left, y: rect.bottom + 4 });
+  };
+
   const readyToSendCount = useMemo(() =>
     Array.from(selectedIds).filter(id => state.instructors.find(i => i.id === id)?.status === "발송 예정").length,
   [selectedIds, state.instructors]);
@@ -290,7 +327,7 @@ export default function ContactTab() {
             { key: "all" as ViewFilter, label: `전체 (${contactInstructors.length})`, active: "bg-gray-200 text-gray-900 border-gray-300", idle: "bg-gray-100 text-gray-600" },
             { key: "발송 예정" as ViewFilter, label: `발송 예정 (${cnt("발송 예정")})`, active: "bg-blue-200 text-blue-900 border-blue-400", idle: "bg-blue-50 text-blue-700 border-blue-200" },
             { key: "진행 중" as ViewFilter, label: `진행 중 (${cnt("진행 중")})`, active: "bg-indigo-200 text-indigo-900 border-indigo-400", idle: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-            { key: "제외" as ViewFilter, label: `제외/보류/거절 (${cnt("제외") + cnt("보류") + cnt("거절")})`, active: "bg-rose-200 text-rose-900 border-rose-400", idle: "bg-rose-50 text-rose-700 border-rose-200" },
+            { key: "보류" as ViewFilter, label: `보류 (${cnt("보류")})`, active: "bg-orange-200 text-orange-900 border-orange-400", idle: "bg-orange-50 text-orange-700 border-orange-200" },
             { key: "계약 완료" as ViewFilter, label: `계약 완료 (${cnt("계약 완료")})`, active: "bg-green-200 text-green-900 border-green-400", idle: "bg-green-50 text-green-700 border-green-200" },
           ]).map((f) => (
             <button
@@ -325,14 +362,14 @@ export default function ContactTab() {
             <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
               checked={selectedIds.size === filtered.length && filtered.length > 0} readOnly />
           </div>
-          <div className="px-3 py-2.5 border-r border-gray-200">이름</div>
-          <div className="px-2 py-2.5 border-r border-gray-200">상태</div>
-          <div className="px-2 py-2.5 border-r border-gray-200">분야</div>
-          <div className="px-2 py-2.5 border-r border-gray-200">담당자</div>
+          <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <SortHeader label="담당자" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <div className="px-2 py-2.5 text-center border-r border-gray-200">1차</div>
           <div className="px-2 py-2.5 text-center border-r border-gray-200">2차</div>
           <div className="px-2 py-2.5 text-center border-r border-gray-200">3차</div>
-          <div className="px-2 py-2.5">최종</div>
+          <SortHeader label="최종" col="final_status" sk={sortKey} sd={sortDir} onSort={handleSort} last />
         </div>
 
         {/* 본문 */}
@@ -394,7 +431,15 @@ export default function ContactTab() {
                     );
                   })}
                   {/* 최종 */}
-                  <div className="px-2 text-muted-foreground truncate" title={i.final_status || ""}>{i.final_status || "-"}</div>
+                  <div
+                    className="px-2 cursor-pointer hover:brightness-95 transition-colors truncate"
+                    title={i.final_status || "미선택"}
+                    onClick={(e) => handleFinalClick(e, i)}
+                  >
+                    <span className={`text-sm ${i.final_status ? "font-medium" : "text-muted-foreground"}`}>
+                      {i.final_status || "-"}
+                    </span>
+                  </div>
                 </div>
               );
             })}
@@ -461,6 +506,17 @@ export default function ContactTab() {
           y={editingWave.y}
           onUpdate={(field, value) => handleWaveUpdate(editingWave.instructorId, editingWave.wave, field, value)}
           onClose={() => setEditingWave(null)}
+        />
+      )}
+
+      {/* ── 최종 상태 팝오버 ── */}
+      {editingFinal && (
+        <FinalStatusPopover
+          instructor={editingFinal.instructor}
+          x={editingFinal.x}
+          y={editingFinal.y}
+          onSelect={handleFinalStatusChange}
+          onClose={() => setEditingFinal(null)}
         />
       )}
 
@@ -661,6 +717,92 @@ function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
       </div>
 
       {saving && <p className="text-xs text-muted-foreground">저장 중...</p>}
+    </div>
+  );
+}
+
+/* ── 최종 상태 팝오버 ── */
+const FINAL_COLORS: Record<string, string> = {
+  "진행 중": "bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
+  "미팅 완료": "bg-purple-50 text-purple-700 hover:bg-purple-100",
+  "계약 완료": "bg-green-50 text-green-700 hover:bg-green-100",
+  보류: "bg-orange-50 text-orange-700 hover:bg-orange-100",
+  거절: "bg-red-50 text-red-700 hover:bg-red-100",
+};
+
+function FinalStatusPopover({ instructor, x, y, onSelect, onClose }: {
+  instructor: Instructor;
+  x: number; y: number;
+  onSelect: (id: string, status: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const popW = 160;
+  const popH = FINAL_STATUSES.length * 36 + 48;
+  const adjustedX = Math.min(x, window.innerWidth - popW - 16);
+  const adjustedY = y + popH > window.innerHeight ? y - popH - 8 : y;
+
+  const handleClick = async (status: string) => {
+    setSaving(true);
+    await onSelect(instructor.id, status);
+    setSaving(false);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-50 bg-white border rounded-lg shadow-lg p-2 space-y-1"
+      style={{ left: adjustedX, top: adjustedY, width: popW }}
+    >
+      <p className="text-xs font-semibold text-muted-foreground px-2 py-1">최종 상태</p>
+      {instructor.final_status && (
+        <button
+          onClick={() => handleClick("")}
+          disabled={saving}
+          className="w-full text-left px-3 py-1.5 rounded text-sm text-muted-foreground hover:bg-gray-100 transition-colors"
+        >
+          초기화
+        </button>
+      )}
+      {FINAL_STATUSES.map((s) => (
+        <button
+          key={s}
+          onClick={() => handleClick(s)}
+          disabled={saving}
+          className={`w-full text-left px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+            instructor.final_status === s ? "ring-2 ring-primary/40" : ""
+          } ${FINAL_COLORS[s] || ""}`}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── 정렬 헤더 셀 ── */
+function SortHeader({ label, col, sk, sd, onSort, last }: {
+  label: string; col: SortKey; sk: SortKey; sd: SortDir;
+  onSort: (k: SortKey) => void; last?: boolean;
+}) {
+  const active = sk === col;
+  return (
+    <div
+      className={`px-2 py-2.5 whitespace-nowrap flex items-center cursor-pointer hover:bg-gray-200/50 ${!last ? "border-r border-gray-200" : ""}`}
+      onClick={() => onSort(col)}
+    >
+      {label}
+      {active && (sd === "asc" ? <ChevronUp className="h-3.5 w-3.5 ml-0.5" /> : <ChevronDown className="h-3.5 w-3.5 ml-0.5" />)}
     </div>
   );
 }

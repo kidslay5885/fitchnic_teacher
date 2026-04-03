@@ -35,5 +35,32 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // 발송 결과가 "거절"이면 강사 상태도 "거절"로 변경
+  if (body.result === "거절") {
+    const { data: inst } = await sb
+      .from("instructors")
+      .select("status, assignee")
+      .eq("id", id)
+      .single();
+
+    if (inst && inst.status !== "거절") {
+      await sb
+        .from("status_history")
+        .insert({
+          instructor_id: id,
+          from_status: inst.status,
+          to_status: "거절",
+          changed_by: inst.assignee || "",
+          reason: `${body.wave_number}차 발송 거절`,
+        });
+
+      await sb
+        .from("instructors")
+        .update({ status: "거절", updated_at: new Date().toISOString() })
+        .eq("id", id);
+    }
+  }
+
   return NextResponse.json(data);
 }
