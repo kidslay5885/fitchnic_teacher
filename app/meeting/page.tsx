@@ -195,7 +195,7 @@ export default function MeetingReportPage() {
 
       <div className="flex gap-4 p-6" style={{ height: "calc(100vh - 70px)" }}>
         {/* ── 좌측: 강사 목록 ── */}
-        <div className="flex flex-col w-[650px] shrink-0">
+        <div className="flex flex-col flex-1 min-w-0">
           <div className="shrink-0 space-y-3 pb-3">
             <div className="relative">
               <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
@@ -299,7 +299,7 @@ export default function MeetingReportPage() {
         </div>
 
         {/* ── 우측: 캘린더 ── */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="w-[500px] shrink-0 flex flex-col">
           <div className="shrink-0 flex items-center gap-3 pb-3">
             <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setMonthOffset(monthOffset - 1)}>
               <ChevronLeft className="h-4 w-4" />
