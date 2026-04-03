@@ -144,6 +144,17 @@ export default function MeetingTab() {
     return { date: dateMatch?.[1] || "", time: timeMatch?.[1] || "" };
   };
 
+  const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+  const formatMeetingDate = (md: string) => {
+    const { date, time } = parseMeetingDate(md);
+    if (!date) return md; // ISO 파싱 안 되면 원본 반환
+    const d = new Date(date);
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    const dow = DAY_KO[d.getDay()];
+    return time ? `${m}/${day}(${dow}) ${time}` : `${m}/${day}(${dow})`;
+  };
+
   const openEdit = (i: Instructor) => {
     const { date, time } = parseMeetingDate(i.meeting_date || "");
     setEditingMeeting({ id: i.id, name: i.name, date, time, memo: i.meeting_memo || "" });
@@ -151,8 +162,9 @@ export default function MeetingTab() {
 
   const handleSave = async () => {
     if (!editingMeeting) return;
-    if (!editingMeeting.date) { toast.error("날짜를 선택하세요."); return; }
-    const meetingDate = editingMeeting.time ? `${editingMeeting.date} ${editingMeeting.time}` : editingMeeting.date;
+    const meetingDate = editingMeeting.date
+      ? (editingMeeting.time ? `${editingMeeting.date} ${editingMeeting.time}` : editingMeeting.date)
+      : "";
     try {
       const res = await fetch(`/api/instructors/${editingMeeting.id}`, {
         method: "PATCH",
@@ -189,10 +201,10 @@ export default function MeetingTab() {
         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap">{i.assignee}</td>
         <td className="px-3 py-2 border-r border-gray-200/60 whitespace-nowrap font-medium text-blue-700">
-          {showDate ? (i.meeting_date || "") : "-"}
+          {showDate ? formatMeetingDate(i.meeting_date || "") : "-"}
         </td>
-        <td className="px-3 py-2 text-muted-foreground truncate max-w-[100px]">
-          {i.meeting_memo && <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3 shrink-0" /><span className="truncate">{i.meeting_memo}</span></span>}
+        <td className="px-3 py-2 text-sm text-foreground/70 truncate max-w-[200px]" title={i.meeting_memo || ""}>
+          {i.meeting_memo || ""}
         </td>
       </tr>
     ));
