@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { STATUS_COLORS } from "@/lib/constants";
 import type { Instructor, InstructorStatus } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import {
   ChevronLeft, ChevronRight, Search, Calendar, Clock,
@@ -48,9 +47,11 @@ export default function MeetingReportPage() {
   const [search, setSearch] = useState("");
   const [detailInstructor, setDetailInstructor] = useState<Instructor | null>(null);
   const [detailTab, setDetailTab] = useState<"before" | "questions" | "after">("before");
-  const [reportMode, setReportMode] = useState(false);
+  const [pageTab, setPageTab] = useState<"overview" | "report">("overview");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportTitle, setReportTitle] = useState(`미팅 보고서 ${new Date().toLocaleDateString("ko-KR")}`);
+  const [reportFields, setReportFields] = useState<Set<string>>(new Set(["name", "status", "field", "contact_assignee", "meeting_date", "meeting_type", "meeting_memo"]));
+  const [reportSaving, setReportSaving] = useState(false);
 
   const getDefaultTab = (meetingDate: string | undefined): "before" | "questions" | "after" => {
     if (!meetingDate) return "before";
@@ -194,29 +195,26 @@ export default function MeetingReportPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card px-6 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold">미팅관리 현황</h1>
-          <p className="text-xs text-muted-foreground">보고용 · 읽기 전용</p>
+      <header className="border-b bg-card px-6">
+        <div className="flex items-center justify-between py-3">
+          <div>
+            <h1 className="text-lg font-bold">미팅관리 현황</h1>
+            <p className="text-xs text-muted-foreground">보고용 · 읽기 전용</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {reportMode ? (
-            <>
-              <span className="text-sm text-muted-foreground">{selectedIds.size}명 선택</span>
-              <Button size="sm" className="h-8 text-sm" onClick={() => { if (selectedIds.size === 0) { toast.error("강사를 선택하세요."); return; } setShowReportModal(true); }}>
-                <FileText className="h-4 w-4 mr-1" />보고서 생성
-              </Button>
-              <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => { setReportMode(false); setSelectedIds(new Set()); }}>취소</Button>
-            </>
-          ) : (
-            <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => setReportMode(true)}>
-              <FileText className="h-4 w-4 mr-1" />보고서 만들기
-            </Button>
-          )}
+        <div className="flex gap-0 -mb-px">
+          <button
+            onClick={() => setPageTab("overview")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${pageTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >현황</button>
+          <button
+            onClick={() => setPageTab("report")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${pageTab === "report" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >보고서</button>
         </div>
       </header>
 
-      <div className="flex gap-4 p-6" style={{ height: "calc(100vh - 70px)" }}>
+      {pageTab === "overview" && <div className="flex gap-4 p-6" style={{ height: "calc(100vh - 100px)" }}>
         {/* ── 좌측: 강사 목록 ── */}
         <div className="flex flex-col w-[800px] shrink-0">
           <div className="shrink-0 space-y-3 pb-3">
@@ -237,12 +235,6 @@ export default function MeetingReportPage() {
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10 bg-[#f8f9fa] text-xs font-semibold text-muted-foreground">
                 <tr className="border-b">
-                  {reportMode && <th className="text-center px-2 py-2 border-r border-gray-200 w-10">
-                    <Checkbox checked={selectedIds.size === meetingInstructors.length && meetingInstructors.length > 0} onCheckedChange={() => {
-                      if (selectedIds.size === meetingInstructors.length) setSelectedIds(new Set());
-                      else setSelectedIds(new Set(meetingInstructors.map(i => i.id)));
-                    }} />
-                  </th>}
                   <th className="text-left px-3 py-2 border-r border-gray-200">이름</th>
                   <th className="text-left px-3 py-2 border-r border-gray-200">상태</th>
                   <th className="text-left px-3 py-2 border-r border-gray-200">분야</th>
@@ -255,14 +247,11 @@ export default function MeetingReportPage() {
               <tbody>
                 {confirmedWithDate.length > 0 && (
                   <>
-                    <tr><td colSpan={reportMode ? 8 : 7} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
+                    <tr><td colSpan={7} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 ({confirmedWithDate.length})</span>
                     </td></tr>
                     {confirmedWithDate.map((i, idx) => (
                       <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab(getDefaultTab(i.meeting_date)); }}>
-                        {reportMode && <td className="px-2 py-2 border-r border-gray-200/60 text-center" onClick={(e) => e.stopPropagation()}>
-                          <Checkbox checked={selectedIds.has(i.id)} onCheckedChange={() => { const s = new Set(selectedIds); if (s.has(i.id)) s.delete(i.id); else s.add(i.id); setSelectedIds(s); }} />
-                        </td>}
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -280,14 +269,11 @@ export default function MeetingReportPage() {
                 )}
                 {confirmedNoDate.length > 0 && (
                   <>
-                    <tr><td colSpan={reportMode ? 8 : 7} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
+                    <tr><td colSpan={7} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 · 날짜 미정 ({confirmedNoDate.length})</span>
                     </td></tr>
                     {confirmedNoDate.map((i, idx) => (
                       <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab(getDefaultTab(i.meeting_date)); }}>
-                        {reportMode && <td className="px-2 py-2 border-r border-gray-200/60 text-center" onClick={(e) => e.stopPropagation()}>
-                          <Checkbox checked={selectedIds.has(i.id)} onCheckedChange={() => { const s = new Set(selectedIds); if (s.has(i.id)) s.delete(i.id); else s.add(i.id); setSelectedIds(s); }} />
-                        </td>}
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -305,14 +291,11 @@ export default function MeetingReportPage() {
                 )}
                 {notConfirmed.length > 0 && (
                   <>
-                    <tr><td colSpan={reportMode ? 8 : 7} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
+                    <tr><td colSpan={7} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 예정 ({notConfirmed.length})</span>
                     </td></tr>
                     {notConfirmed.map((i, idx) => (
                       <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab(getDefaultTab(i.meeting_date)); }}>
-                        {reportMode && <td className="px-2 py-2 border-r border-gray-200/60 text-center" onClick={(e) => e.stopPropagation()}>
-                          <Checkbox checked={selectedIds.has(i.id)} onCheckedChange={() => { const s = new Set(selectedIds); if (s.has(i.id)) s.delete(i.id); else s.add(i.id); setSelectedIds(s); }} />
-                        </td>}
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -418,7 +401,6 @@ export default function MeetingReportPage() {
             </div>
           </div>
         </div>
-      </div>
 
       {/* ── 강사 상세 모달 (읽기 전용) ── */}
       {detailInstructor && (() => {
@@ -559,13 +541,124 @@ export default function MeetingReportPage() {
           </div>
         );
       })()}
+      </div>}
 
-      {/* ── 보고서 생성 모달 ── */}
-      {showReportModal && (
-        <ReportCreateModal
-          selectedIds={Array.from(selectedIds)}
-          onClose={() => setShowReportModal(false)}
-        />
+      {/* ── 보고서 탭 ── */}
+      {pageTab === "report" && (
+        <div className="p-6" style={{ height: "calc(100vh - 100px)" }}>
+          <div className="flex gap-6 h-full">
+            {/* 좌측: 강사 선택 */}
+            <div className="w-[400px] shrink-0 flex flex-col border rounded-lg overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold">강사 선택</p>
+                  <span className="text-xs text-muted-foreground">{selectedIds.size}명 선택</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedIds.size === meetingInstructors.length && meetingInstructors.length > 0}
+                    onCheckedChange={() => {
+                      if (selectedIds.size === meetingInstructors.length) setSelectedIds(new Set());
+                      else setSelectedIds(new Set(meetingInstructors.map(i => i.id)));
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">전체 선택</span>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {meetingInstructors.map((i) => (
+                  <div
+                    key={i.id}
+                    className={`flex items-center gap-3 px-4 py-2.5 border-b cursor-pointer hover:bg-blue-50/40 transition-colors ${selectedIds.has(i.id) ? "bg-blue-50" : ""}`}
+                    onClick={() => { const s = new Set(selectedIds); if (s.has(i.id)) s.delete(i.id); else s.add(i.id); setSelectedIds(s); }}
+                  >
+                    <Checkbox checked={selectedIds.has(i.id)} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{i.name}</span>
+                        <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{i.field} · {i.contact_assignee || i.assignee || "-"} {i.meeting_date ? `· ${formatMeetingDate(i.meeting_date)}` : ""}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 우측: 항목 선택 + 생성 */}
+            <div className="flex-1 flex flex-col border rounded-lg overflow-hidden">
+              <div className="px-4 py-3 bg-gray-50 border-b shrink-0">
+                <p className="text-sm font-semibold">보고서 설정</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">보고서 제목</label>
+                  <Input className="h-9 text-sm" value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-2 block">표시할 항목</label>
+                  <div className="space-y-3">
+                    {FIELD_GROUPS.map((group) => {
+                      const groupFields = REPORT_FIELDS.filter(f => f.group === group);
+                      const allSelected = groupFields.every(f => reportFields.has(f.id));
+                      return (
+                        <div key={group} className="border rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Checkbox checked={allSelected} onCheckedChange={() => {
+                              const s = new Set(reportFields);
+                              groupFields.forEach(f => { if (allSelected) s.delete(f.id); else s.add(f.id); });
+                              setReportFields(s);
+                            }} />
+                            <span className="text-sm font-semibold">{group}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {groupFields.map((f) => (
+                              <button
+                                key={f.id}
+                                onClick={() => { const s = new Set(reportFields); if (s.has(f.id)) s.delete(f.id); else s.add(f.id); setReportFields(s); }}
+                                className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
+                                  reportFields.has(f.id)
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                                }`}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div className="px-4 py-3 border-t shrink-0">
+                <Button
+                  className="w-full h-9 text-sm"
+                  disabled={selectedIds.size === 0 || reportFields.size === 0 || reportSaving}
+                  onClick={async () => {
+                    setReportSaving(true);
+                    try {
+                      const res = await fetch("/api/meeting-reports", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ title: reportTitle, instructor_ids: Array.from(selectedIds), fields: Array.from(reportFields) }),
+                      });
+                      if (!res.ok) throw new Error("생성 실패");
+                      const data = await res.json();
+                      window.open(`/meeting/${data.id}`, "_blank");
+                      toast.success("보고서가 생성되었습니다.");
+                    } catch { toast.error("보고서 생성 실패"); }
+                    setReportSaving(false);
+                  }}
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  {reportSaving ? "생성 중..." : `보고서 생성 (${selectedIds.size}명)`}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -601,105 +694,3 @@ const REPORT_FIELDS = [
 
 const FIELD_GROUPS = ["기본", "미팅", "연락처", "강사정보", "미팅 내용", "기타"] as const;
 
-function ReportCreateModal({ selectedIds, onClose }: { selectedIds: string[]; onClose: () => void }) {
-  const [title, setTitle] = useState(`미팅 보고서 ${new Date().toLocaleDateString("ko-KR")}`);
-  const [selectedFields, setSelectedFields] = useState<Set<string>>(
-    new Set(["name", "status", "field", "contact_assignee", "meeting_date", "meeting_type", "meeting_memo"])
-  );
-  const [saving, setSaving] = useState(false);
-
-  const toggleField = (id: string) => {
-    const s = new Set(selectedFields);
-    if (s.has(id)) s.delete(id); else s.add(id);
-    setSelectedFields(s);
-  };
-
-  const toggleGroup = (group: string) => {
-    const groupFields = REPORT_FIELDS.filter(f => f.group === group);
-    const allSelected = groupFields.every(f => selectedFields.has(f.id));
-    const s = new Set(selectedFields);
-    groupFields.forEach(f => { if (allSelected) s.delete(f.id); else s.add(f.id); });
-    setSelectedFields(s);
-  };
-
-  const handleCreate = async () => {
-    if (selectedFields.size === 0) { toast.error("항목을 하나 이상 선택하세요."); return; }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/meeting-reports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, instructor_ids: selectedIds, fields: Array.from(selectedFields) }),
-      });
-      if (!res.ok) throw new Error("생성 실패");
-      const data = await res.json();
-      window.open(`/meeting/${data.id}`, "_blank");
-      onClose();
-      toast.success("보고서가 생성되었습니다.");
-    } catch { toast.error("보고서 생성 실패"); }
-    setSaving(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <Card className="w-[600px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <CardContent className="p-0 flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
-            <div>
-              <p className="text-base font-semibold">보고서 생성</p>
-              <p className="text-xs text-muted-foreground">{selectedIds.length}명 선택됨</p>
-            </div>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">보고서 제목</label>
-              <Input className="h-9 text-sm" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </div>
-
-            <div>
-              <label className="text-xs text-muted-foreground mb-2 block">표시할 항목 선택</label>
-              <div className="space-y-3">
-                {FIELD_GROUPS.map((group) => {
-                  const groupFields = REPORT_FIELDS.filter(f => f.group === group);
-                  const allSelected = groupFields.every(f => selectedFields.has(f.id));
-                  return (
-                    <div key={group} className="border rounded-lg p-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Checkbox checked={allSelected} onCheckedChange={() => toggleGroup(group)} />
-                        <span className="text-sm font-semibold">{group}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {groupFields.map((f) => (
-                          <button
-                            key={f.id}
-                            onClick={() => toggleField(f.id)}
-                            className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
-                              selectedFields.has(f.id)
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
-                            }`}
-                          >
-                            {f.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2 px-5 py-3 border-t shrink-0">
-            <Button size="sm" className="h-9 text-sm flex-1" onClick={handleCreate} disabled={saving}>
-              {saving ? "생성 중..." : "보고서 생성"}
-            </Button>
-            <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
