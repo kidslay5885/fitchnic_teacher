@@ -94,7 +94,7 @@ export default function ContactTab() {
     else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
     if (search) {
       const q = search.toLowerCase();
-      list = list.filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q));
+      list = list.filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q) || i.email?.toLowerCase().includes(q));
     }
     return [...list].sort((a, b) => {
       const av = (a[sortKey] || "") as string;
@@ -379,7 +379,7 @@ export default function ContactTab() {
         <div className="flex items-center gap-3">
           <div className="relative max-w-xs">
             <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="이름, 분야, 담당자..." className="h-8 text-sm pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder="이름, 분야, 담당자, 이메일..." className="h-8 text-sm pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <span className="text-sm text-muted-foreground">{filtered.length}명</span>
         </div>
