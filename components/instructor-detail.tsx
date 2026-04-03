@@ -84,6 +84,9 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
       if (requiresReason(statusChange.to as InstructorStatus)) {
         body.exclude_reason = statusChange.reason;
       }
+      if (statusChange.to === "컨펌 필요") {
+        body.confirm_reason = statusChange.reason;
+      }
       const res = await fetch(`/api/instructors/${instructor.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -190,9 +193,9 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                         {ASSIGNEES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
                       </SelectContent>
                     </Select>
-                    {requiresReason(statusChange.to as InstructorStatus) && (
+                    {(requiresReason(statusChange.to as InstructorStatus) || statusChange.to === "컨펌 필요") && (
                       <Input
-                        placeholder="사유 입력 (필수)"
+                        placeholder={statusChange.to === "컨펌 필요" ? "메모 입력 (선택)..." : "사유 입력 (필수)"}
                         className="h-8 text-sm"
                         value={statusChange.reason}
                         onChange={(e) => setStatusChange({ ...statusChange, reason: e.target.value })}

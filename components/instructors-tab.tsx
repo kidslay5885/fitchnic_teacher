@@ -129,6 +129,7 @@ export default function InstructorsTab() {
       const inst = state.instructors.find(i => i.id === instructorId);
       const body: any = { status: newStatus, _changed_by: inst?.assignee || "", _reason: reason };
       if (newStatus === "컨펌 필요") body.confirm_reason = reason;
+      if (requiresReason(newStatus)) body.exclude_reason = reason;
       const res = await fetch(`/api/instructors/${instructorId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
