@@ -16,7 +16,7 @@ import type { Instructor, InstructorStatus } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
 import BulkActions from "@/components/bulk-actions";
-import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink } from "lucide-react";
+import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email";
@@ -105,6 +105,19 @@ export default function InstructorsTab() {
     } catch (e: any) { toast.error(e.message); }
   };
 
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`${selected.size}명의 강사를 삭제하시겠습니까?`)) return;
+    try {
+      await Promise.all(Array.from(selected).map(id =>
+        fetch(`/api/instructors/${id}`, { method: "DELETE" })
+      ));
+      await Promise.all([loadInstructors(), loadStats()]);
+      toast.success(`${selected.size}명 삭제 완료`);
+      setSelected(new Set());
+    } catch { toast.error("삭제 실패"); }
+  };
+
   const handleStatusClick = (e: React.MouseEvent, instructor: Instructor) => {
     e.stopPropagation();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -166,6 +179,9 @@ export default function InstructorsTab() {
                 발송 예정으로 ({selected.size})
               </Button>
               <BulkActions selectedIds={Array.from(selected)} onDone={() => setSelected(new Set())} />
+              <Button size="sm" variant="outline" className="h-8 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleBulkDelete}>
+                <Trash2 className="h-3.5 w-3.5 mr-1" />삭제 ({selected.size})
+              </Button>
             </>
           )}
           <Button onClick={() => setShowForm(true)} size="sm" className="h-8 text-sm">

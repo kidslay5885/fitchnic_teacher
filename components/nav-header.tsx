@@ -4,7 +4,7 @@ import { useOutreach } from "@/hooks/use-outreach-store";
 import type { TabId } from "@/lib/types";
 import {
   LayoutDashboard, Users, MessageSquare, Calendar,
-  FileText, Ban, Mail,
+  FileText, Ban, Mail, Activity,
 } from "lucide-react";
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
@@ -47,8 +47,19 @@ export default function NavHeader() {
         })}
       </nav>
 
-      <div className="border-t px-5 py-3">
-        <p className="text-xs text-muted-foreground">
+      <div className="border-t px-3 py-2 space-y-1">
+        <button
+          onClick={() => dispatch({ type: "SET_TAB", tab: "activity" })}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            state.tab === "activity"
+              ? "bg-primary text-primary-foreground"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          }`}
+        >
+          <Activity className="h-4.5 w-4.5 flex-shrink-0" />
+          활동 로그
+        </button>
+        <p className="text-xs text-muted-foreground px-3 py-1">
           {state.instructors.length}명 관리 중
         </p>
       </div>

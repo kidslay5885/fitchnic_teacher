@@ -9,6 +9,7 @@ import MeetingTab from "@/components/meeting-tab";
 import ApplicationsTab from "@/components/applications-tab";
 import BannedTab from "@/components/banned-tab";
 import MessagesTab from "@/components/messages-tab";
+import ActivityTab from "@/components/activity-tab";
 
 function MainContent() {
   const { state } = useOutreach();
@@ -36,6 +37,7 @@ function MainContent() {
           {state.tab === "applications" && <ApplicationsTab />}
           {state.tab === "banned" && <BannedTab />}
           {state.tab === "messages" && <MessagesTab />}
+          {state.tab === "activity" && <ActivityTab />}
         </div>
       </main>
     </div>

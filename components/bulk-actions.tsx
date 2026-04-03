@@ -48,21 +48,19 @@ export default function BulkActions({ selectedIds, onDone }: Props) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <span className="text-sm font-medium">{selectedIds.length}명 선택</span>
-      <Select value={status || "_pick"} onValueChange={(v) => setStatus(v === "_pick" ? "" : v)}>
+      <Select value={status} onValueChange={setStatus}>
         <SelectTrigger className="w-[110px] h-8 text-sm">
-          <SelectValue placeholder="상태 변경" />
+          <SelectValue placeholder="상태 선택" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="_pick" disabled>상태 선택</SelectItem>
           {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
         </SelectContent>
       </Select>
-      <Select value={changedBy || "_pick"} onValueChange={(v) => setChangedBy(v === "_pick" ? "" : v)}>
+      <Select value={changedBy} onValueChange={setChangedBy}>
         <SelectTrigger className="w-[100px] h-8 text-sm">
           <SelectValue placeholder="변경자" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="_pick" disabled>변경자</SelectItem>
           {ASSIGNEES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
         </SelectContent>
       </Select>
