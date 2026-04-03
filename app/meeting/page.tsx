@@ -219,13 +219,14 @@ export default function MeetingReportPage() {
                   <th className="text-left px-3 py-2 border-r border-gray-200">분야</th>
                   <th className="text-left px-3 py-2 border-r border-gray-200">담당자</th>
                   <th className="text-left px-3 py-2 border-r border-gray-200">미팅일</th>
+                  <th className="text-center px-2 py-2 border-r border-gray-200">방식</th>
                   <th className="text-left px-3 py-2">메모</th>
                 </tr>
               </thead>
               <tbody>
                 {confirmedWithDate.length > 0 && (
                   <>
-                    <tr><td colSpan={6} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
+                    <tr><td colSpan={7} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 ({confirmedWithDate.length})</span>
                     </td></tr>
                     {confirmedWithDate.map((i, idx) => (
@@ -233,8 +234,13 @@ export default function MeetingReportPage() {
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
-                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.assignee}</td>
+                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.contact_assignee || i.assignee}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium text-blue-700 whitespace-nowrap">{formatMeetingDate(i.meeting_date || "")}</td>
+                        <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap">
+                          {i.meeting_type ? (
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${i.meeting_type === "줌미팅" ? "text-blue-600 border-blue-300 bg-blue-50" : "text-orange-600 border-orange-300 bg-orange-50"}`}>{i.meeting_type}</Badge>
+                          ) : <span className="text-muted-foreground text-xs">-</span>}
+                        </td>
                         <td className="px-3 py-2 text-foreground/70 truncate max-w-[200px]">{i.meeting_memo || ""}</td>
                       </tr>
                     ))}
@@ -242,7 +248,7 @@ export default function MeetingReportPage() {
                 )}
                 {confirmedNoDate.length > 0 && (
                   <>
-                    <tr><td colSpan={6} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
+                    <tr><td colSpan={7} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 · 날짜 미정 ({confirmedNoDate.length})</span>
                     </td></tr>
                     {confirmedNoDate.map((i, idx) => (
@@ -250,8 +256,13 @@ export default function MeetingReportPage() {
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
-                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.assignee}</td>
+                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.contact_assignee || i.assignee}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">-</td>
+                        <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap">
+                          {i.meeting_type ? (
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${i.meeting_type === "줌미팅" ? "text-blue-600 border-blue-300 bg-blue-50" : "text-orange-600 border-orange-300 bg-orange-50"}`}>{i.meeting_type}</Badge>
+                          ) : <span className="text-muted-foreground text-xs">-</span>}
+                        </td>
                         <td className="px-3 py-2 text-foreground/70 truncate max-w-[200px]">{i.meeting_memo || ""}</td>
                       </tr>
                     ))}
@@ -259,7 +270,7 @@ export default function MeetingReportPage() {
                 )}
                 {notConfirmed.length > 0 && (
                   <>
-                    <tr><td colSpan={6} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
+                    <tr><td colSpan={7} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 예정 ({notConfirmed.length})</span>
                     </td></tr>
                     {notConfirmed.map((i, idx) => (
@@ -267,8 +278,13 @@ export default function MeetingReportPage() {
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
-                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.assignee}</td>
+                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.contact_assignee || i.assignee}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">-</td>
+                        <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap">
+                          {i.meeting_type ? (
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${i.meeting_type === "줌미팅" ? "text-blue-600 border-blue-300 bg-blue-50" : "text-orange-600 border-orange-300 bg-orange-50"}`}>{i.meeting_type}</Badge>
+                          ) : <span className="text-muted-foreground text-xs">-</span>}
+                        </td>
                         <td className="px-3 py-2 text-foreground/70 truncate max-w-[200px]">{i.meeting_memo || ""}</td>
                       </tr>
                     ))}
