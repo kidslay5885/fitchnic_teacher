@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const publicPaths = ["/login", "/submit", "/api/", "/_next/", "/favicon.ico"];
+  const publicPaths = ["/login", "/submit", "/meeting", "/api/", "/_next/", "/favicon.ico"];
   if (publicPaths.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }

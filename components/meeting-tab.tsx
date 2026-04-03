@@ -10,9 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { STATUS_COLORS } from "@/lib/constants";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Save, ExternalLink,
-  MessageSquare, X, Search, Calendar, Clock, Plus,
+  MessageSquare, X, Search, Calendar, Clock, Plus, ArrowUpRight,
 } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
@@ -272,9 +273,16 @@ export default function MeetingTab() {
         <div className="shrink-0 space-y-3 pb-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">미팅관리</h2>
-            <Button size="sm" className="h-8 text-sm" onClick={() => setShowAddModal(true)}>
-              <Plus className="h-4 w-4 mr-1" />미팅 추가
-            </Button>
+            <div className="flex items-center gap-2">
+              <Link href="/meeting" target="_blank">
+                <Button size="sm" variant="outline" className="h-8 text-sm">
+                  <ArrowUpRight className="h-4 w-4 mr-1" />미팅 페이지
+                </Button>
+              </Link>
+              <Button size="sm" className="h-8 text-sm" onClick={() => setShowAddModal(true)}>
+                <Plus className="h-4 w-4 mr-1" />미팅 추가
+              </Button>
+            </div>
           </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />

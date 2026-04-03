@@ -17,7 +17,7 @@ import { STATUS_COLORS, STATUSES, ASSIGNEES, WAVE_RESULTS } from "@/lib/constant
 import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, StatusHistory, OutreachWave } from "@/lib/types";
 import { toast } from "sonner";
-import { ExternalLink, Clock, Send, Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Clock, Send, Pencil, Trash2, ArrowRight } from "lucide-react";
 
 interface Props {
   instructor: Instructor;
@@ -282,9 +282,18 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
 
             {/* 발송 타임라인 */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Send className="h-4 w-4" />
-                <p className="text-sm font-semibold">발송 타임라인</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Send className="h-4 w-4" />
+                  <p className="text-sm font-semibold">발송 타임라인</p>
+                </div>
+                <button
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                  onClick={() => { dispatch({ type: "SET_TAB", tab: "contact" }); onClose(); }}
+                >
+                  컨택관리에서 수정
+                  <ArrowRight className="h-3 w-3" />
+                </button>
               </div>
               <div className="space-y-2">
                 {[1, 2, 3].map((n) => {
@@ -292,23 +301,12 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                   return (
                     <div key={n} className="flex items-center gap-2">
                       <Badge variant="outline" className="text-xs px-2 py-0.5 w-10 justify-center">{n}차</Badge>
-                      <Input
-                        type="date"
-                        className="w-[140px] h-7 text-xs"
-                        value={wave?.sent_date || ""}
-                        onChange={(e) => handleWaveUpdate(n, "sent_date", e.target.value)}
-                      />
-                      <Select
-                        value={wave?.result || "무응답"}
-                        onValueChange={(v) => handleWaveUpdate(n, "result", v)}
-                      >
-                        <SelectTrigger className="w-[100px] h-7 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <span className="w-[140px] h-7 text-xs flex items-center px-2 border rounded-md bg-muted/40 text-muted-foreground">
+                        {wave?.sent_date || "날짜 없음"}
+                      </span>
+                      <span className="w-[100px] h-7 text-xs flex items-center px-2 border rounded-md bg-muted/40 text-muted-foreground">
+                        {wave?.result || "무응답"}
+                      </span>
                     </div>
                   );
                 })}
