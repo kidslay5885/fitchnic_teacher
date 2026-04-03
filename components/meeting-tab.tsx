@@ -446,16 +446,16 @@ export default function MeetingTab() {
                                     mt.meeting_type === "대면미팅"
                                       ? "bg-orange-100 border-orange-200 hover:bg-orange-200"
                                       : mt.meeting_type === "줌미팅"
-                                      ? "bg-violet-100 border-violet-200 hover:bg-violet-200"
-                                      : "bg-blue-100 border-blue-200 hover:bg-blue-200"
+                                      ? "bg-blue-100 border-blue-200 hover:bg-blue-200"
+                                      : "bg-gray-100 border-gray-200 hover:bg-gray-200"
                                   }`}
                                   title={`${mt.name} ${time || ""} ${mt.meeting_type || ""}`}
                                 >
                                   <span className={`font-medium ${
-                                    mt.meeting_type === "대면미팅" ? "text-orange-900" : mt.meeting_type === "줌미팅" ? "text-violet-900" : "text-blue-900"
+                                    mt.meeting_type === "대면미팅" ? "text-orange-900" : mt.meeting_type === "줌미팅" ? "text-blue-900" : "text-gray-900"
                                   }`}>{mt.name}</span>
                                   {time && <span className={`ml-1 ${
-                                    mt.meeting_type === "대면미팅" ? "text-orange-500" : mt.meeting_type === "줌미팅" ? "text-violet-500" : "text-blue-500"
+                                    mt.meeting_type === "대면미팅" ? "text-orange-500" : mt.meeting_type === "줌미팅" ? "text-blue-500" : "text-gray-500"
                                   }`}>{time}</span>}
                                 </button>
                               );
