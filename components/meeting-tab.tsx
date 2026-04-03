@@ -22,7 +22,7 @@ export default function MeetingTab() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [editingMeeting, setEditingMeeting] = useState<{
     instructor: Instructor; date: string; time: string; memo: string;
-    confirmed: boolean; postInfo: string;
+    confirmed: boolean; postSpecial: string; postPositive: string; postNegative: string;
   } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState("");
@@ -165,11 +165,18 @@ export default function MeetingTab() {
     return time ? `${m}/${day}(${dow}) ${time}` : `${m}/${day}(${dow})`;
   };
 
+  const parsePostInfo = (raw: string) => {
+    try { const p = JSON.parse(raw); return { special: p.special || "", positive: p.positive || "", negative: p.negative || "" }; }
+    catch { return { special: raw || "", positive: "", negative: "" }; }
+  };
+
   const openEdit = (i: Instructor) => {
     const { date, time } = parseMeetingDate(i.meeting_date || "");
+    const post = parsePostInfo(i.post_info || "");
     setEditingMeeting({
       instructor: i, date, time, memo: i.meeting_memo || "",
-      confirmed: !!i.meeting_confirmed, postInfo: i.post_info || "",
+      confirmed: !!i.meeting_confirmed,
+      postSpecial: post.special, postPositive: post.positive, postNegative: post.negative,
     });
   };
 
@@ -184,7 +191,8 @@ export default function MeetingTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           meeting_date: meetingDate, meeting_memo: editingMeeting.memo,
-          meeting_confirmed: editingMeeting.confirmed, post_info: editingMeeting.postInfo,
+          meeting_confirmed: editingMeeting.confirmed,
+          post_info: JSON.stringify({ special: editingMeeting.postSpecial, positive: editingMeeting.postPositive, negative: editingMeeting.postNegative }),
         }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -210,8 +218,12 @@ export default function MeetingTab() {
   };
 
   // 미팅일 지났는데 사후 정보 없는 강사
+  const hasPostInfo = (raw: string) => {
+    try { const p = JSON.parse(raw); return !!(p.special || p.positive || p.negative); }
+    catch { return !!raw; }
+  };
   const needsPostInfo = (i: Instructor) => {
-    if (!i.meeting_date || i.post_info) return false;
+    if (!i.meeting_date || hasPostInfo(i.post_info)) return false;
     const d = extractDate(i.meeting_date);
     return d ? d.getTime() < now.getTime() : false;
   };
@@ -477,15 +489,37 @@ export default function MeetingTab() {
                   </div>
 
                   {/* ── 오른쪽: 사후 정보 ── */}
-                  <div className="flex-1 min-w-0">
-                    <label className="text-xs text-muted-foreground mb-1 block">사후 정보</label>
-                    <Textarea
-                      className="text-sm h-[calc(100%-20px)]"
-                      rows={10}
-                      placeholder="미팅 후 기록할 내용..."
-                      value={editingMeeting.postInfo}
-                      onChange={(e) => setEditingMeeting({ ...editingMeeting, postInfo: e.target.value })}
-                    />
+                  <div className="flex-1 min-w-0 space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground">사후 정보</p>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">특이사항</label>
+                      <Textarea
+                        className="text-sm !min-h-[200px]"
+                        placeholder="미팅 중 특이사항..."
+                        value={editingMeeting.postSpecial}
+                        onChange={(e) => setEditingMeeting({ ...editingMeeting, postSpecial: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">긍정적인 점</label>
+                      <Textarea
+                        className="text-sm"
+                        rows={4}
+                        placeholder="긍정적인 점..."
+                        value={editingMeeting.postPositive}
+                        onChange={(e) => setEditingMeeting({ ...editingMeeting, postPositive: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">부정적인 점</label>
+                      <Textarea
+                        className="text-sm"
+                        rows={4}
+                        placeholder="부정적인 점..."
+                        value={editingMeeting.postNegative}
+                        onChange={(e) => setEditingMeeting({ ...editingMeeting, postNegative: e.target.value })}
+                      />
+                    </div>
                   </div>
                 </div>
 
