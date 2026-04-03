@@ -6,6 +6,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "핏크닉 강사 아웃리치 매니저",
   description: "강사 모집 파이프라인 관리 도구",
+  icons: {
+    icon: "/teacher.png",
+  },
 };
 
 export default function RootLayout({
@@ -16,7 +19,6 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <head>
-        <link rel="icon" href="/teacher.png" type="image/png" />
         <link
           rel="stylesheet"
           as="style"
