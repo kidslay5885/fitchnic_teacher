@@ -442,12 +442,21 @@ export default function MeetingTab() {
                                 <button
                                   key={mt.id}
                                   onClick={() => openEdit(mt)}
-                                  className="w-full text-left rounded bg-blue-100 border border-blue-200 px-1.5 py-0.5 text-[11px] hover:bg-blue-200 transition-colors"
+                                  className={`w-full text-left rounded px-1.5 py-0.5 text-[11px] transition-colors truncate border ${
+                                    mt.meeting_type === "대면미팅"
+                                      ? "bg-orange-100 border-orange-200 hover:bg-orange-200"
+                                      : mt.meeting_type === "줌미팅"
+                                      ? "bg-violet-100 border-violet-200 hover:bg-violet-200"
+                                      : "bg-blue-100 border-blue-200 hover:bg-blue-200"
+                                  }`}
+                                  title={`${mt.name} ${time || ""} ${mt.meeting_type || ""}`}
                                 >
-                                  <div className="font-semibold text-blue-900 leading-tight">{mt.name}</div>
-                                  <div className="text-blue-600">
-                                    {time}{mt.meeting_type ? ` ${mt.meeting_type === "줌미팅" ? "줌" : "대면"}` : ""}
-                                  </div>
+                                  <span className={`font-medium ${
+                                    mt.meeting_type === "대면미팅" ? "text-orange-900" : mt.meeting_type === "줌미팅" ? "text-violet-900" : "text-blue-900"
+                                  }`}>{mt.name}</span>
+                                  {time && <span className={`ml-1 ${
+                                    mt.meeting_type === "대면미팅" ? "text-orange-500" : mt.meeting_type === "줌미팅" ? "text-violet-500" : "text-blue-500"
+                                  }`}>{time}</span>}
                                 </button>
                               );
                             })}
