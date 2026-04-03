@@ -299,14 +299,13 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                         onChange={(e) => handleWaveUpdate(n, "sent_date", e.target.value)}
                       />
                       <Select
-                        value={wave?.result || "_none"}
-                        onValueChange={(v) => handleWaveUpdate(n, "result", v === "_none" ? "" : v)}
+                        value={wave?.result || "무응답"}
+                        onValueChange={(v) => handleWaveUpdate(n, "result", v)}
                       >
                         <SelectTrigger className="w-[100px] h-7 text-xs">
-                          <SelectValue placeholder="결과" />
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="_none">미발송</SelectItem>
                           {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                         </SelectContent>
                       </Select>

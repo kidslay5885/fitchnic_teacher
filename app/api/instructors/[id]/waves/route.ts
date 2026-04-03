@@ -25,6 +25,9 @@ export async function POST(
   const sb = getSupabase();
   const body = await req.json();
 
+  // 빈 문자열은 null로 변환
+  if (body.sent_date === "") body.sent_date = null;
+
   const { data, error } = await sb
     .from("outreach_waves")
     .upsert(
@@ -63,4 +66,22 @@ export async function POST(
   }
 
   return NextResponse.json(data);
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const sb = getSupabase();
+  const { wave_number } = await req.json();
+
+  const { error } = await sb
+    .from("outreach_waves")
+    .delete()
+    .eq("instructor_id", id)
+    .eq("wave_number", wave_number);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

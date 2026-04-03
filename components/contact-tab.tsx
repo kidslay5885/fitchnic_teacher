@@ -129,6 +129,21 @@ export default function ContactTab() {
     } catch (e: any) { toast.error(e.message || "업데이트 실패"); }
   };
 
+  /* ── 개별 발송 삭제 ── */
+  const handleWaveDelete = async (instructorId: string, waveNumber: number) => {
+    try {
+      const res = await fetch(`/api/instructors/${instructorId}/waves`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wave_number: waveNumber }),
+      });
+      if (!res.ok) throw new Error("삭제 실패");
+      await loadAllWaves();
+      toast.success(`${waveNumber}차 발송 기록 삭제`);
+      setEditingWave(null);
+    } catch (e: any) { toast.error(e.message); }
+  };
+
   /* ── 개별 상태 변경 ── */
   const handleStatusChange = async (instructorId: string, newStatus: InstructorStatus, reason: string) => {
     try {
@@ -278,12 +293,13 @@ export default function ContactTab() {
   const formatWave = (w: OutreachWave | undefined) => {
     if (!w || (!w.sent_date && !w.result)) return "-";
     const d = w.sent_date ? (() => { const p = w.sent_date.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; })() : "";
-    const r = w.result || "";
+    const r = w.result || (w.sent_date ? "무응답" : "");
     if (d && r) return `${d} · ${r}`;
     return d || r;
   };
 
   const waveColor = (w: OutreachWave | undefined) => {
+    if (!w?.result && w?.sent_date) return "text-gray-500 bg-gray-50";
     if (!w?.result) return "";
     if (w.result === "응답") return "text-green-700 bg-green-50";
     if (w.result === "거절") return "text-red-600 bg-red-50";
@@ -461,10 +477,9 @@ export default function ContactTab() {
             </SelectContent>
           </Select>
           <Input type="date" className="w-[148px] h-8 text-sm" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
-          <Select value={bulkResult || "_none"} onValueChange={v => setBulkResult(v === "_none" ? "" : v)}>
-            <SelectTrigger className="w-[96px] h-8 text-sm"><SelectValue placeholder="결과" /></SelectTrigger>
+          <Select value={bulkResult || "무응답"} onValueChange={setBulkResult}>
+            <SelectTrigger className="w-[96px] h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="_none">미선택</SelectItem>
               {WAVE_RESULTS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -505,6 +520,7 @@ export default function ContactTab() {
           x={editingWave.x}
           y={editingWave.y}
           onUpdate={(field, value) => handleWaveUpdate(editingWave.instructorId, editingWave.wave, field, value)}
+          onDelete={() => handleWaveDelete(editingWave.instructorId, editingWave.wave)}
           onClose={() => setEditingWave(null)}
         />
       )}
@@ -629,11 +645,12 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
 }
 
 /* ── 발송 편집 팝오버 ── */
-function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
+function WavePopover({ wave, waveNumber, x, y, onUpdate, onDelete, onClose }: {
   wave: OutreachWave | undefined;
   waveNumber: number;
   x: number; y: number;
   onUpdate: (field: string, value: string) => Promise<void>;
+  onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
   const [date, setDate] = useState(wave?.sent_date || "");
@@ -698,25 +715,33 @@ function WavePopover({ wave, waveNumber, x, y, onUpdate, onClose }: {
         <div>
           <label className="text-xs text-muted-foreground">결과</label>
           <Select
-            value={result || "_none"}
+            value={result || "무응답"}
             open={selectOpen}
             onOpenChange={setSelectOpen}
             onValueChange={(v) => {
-              const val = v === "_none" ? "" : v;
-              setResult(val);
-              handleSave("result", val);
+              setResult(v);
+              handleSave("result", v);
             }}
           >
-            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="선택" /></SelectTrigger>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="_none">미선택</SelectItem>
               {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {saving && <p className="text-xs text-muted-foreground">저장 중...</p>}
+      <div className="flex items-center justify-between">
+        {saving && <p className="text-xs text-muted-foreground">저장 중...</p>}
+        {wave && (
+          <button
+            onClick={onDelete}
+            className="text-xs text-red-500 hover:text-red-600 hover:underline ml-auto"
+          >
+            삭제
+          </button>
+        )}
+      </div>
     </div>
   );
 }
