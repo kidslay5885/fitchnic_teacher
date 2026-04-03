@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { STATUS_COLORS } from "@/lib/constants";
-import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
+import type { Instructor, InstructorStatus } from "@/lib/types";
 import {
   ChevronLeft, ChevronRight, Search, Calendar, Clock,
   ExternalLink, Phone, Mail,
@@ -16,7 +16,6 @@ const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
 export default function MeetingReportPage() {
   const [instructors, setInstructors] = useState<Instructor[]>([]);
-  const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
   const [loading, setLoading] = useState(true);
   const [monthOffset, setMonthOffset] = useState(0);
   const [search, setSearch] = useState("");
@@ -30,24 +29,6 @@ export default function MeetingReportPage() {
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.data || []);
         setInstructors(list);
-        // 발송 기록 로드
-        const ids = list.map((i: Instructor) => i.id);
-        if (ids.length > 0) {
-          const wRes = await fetch("/api/outreach/waves-bulk", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ids }),
-          });
-          if (wRes.ok) {
-            const waves = await wRes.json();
-            const map: Record<string, OutreachWave[]> = {};
-            for (const w of waves) {
-              if (!map[w.instructor_id]) map[w.instructor_id] = [];
-              map[w.instructor_id].push(w);
-            }
-            setWavesMap(map);
-          }
-        }
       }
     } catch {}
     setLoading(false);
@@ -61,10 +42,9 @@ export default function MeetingReportPage() {
     return instructors.filter((i) => {
       if (i.meeting_date || i.meeting_confirmed) return true;
       if (EXCLUDE_STATUSES.includes(i.status)) return false;
-      const waves = wavesMap[i.id] || [];
-      return waves.some((w) => w.result === "응답");
+      return i.has_response;
     });
-  }, [instructors, wavesMap]);
+  }, [instructors]);
 
   const filteredList = useMemo(() => {
     if (!search) return meetingInstructors;
