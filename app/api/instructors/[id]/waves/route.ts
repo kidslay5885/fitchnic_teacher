@@ -39,6 +39,17 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // has_response 플래그 업데이트 (이 강사의 모든 wave 확인)
+  const { data: allWaves } = await sb
+    .from("outreach_waves")
+    .select("result")
+    .eq("instructor_id", id);
+  const hasResponse = (allWaves || []).some((w) => w.result === "응답");
+  await sb
+    .from("instructors")
+    .update({ has_response: hasResponse, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
   // 발송 결과가 "거절"이면 강사 상태도 "거절"로 변경
   if (body.result === "거절") {
     const { data: inst } = await sb

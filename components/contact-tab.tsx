@@ -86,12 +86,11 @@ export default function ContactTab() {
   useEffect(() => { loadAllWaves(); }, [loadAllWaves]);
 
   // 응답 받았지만 사전 정보 없는 강사
-  const hasResponse = useCallback((id: string) => (wavesMap[id] || []).some((w) => w.result === "응답"), [wavesMap]);
-  const noPreInfoCount = useMemo(() => contactInstructors.filter((i) => hasResponse(i.id) && !i.pre_info).length, [contactInstructors, hasResponse]);
+  const noPreInfoCount = useMemo(() => contactInstructors.filter((i) => i.has_response && !i.pre_info).length, [contactInstructors]);
 
   const filtered = useMemo(() => {
     let list = contactInstructors;
-    if (viewFilter === "no_preinfo") list = list.filter((i) => hasResponse(i.id) && !i.pre_info);
+    if (viewFilter === "no_preinfo") list = list.filter((i) => i.has_response && !i.pre_info);
     else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
     if (search) {
       const q = search.toLowerCase();

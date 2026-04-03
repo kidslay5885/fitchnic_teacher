@@ -52,6 +52,7 @@ export interface Instructor {
   instructor_info: string;
   is_banned: boolean;
   ban_reason: string;
+  has_response: boolean;
   created_at: string;
   updated_at: string;
 }

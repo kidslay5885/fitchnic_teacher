@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect, useCallback } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { STATUS_COLORS } from "@/lib/constants";
-import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
+import type { Instructor, InstructorStatus } from "@/lib/types";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
@@ -31,45 +31,16 @@ export default function MeetingTab() {
   const [remindDate, setRemindDate] = useState("");
   const [remindDone, setRemindDone] = useState(false);
   const [search, setSearch] = useState("");
-  const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
-
-  // 발송 기록 로드
-  const loadWaves = useCallback(async () => {
-    if (state.instructors.length === 0) return;
-    try {
-      const ids = state.instructors.map((i) => i.id);
-      const res = await fetch("/api/outreach/waves-bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const map: Record<string, OutreachWave[]> = {};
-        for (const w of data) {
-          if (!map[w.instructor_id]) map[w.instructor_id] = [];
-          map[w.instructor_id].push(w);
-        }
-        setWavesMap(map);
-      }
-    } catch {}
-  }, [state.instructors]);
-
-  useEffect(() => { loadWaves(); }, [loadWaves]);
 
   // 응답을 받은 강사 (거절/제외/보류 제외) + 미팅 관련 강사
   const EXCLUDE_STATUSES = ["거절", "제외", "보류"];
   const respondedInstructors = useMemo(() => {
     return state.instructors.filter((i) => {
-      // 미팅 일정 또는 미팅 확정이면 무조건 포함
       if (i.meeting_date || i.meeting_confirmed) return true;
-      // 거절/제외/보류는 제외
       if (EXCLUDE_STATUSES.includes(i.status)) return false;
-      // 응답 받은 강사 포함
-      const waves = wavesMap[i.id] || [];
-      return waves.some((w) => w.result === "응답");
+      return i.has_response;
     });
-  }, [state.instructors, wavesMap]);
+  }, [state.instructors]);
 
   // 검색 필터
   const filteredList = useMemo(() => {
