@@ -13,10 +13,52 @@ import { toast } from "sonner";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Save, ExternalLink,
-  MessageSquare, X, Search, Calendar, Clock, Plus, ArrowUpRight,
+  MessageSquare, X, Search, Calendar, Clock, Plus, ArrowUpRight, ClipboardList,
 } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
+
+// 사전 질문 구조
+const PRE_QUESTIONS = [
+  {
+    section: "기본 확인 사항",
+    questions: [
+      "핏크닉을 알고 있었는지, 이번에 연락이 닿아서 알게 되었는지",
+      "'강의' 형태로 진행 여부 (온라인/오프라인, 기수제/상시판매/웨비나 등)",
+    ],
+  },
+  {
+    section: "콘텐츠 관련 확인사항",
+    questions: [
+      "수익을 내고 있는 콘텐츠?",
+      "현재 수익 규모",
+      "유사 콘텐츠 강의와 다른점 (소구점, 고객 어필 포인트)",
+      "AI를 활용하고 있는지, 어떻게 활용하는지",
+    ],
+  },
+  {
+    section: "'강의' 초점 확인 사항",
+    questions: [
+      "수강생 연령대, 타깃 고객",
+      "강의 커리큘럼 (있는지, 몇주 진행인지)",
+      "수강생 실제 수익화 여부, 수익 발생 기간",
+      "한번에 가능한 수강생 수 (우리는 한 기수당 100명, 강의금액 2~3백만원 대, 감당가능?)",
+    ],
+  },
+  {
+    section: "위험 방어",
+    questions: [
+      "강의 진행 시 수강생 불만/항의 경험 및 해결방법",
+      "콘텐츠로 수익을 내면서 플랫폼에서 알아야 할 위험요소",
+    ],
+  },
+  {
+    section: "기타 내용 전달",
+    questions: [
+      "전달 사항 (준비 기간 2달, 브랜딩/기획/리허설/촬영 지원, 100명 이상 목표 등)",
+    ],
+  },
+];
 
 export default function MeetingTab() {
   const { state, dispatch } = useOutreach();
@@ -30,6 +72,7 @@ export default function MeetingTab() {
   const [remindModal, setRemindModal] = useState<Instructor | null>(null);
   const [remindDate, setRemindDate] = useState("");
   const [remindDone, setRemindDone] = useState(false);
+  const [preQModal, setPreQModal] = useState<Instructor | null>(null);
   const [search, setSearch] = useState("");
 
   // 응답을 받은 강사 (거절/제외/보류 제외) + 미팅 관련 강사
@@ -214,6 +257,14 @@ export default function MeetingTab() {
     return d ? d.getTime() < now.getTime() : false;
   };
 
+  const hasPreQuestions = (i: Instructor) => {
+    if (!i.pre_questions) return false;
+    try {
+      const parsed = JSON.parse(i.pre_questions);
+      return Object.values(parsed).some((v) => typeof v === "string" && v.trim() !== "");
+    } catch { return false; }
+  };
+
   const renderRows = (list: Instructor[], showDate: boolean) =>
     list.map((i, idx) => (
       <tr key={i.id} className={`border-b hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => openEdit(i)}>
@@ -231,8 +282,17 @@ export default function MeetingTab() {
         <td className="px-3 py-2 border-r border-gray-200/60 whitespace-nowrap font-medium text-blue-700">
           {showDate ? formatMeetingDate(i.meeting_date || "") : "-"}
         </td>
-        <td className="px-3 py-2 text-sm text-foreground/70 truncate max-w-[200px]" title={i.meeting_memo || ""}>
+        <td className="px-3 py-2 border-r border-gray-200/60 text-sm text-foreground/70 truncate max-w-[200px]" title={i.meeting_memo || ""}>
           {i.meeting_memo || ""}
+        </td>
+        <td className="px-2 py-2 text-center">
+          <button
+            title="사전 질문"
+            className={`p-1 rounded hover:bg-gray-100 ${hasPreQuestions(i) ? "text-blue-600" : "text-muted-foreground"}`}
+            onClick={(e) => { e.stopPropagation(); setPreQModal(i); }}
+          >
+            <ClipboardList className="h-4 w-4" />
+          </button>
         </td>
       </tr>
     ));
@@ -282,7 +342,8 @@ export default function MeetingTab() {
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">분야</th>
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">담당자</th>
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">미팅일</th>
-                <th className="text-left px-3 py-2 whitespace-nowrap">메모</th>
+                <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">메모</th>
+                <th className="text-center px-2 py-2 whitespace-nowrap w-10">질문</th>
               </tr>
             </thead>
             <tbody>
@@ -290,7 +351,7 @@ export default function MeetingTab() {
               {confirmedWithDate.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={6} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
+                    <td colSpan={7} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 ({confirmedWithDate.length})</span>
                     </td>
                   </tr>
@@ -301,7 +362,7 @@ export default function MeetingTab() {
               {confirmedNoDate.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={6} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
+                    <td colSpan={7} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 · 날짜 미정 ({confirmedNoDate.length})</span>
                     </td>
                   </tr>
@@ -312,7 +373,7 @@ export default function MeetingTab() {
               {notConfirmed.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={6} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
+                    <td colSpan={7} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 예정 ({notConfirmed.length})</span>
                     </td>
                   </tr>
@@ -469,7 +530,7 @@ export default function MeetingTab() {
                           setEditingMeeting({ ...editingMeeting, date: newDate, remindDate: newDate ? calcRemindDate(newDate) : "" });
                         }} />
                       </div>
-                      <div className="w-[110px]">
+                      <div className="w-[140px]">
                         <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
                         <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
                       </div>
@@ -668,6 +729,97 @@ export default function MeetingTab() {
           onClose={() => setShowAddModal(false)}
         />
       )}
+      {/* ── 사전 질문 모달 ── */}
+      {preQModal && (
+        <PreQuestionsModal
+          instructor={preQModal}
+          onSave={async (data) => {
+            try {
+              const res = await fetch(`/api/instructors/${preQModal.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pre_questions: JSON.stringify(data) }),
+              });
+              if (!res.ok) throw new Error("Failed");
+              dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
+              toast.success("사전 질문 저장 완료");
+              setPreQModal(null);
+            } catch { toast.error("저장 실패"); }
+          }}
+          onClose={() => setPreQModal(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── 사전 질문 모달 ── */
+function PreQuestionsModal({ instructor, onSave, onClose }: {
+  instructor: Instructor;
+  onSave: (data: Record<string, string>) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [answers, setAnswers] = useState<Record<string, string>>(() => {
+    try {
+      return instructor.pre_questions ? JSON.parse(instructor.pre_questions) : {};
+    } catch { return {}; }
+  });
+  const [saving, setSaving] = useState(false);
+
+  const getKey = (si: number, qi: number) => `${si}_${qi}`;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try { await onSave(answers); } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <Card className="w-[700px] max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="p-0 flex flex-col h-full">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+            <div>
+              <p className="text-base font-semibold">{instructor.name} - 사전 질문</p>
+              <p className="text-xs text-muted-foreground">{instructor.field} | {instructor.assignee || "미지정"}</p>
+            </div>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* 질문 목록 */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+            {PRE_QUESTIONS.map((section, si) => (
+              <div key={si} className="space-y-2.5">
+                <p className="text-sm font-semibold text-foreground border-b pb-1">
+                  {si + 1}. {section.section}
+                </p>
+                {section.questions.map((q, qi) => (
+                  <div key={qi}>
+                    <label className="text-xs text-muted-foreground mb-1 block">{q}</label>
+                    <Textarea
+                      className="text-sm"
+                      rows={2}
+                      value={answers[getKey(si, qi)] || ""}
+                      onChange={(e) => setAnswers({ ...answers, [getKey(si, qi)]: e.target.value })}
+                      placeholder="답변 입력..."
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* 푸터 */}
+          <div className="flex gap-2 px-5 py-3 border-t shrink-0">
+            <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSave} disabled={saving}>
+              <Save className="h-4 w-4 mr-1" />{saving ? "저장 중..." : "저장"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

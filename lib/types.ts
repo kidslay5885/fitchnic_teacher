@@ -53,6 +53,7 @@ export interface Instructor {
   is_banned: boolean;
   ban_reason: string;
   has_response: boolean;
+  pre_questions: string;
   created_at: string;
   updated_at: string;
 }
