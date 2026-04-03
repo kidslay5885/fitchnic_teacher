@@ -102,7 +102,7 @@ export default function ContactTab() {
       const cmp = av.localeCompare(bv, "ko");
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [contactInstructors, viewFilter, search, sortKey, sortDir, hasResponse]);
+  }, [contactInstructors, viewFilter, search, sortKey, sortDir]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -440,7 +440,7 @@ export default function ContactTab() {
                     onClick={() => setDetailId(i.id)}
                   >
                     {i.name}
-                    {hasResponse(i.id) && !i.pre_info && (
+                    {i.has_response && !i.pre_info && (
                       <span className="shrink-0 h-2 w-2 rounded-full bg-red-500" title="사전 정보 미입력" />
                     )}
                   </div>
