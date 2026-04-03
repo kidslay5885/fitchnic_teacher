@@ -379,7 +379,7 @@ export default function ContactTab() {
         <div className="flex items-center gap-3">
           <div className="relative max-w-xs">
             <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="이름, 분야, 담당자, 이메일..." className="h-8 text-sm pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder="이름, 분야, 찾은 사람, 이메일..." className="h-8 text-sm pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <span className="text-sm text-muted-foreground">{filtered.length}명</span>
         </div>
@@ -399,7 +399,7 @@ export default function ContactTab() {
           <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <SortHeader label="담당자" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <SortHeader label="찾은 사람" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <div className="px-2 py-2.5 text-center border-r border-gray-200">1차</div>
           <div className="px-2 py-2.5 text-center border-r border-gray-200">2차</div>
           <div className="px-2 py-2.5 text-center border-r border-gray-200">3차</div>
@@ -452,7 +452,7 @@ export default function ContactTab() {
                   </div>
                   {/* 분야 */}
                   <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60" title={i.field || ""}>{i.field || ""}</div>
-                  {/* 담당자 */}
+                  {/* 찾은 사람 */}
                   <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60" title={i.assignee || ""}>{i.assignee || ""}</div>
                   {/* 1차 2차 3차 */}
                   {[1, 2, 3].map((n) => {

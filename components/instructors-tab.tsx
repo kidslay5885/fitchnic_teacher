@@ -23,7 +23,7 @@ type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lectur
 type SortDir = "asc" | "desc";
 
 const ROW_H = 36;
-// 체크 | 상태 | 분야 | 담당자 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처 | 사유
+// 체크 | 상태 | 분야 | 찾은 사람 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처 | 사유
 const GRID = "36px 84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px 1.2fr";
 const MIN_W = 1100;
 
@@ -213,7 +213,7 @@ export default function InstructorsTab() {
           </div>
           <HeaderCell label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <HeaderCell label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <HeaderCell label="담당자" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="찾은 사람" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <HeaderCell label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <HeaderCell label="참조" />
           <HeaderCell label="강의" col="has_lecture_history" sk={sortKey} sd={sortDir} onSort={handleSort} center />
