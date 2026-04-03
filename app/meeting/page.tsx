@@ -46,6 +46,17 @@ export default function MeetingReportPage() {
   const [detailInstructor, setDetailInstructor] = useState<Instructor | null>(null);
   const [detailTab, setDetailTab] = useState<"before" | "questions" | "after">("before");
 
+  const getDefaultTab = (meetingDate: string | undefined): "before" | "questions" | "after" => {
+    if (!meetingDate) return "before";
+    const match = meetingDate.match(/(\d{4}-\d{2}-\d{2})/);
+    if (!match) return "before";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const d = new Date(match[1]); d.setHours(0, 0, 0, 0);
+    if (d.getTime() === today.getTime()) return "questions";
+    if (d < today) return "after";
+    return "before";
+  };
+
   // 데이터 로드
   const loadData = useCallback(async () => {
     try {
@@ -218,7 +229,7 @@ export default function MeetingReportPage() {
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 ({confirmedWithDate.length})</span>
                     </td></tr>
                     {confirmedWithDate.map((i, idx) => (
-                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab("before"); }}>
+                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab(getDefaultTab(i.meeting_date)); }}>
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -235,7 +246,7 @@ export default function MeetingReportPage() {
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 · 날짜 미정 ({confirmedNoDate.length})</span>
                     </td></tr>
                     {confirmedNoDate.map((i, idx) => (
-                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab("before"); }}>
+                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab(getDefaultTab(i.meeting_date)); }}>
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -252,7 +263,7 @@ export default function MeetingReportPage() {
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 예정 ({notConfirmed.length})</span>
                     </td></tr>
                     {notConfirmed.map((i, idx) => (
-                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab("before"); }}>
+                      <tr key={i.id} className={`border-b cursor-pointer hover:bg-blue-50/40 ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => { setDetailInstructor(i); setDetailTab(getDefaultTab(i.meeting_date)); }}>
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
@@ -313,7 +324,7 @@ export default function MeetingReportPage() {
                               {dayMeetings.map((mt) => {
                                 const time = mt.meeting_date?.match(/\d{1,2}:\d{2}/)?.[0];
                                 return (
-                                  <button key={mt.id} onClick={() => { setDetailInstructor(mt); setDetailTab("before"); }}
+                                  <button key={mt.id} onClick={() => { setDetailInstructor(mt); setDetailTab(getDefaultTab(mt.meeting_date)); }}
                                     className="w-full text-left rounded bg-blue-100 border border-blue-200 px-1.5 py-0.5 text-[11px] hover:bg-blue-200 transition-colors truncate">
                                     <span className="font-medium text-blue-900">{mt.name}</span>
                                     {time && <span className="text-blue-500 ml-1">{time}</span>}

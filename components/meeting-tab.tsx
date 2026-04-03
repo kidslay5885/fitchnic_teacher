@@ -204,11 +204,19 @@ export default function MeetingTab() {
     const remindDate = i.remind_date || (i.meeting_date ? calcRemindDate(i.meeting_date) : "");
     let preQ: Record<string, string> = {};
     try { if (i.pre_questions) preQ = JSON.parse(i.pre_questions); } catch {}
+    // 미팅 날짜 기준 기본 탭 결정
+    let defaultTab: "before" | "questions" | "after" = "before";
+    if (date) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const meetDate = new Date(date); meetDate.setHours(0, 0, 0, 0);
+      if (meetDate.getTime() === today.getTime()) defaultTab = "questions";
+      else if (meetDate < today) defaultTab = "after";
+    }
     setEditingMeeting({
       instructor: i, date, time, memo: i.meeting_memo || "",
       confirmed: !!i.meeting_confirmed, remindDate, meetingType: i.meeting_type || "",
       postSpecial: post.special, postPositive: post.positive, postNegative: post.negative,
-      modalTab: "before", preQuestions: preQ,
+      modalTab: defaultTab, preQuestions: preQ,
     });
   };
 
