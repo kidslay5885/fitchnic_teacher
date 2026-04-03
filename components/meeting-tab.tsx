@@ -442,10 +442,14 @@ export default function MeetingTab() {
                                 <button
                                   key={mt.id}
                                   onClick={() => openEdit(mt)}
-                                  className="w-full text-left rounded bg-blue-100 border border-blue-200 px-1.5 py-0.5 text-[11px] hover:bg-blue-200 transition-colors truncate"
+                                  className={`w-full text-left rounded px-1.5 py-0.5 text-[11px] hover:brightness-95 transition-colors truncate border ${
+                                    mt.meeting_type === "대면미팅" ? "bg-orange-100 border-orange-200" : "bg-blue-100 border-blue-200"
+                                  }`}
                                 >
-                                  <span className="font-medium text-blue-900">{mt.name}</span>
-                                  {time && <span className="text-blue-500 ml-1">{time}</span>}
+                                  <span className={`font-medium ${mt.meeting_type === "대면미팅" ? "text-orange-900" : "text-blue-900"}`}>
+                                    {mt.meeting_type === "줌미팅" ? "💻" : mt.meeting_type === "대면미팅" ? "🤝" : ""} {mt.name}
+                                  </span>
+                                  {time && <span className={`ml-1 ${mt.meeting_type === "대면미팅" ? "text-orange-500" : "text-blue-500"}`}>{time}</span>}
                                 </button>
                               );
                             })}
