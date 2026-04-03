@@ -18,7 +18,7 @@ type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lectur
 type SortDir = "asc" | "desc";
 
 const ROW_H = 36;
-// 상태 | 분야 | 담당자 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처
+// 상태 | 분야 | 찾은 사람 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처
 const GRID = "84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px";
 const MIN_W = 940;
 
@@ -159,7 +159,7 @@ export default function SubmitPage() {
             >
               <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
               <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
-              <SortHeader label="담당자" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
+              <SortHeader label="찾은 사람" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
               <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} />
               <SortHeader label="참조" />
               <SortHeader label="강의" col="has_lecture_history" sk={sortKey} sd={sortDir} onSort={handleSort} center />
@@ -418,7 +418,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
           <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="h-8 text-sm" />
         </div>
         <div className="relative">
-          <Label className="text-xs">담당자</Label>
+          <Label className="text-xs">찾은 사람</Label>
           <Input
             value={form.assignee}
             onChange={(e) => setForm({ ...form, assignee: e.target.value })}

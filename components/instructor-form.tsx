@@ -194,10 +194,10 @@ export default function InstructorForm({ onClose }: Props) {
                 <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="h-8 text-sm" />
               </div>
 
-              {/* 담당자 + 출처 */}
+              {/* 찾은 사람 + 출처 */}
               <div className="col-span-2 flex items-end gap-4">
                 <div className="w-[140px] shrink-0 relative">
-                  <Label className="text-xs">담당자</Label>
+                  <Label className="text-xs">찾은 사람</Label>
                   <Input
                     value={form.assignee}
                     onChange={(e) => setForm({ ...form, assignee: e.target.value })}
