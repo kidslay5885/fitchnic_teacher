@@ -18,7 +18,7 @@ import { Send, Search, X, ChevronUp, ChevronDown } from "lucide-react";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
 const FINAL_STATUSES = ["진행 중", "미팅 완료", "계약 완료", "보류", "거절"] as const;
-type ViewFilter = "all" | InstructorStatus;
+type ViewFilter = "all" | "no_preinfo" | InstructorStatus;
 type SortKey = "name" | "status" | "field" | "assignee" | "final_status";
 type SortDir = "asc" | "desc";
 
@@ -85,9 +85,14 @@ export default function ContactTab() {
 
   useEffect(() => { loadAllWaves(); }, [loadAllWaves]);
 
+  // 응답 받았지만 사전 정보 없는 강사
+  const hasResponse = useCallback((id: string) => (wavesMap[id] || []).some((w) => w.result === "응답"), [wavesMap]);
+  const noPreInfoCount = useMemo(() => contactInstructors.filter((i) => hasResponse(i.id) && !i.pre_info).length, [contactInstructors, hasResponse]);
+
   const filtered = useMemo(() => {
     let list = contactInstructors;
-    if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
+    if (viewFilter === "no_preinfo") list = list.filter((i) => hasResponse(i.id) && !i.pre_info);
+    else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q));
@@ -98,7 +103,7 @@ export default function ContactTab() {
       const cmp = av.localeCompare(bv, "ko");
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [contactInstructors, viewFilter, search, sortKey, sortDir]);
+  }, [contactInstructors, viewFilter, search, sortKey, sortDir, hasResponse]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -115,18 +120,31 @@ export default function ContactTab() {
     overscan: 20,
   });
 
-  /* ── 개별 발송 편집 ── */
-  const handleWaveUpdate = async (instructorId: string, waveNumber: number, field: string, value: string) => {
+  /* ── 개별 발송 저장 ── */
+  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; response_method: string; pre_info: string }) => {
     try {
-      const existing = (wavesMap[instructorId] || []).find((w) => w.wave_number === waveNumber);
-      const body: any = { wave_number: waveNumber, sent_date: existing?.sent_date || null, result: existing?.result || "", [field]: value };
-      const res = await fetch(`/api/instructors/${instructorId}/waves`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "저장 실패");
+      const { pre_info, ...waveData } = data;
+      // 발송 기록 저장
+      const res = await fetch(`/api/instructors/${instructorId}/waves`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wave_number: waveNumber, ...waveData }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "저장 실패");
+      // 사전 정보는 강사 테이블에 저장 (1~3차 공유)
+      const inst = state.instructors.find(i => i.id === instructorId);
+      if (inst?.pre_info !== pre_info) {
+        const r2 = await fetch(`/api/instructors/${instructorId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pre_info }),
+        });
+        if (r2.ok) dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await r2.json() });
       }
       await loadAllWaves();
-    } catch (e: any) { toast.error(e.message || "업데이트 실패"); }
+      toast.success(`${waveNumber}차 발송 저장 완료`);
+      setEditingWave(null);
+    } catch (e: any) { toast.error(e.message); }
   };
 
   /* ── 개별 발송 삭제 ── */
@@ -345,6 +363,7 @@ export default function ContactTab() {
             { key: "진행 중" as ViewFilter, label: `진행 중 (${cnt("진행 중")})`, active: "bg-indigo-200 text-indigo-900 border-indigo-400", idle: "bg-indigo-50 text-indigo-700 border-indigo-200" },
             { key: "보류" as ViewFilter, label: `보류 (${cnt("보류")})`, active: "bg-orange-200 text-orange-900 border-orange-400", idle: "bg-orange-50 text-orange-700 border-orange-200" },
             { key: "계약 완료" as ViewFilter, label: `계약 완료 (${cnt("계약 완료")})`, active: "bg-green-200 text-green-900 border-green-400", idle: "bg-green-50 text-green-700 border-green-200" },
+            ...(noPreInfoCount > 0 ? [{ key: "no_preinfo" as ViewFilter, label: `사전 정보 미입력 (${noPreInfoCount})`, active: "bg-red-200 text-red-900 border-red-400", idle: "bg-red-50 text-red-700 border-red-200" }] : []),
           ]).map((f) => (
             <button
               key={f.key}
@@ -417,11 +436,14 @@ export default function ContactTab() {
                   </div>
                   {/* 이름 */}
                   <div
-                    className="px-3 font-medium cursor-pointer hover:underline truncate border-r border-gray-200/60"
+                    className="px-3 font-medium cursor-pointer hover:underline truncate border-r border-gray-200/60 flex items-center gap-1"
                     title={i.name}
                     onClick={() => setDetailId(i.id)}
                   >
                     {i.name}
+                    {hasResponse(i.id) && !i.pre_info && (
+                      <span className="shrink-0 h-2 w-2 rounded-full bg-red-500" title="사전 정보 미입력" />
+                    )}
                   </div>
                   {/* 상태 */}
                   <div className="px-2 cursor-pointer border-r border-gray-200/60" onClick={(e) => handleStatusClick(e, i)}>
@@ -512,14 +534,13 @@ export default function ContactTab() {
         />
       )}
 
-      {/* ── 발송 편집 팝오버 ── */}
+      {/* ── 발송 편집 모달 ── */}
       {editingWave && (
-        <WavePopover
+        <WaveModal
           wave={getWave(editingWave.instructorId, editingWave.wave)}
           waveNumber={editingWave.wave}
-          x={editingWave.x}
-          y={editingWave.y}
-          onUpdate={(field, value) => handleWaveUpdate(editingWave.instructorId, editingWave.wave, field, value)}
+          preInfo={state.instructors.find(i => i.id === editingWave.instructorId)?.pre_info || ""}
+          onSave={(data) => handleWaveSave(editingWave.instructorId, editingWave.wave, data)}
           onDelete={() => handleWaveDelete(editingWave.instructorId, editingWave.wave)}
           onClose={() => setEditingWave(null)}
         />
@@ -645,102 +666,96 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
 }
 
 /* ── 발송 편집 팝오버 ── */
-function WavePopover({ wave, waveNumber, x, y, onUpdate, onDelete, onClose }: {
+const RESPONSE_METHODS = ["전화", "문자", "이메일", "기타"] as const;
+
+function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, onSave, onDelete, onClose }: {
   wave: OutreachWave | undefined;
   waveNumber: number;
-  x: number; y: number;
-  onUpdate: (field: string, value: string) => Promise<void>;
+  preInfo: string;
+  onSave: (data: { sent_date: string; result: string; response_method: string; pre_info: string }) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
   const [date, setDate] = useState(wave?.sent_date || "");
   const [result, setResult] = useState(wave?.result || "");
+  const [responseMethod, setResponseMethod] = useState(wave?.response_method || "");
+  const [preInfo, setPreInfo] = useState(initialPreInfo);
   const [saving, setSaving] = useState(false);
-  const [selectOpen, setSelectOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const savingRef = useRef(false);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      // 저장 중이거나 Select 열려있으면 닫지 않음
-      if (savingRef.current || selectOpen) return;
-      const target = e.target as HTMLElement;
-      if (target.closest("[data-radix-popper-content-wrapper]")) return;
-      if (ref.current && !ref.current.contains(target)) onClose();
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [onClose, selectOpen]);
-
-  const popW = 260;
-  const popH = 180;
-  const adjustedX = Math.min(x, window.innerWidth - popW - 16);
-  const adjustedY = y + popH > window.innerHeight ? y - popH - ROW_H - 8 : y;
-
-  const handleSave = async (field: string, value: string) => {
+  const handleSubmit = async () => {
     setSaving(true);
-    savingRef.current = true;
     try {
-      await onUpdate(field, value);
-    } finally {
-      setSaving(false);
-      savingRef.current = false;
-    }
+      await onSave({ sent_date: date, result: result || "무응답", response_method: responseMethod, pre_info: preInfo });
+    } finally { setSaving(false); }
   };
 
   return (
-    <div
-      ref={ref}
-      className="fixed z-50 bg-white border rounded-lg shadow-lg p-4 space-y-3"
-      style={{ left: adjustedX, top: adjustedY, width: popW }}
-    >
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold">{waveNumber}차 발송</p>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-lg w-[520px] p-6 space-y-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <p className="text-base font-semibold">{waveNumber}차 발송</p>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
-      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">발송일</label>
+            <Input type="date" className="h-9 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">결과</label>
+            <Select value={result || "무응답"} onValueChange={setResult}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
         <div>
-          <label className="text-xs text-muted-foreground">발송일</label>
-          <Input
-            type="date"
-            className="h-8 text-sm"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            onBlur={() => { if (date !== (wave?.sent_date || "")) handleSave("sent_date", date); }}
+          <label className="text-xs text-muted-foreground mb-1.5 block">응답 방식</label>
+          <div className="flex gap-2">
+            {RESPONSE_METHODS.map((m) => (
+              <button
+                key={m}
+                onClick={() => setResponseMethod(responseMethod === m ? "" : m)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                  responseMethod === m
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-1 block">사전 정보</label>
+          <textarea
+            className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+            rows={10}
+            placeholder="강사에 대한 사전 정보나 메모..."
+            value={preInfo}
+            onChange={(e) => setPreInfo(e.target.value)}
           />
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">결과</label>
-          <Select
-            value={result || "무응답"}
-            open={selectOpen}
-            onOpenChange={setSelectOpen}
-            onValueChange={(v) => {
-              setResult(v);
-              handleSave("result", v);
-            }}
-          >
-            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
-      <div className="flex items-center justify-between">
-        {saving && <p className="text-xs text-muted-foreground">저장 중...</p>}
-        {wave && (
-          <button
-            onClick={onDelete}
-            className="text-xs text-red-500 hover:text-red-600 hover:underline ml-auto"
-          >
-            삭제
-          </button>
-        )}
+        <div className="flex gap-2">
+          <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSubmit} disabled={saving}>
+            {saving ? "저장 중..." : "저장"}
+          </Button>
+          {wave && (
+            <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600" onClick={onDelete}>
+              삭제
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
+        </div>
       </div>
     </div>
   );

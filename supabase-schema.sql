@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS outreach_waves (
   wave_number INTEGER NOT NULL CHECK (wave_number BETWEEN 1 AND 3),
   sent_date DATE,
   result TEXT DEFAULT '',
+  response_method TEXT DEFAULT '',
+  pre_info TEXT DEFAULT '',
   notes TEXT DEFAULT '',
   UNIQUE(instructor_id, wave_number)
 );

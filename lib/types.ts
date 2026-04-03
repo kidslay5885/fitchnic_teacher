@@ -43,6 +43,7 @@ export interface Instructor {
   meeting_memo: string;
   meeting_date: string;
   notes: string;
+  pre_info: string;
   source: InstructorSource;
   instructor_info: string;
   is_banned: boolean;
@@ -67,6 +68,7 @@ export interface OutreachWave {
   wave_number: number;
   sent_date: string;
   result: WaveResult;
+  response_method: string;
   notes: string;
 }
 
