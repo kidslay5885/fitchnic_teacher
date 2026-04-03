@@ -474,8 +474,8 @@ export default function MeetingTab() {
         const igUrl = inst.instagram ? (inst.instagram.startsWith("http") ? inst.instagram : `https://instagram.com/${inst.instagram}`) : "";
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingMeeting(null)}>
-            <Card className="w-[1100px] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-              <CardContent className="p-6">
+            <Card className="w-[1100px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 flex flex-col overflow-hidden">
                 {/* 헤더 */}
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2">
@@ -485,9 +485,9 @@ export default function MeetingTab() {
                   <button onClick={() => setEditingMeeting(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
                 </div>
 
-                <div className="flex gap-5">
+                <div className="flex gap-5 flex-1 min-h-0">
                   {/* ── 왼쪽: 기본 정보 + 미팅 설정 ── */}
-                  <div className="w-[320px] shrink-0 space-y-4">
+                  <div className="w-[320px] shrink-0 space-y-4 overflow-y-auto">
                     {/* 강사 기본 정보 */}
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm border rounded-lg p-3 bg-gray-50/50">
                       <div><span className="text-muted-foreground">분야</span> <span className="ml-1 font-medium">{inst.field || "-"}</span></div>
@@ -679,7 +679,7 @@ export default function MeetingTab() {
                 </div>
 
                 {/* 버튼 */}
-                <div className="flex gap-2 mt-5">
+                <div className="flex gap-2 mt-5 shrink-0">
                   <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSave}><Save className="h-3.5 w-3.5 mr-1" />저장</Button>
                   {(inst.meeting_date || inst.meeting_confirmed) && (
                     <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600" onClick={handleRemove}>삭제</Button>
