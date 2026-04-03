@@ -37,6 +37,7 @@ export interface Instructor {
   status: InstructorStatus;
   exclude_reason: string;
   confirm_reason: string;
+  contact_assignee: string;
   outreach_channel: OutreachChannel;
   dm_sent: boolean;
   email_sent: boolean;

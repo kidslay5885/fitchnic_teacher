@@ -284,7 +284,7 @@ export default function MeetingTab() {
           <Badge className={`text-[10px] px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
         </td>
         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
-        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap">{i.assignee}</td>
+        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap">{i.contact_assignee || i.assignee}</td>
         <td className="px-3 py-2 border-r border-gray-200/60 whitespace-nowrap font-medium text-blue-700">
           {showDate ? formatMeetingDate(i.meeting_date || "") : "-"}
         </td>
