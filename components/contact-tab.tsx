@@ -120,9 +120,9 @@ export default function ContactTab() {
   });
 
   /* ── 개별 발송 저장 ── */
-  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string }) => {
+  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string; assignee: string }) => {
     try {
-      const { pre_info, meeting_type, ...waveData } = data;
+      const { pre_info, meeting_type, assignee, ...waveData } = data;
       // 발송 기록 저장
       const res = await fetch(`/api/instructors/${instructorId}/waves`, {
         method: "POST",
@@ -132,11 +132,11 @@ export default function ContactTab() {
       if (!res.ok) throw new Error((await res.json()).error || "저장 실패");
       // 사전 정보 + 미팅 방식은 강사 테이블에 저장 (1~3차 공유)
       const inst = state.instructors.find(i => i.id === instructorId);
-      if (inst?.pre_info !== pre_info || inst?.meeting_type !== meeting_type) {
+      if (inst?.pre_info !== pre_info || inst?.meeting_type !== meeting_type || inst?.assignee !== assignee) {
         const r2 = await fetch(`/api/instructors/${instructorId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pre_info, meeting_type }),
+          body: JSON.stringify({ pre_info, meeting_type, assignee }),
         });
         if (r2.ok) dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await r2.json() });
       }
@@ -540,6 +540,7 @@ export default function ContactTab() {
           waveNumber={editingWave.wave}
           preInfo={state.instructors.find(i => i.id === editingWave.instructorId)?.pre_info || ""}
           meetingType={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type || ""}
+          assignee={state.instructors.find(i => i.id === editingWave.instructorId)?.assignee || ""}
           onSave={(data) => handleWaveSave(editingWave.instructorId, editingWave.wave, data)}
           onDelete={() => handleWaveDelete(editingWave.instructorId, editingWave.wave)}
           onClose={() => setEditingWave(null)}
@@ -668,12 +669,13 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
 /* ── 발송 편집 팝오버 ── */
 const RESPONSE_METHODS = ["전화", "문자", "이메일", "기타"] as const;
 
-function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: initialMeetingType, onSave, onDelete, onClose }: {
+function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: initialMeetingType, assignee: initialAssignee, onSave, onDelete, onClose }: {
   wave: OutreachWave | undefined;
   waveNumber: number;
   preInfo: string;
   meetingType: string;
-  onSave: (data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string }) => Promise<void>;
+  assignee: string;
+  onSave: (data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string; assignee: string }) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -682,12 +684,13 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   const [responseMethod, setResponseMethod] = useState(wave?.response_method || "");
   const [preInfo, setPreInfo] = useState(initialPreInfo);
   const [meetingType, setMeetingType] = useState(initialMeetingType);
+  const [assignee, setAssignee] = useState(initialAssignee);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await onSave({ sent_date: date, result: result || "무응답", response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType });
+      await onSave({ sent_date: date, result: result || "무응답", response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType, assignee });
     } finally { setSaving(false); }
   };
 
@@ -731,6 +734,25 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
                 }`}
               >
                 {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-muted-foreground mb-1.5 block">담당자</label>
+          <div className="flex gap-2">
+            {(["정승희", "김보성"] as const).map((a) => (
+              <button
+                key={a}
+                onClick={() => setAssignee(assignee === a ? "" : a)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                  assignee === a
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {a}
               </button>
             ))}
           </div>
