@@ -300,7 +300,7 @@ export default function MeetingTab() {
   return (
     <div className="flex gap-4" style={{ height: "calc(100vh - 56px)" }}>
       {/* ── 좌측: 전체 미팅 목록 ── */}
-      <div className="flex flex-col w-[650px] shrink-0">
+      <div className="flex flex-col w-[750px] shrink-0">
         <div className="shrink-0 space-y-3 pb-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">미팅관리</h2>
@@ -775,8 +775,8 @@ function PreQuestionsModal({ instructor, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="w-[700px] max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <CardContent className="p-0 flex flex-col h-full">
+      <Card className="w-[700px] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="p-0 flex flex-col overflow-hidden">
           {/* 헤더 */}
           <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
             <div>
