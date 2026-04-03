@@ -44,6 +44,7 @@ export interface Instructor {
   meeting_date: string;
   notes: string;
   pre_info: string;
+  post_info: string;
   meeting_confirmed: boolean;
   source: InstructorSource;
   instructor_info: string;

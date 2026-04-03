@@ -20,7 +20,10 @@ const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 export default function MeetingTab() {
   const { state, dispatch } = useOutreach();
   const [monthOffset, setMonthOffset] = useState(0);
-  const [editingMeeting, setEditingMeeting] = useState<{ id: string; name: string; date: string; time: string; memo: string; confirmed: boolean } | null>(null);
+  const [editingMeeting, setEditingMeeting] = useState<{
+    instructor: Instructor; date: string; time: string; memo: string;
+    confirmed: boolean; postInfo: string;
+  } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [search, setSearch] = useState("");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
@@ -164,7 +167,10 @@ export default function MeetingTab() {
 
   const openEdit = (i: Instructor) => {
     const { date, time } = parseMeetingDate(i.meeting_date || "");
-    setEditingMeeting({ id: i.id, name: i.name, date, time, memo: i.meeting_memo || "", confirmed: !!i.meeting_confirmed });
+    setEditingMeeting({
+      instructor: i, date, time, memo: i.meeting_memo || "",
+      confirmed: !!i.meeting_confirmed, postInfo: i.post_info || "",
+    });
   };
 
   const handleSave = async () => {
@@ -173,35 +179,52 @@ export default function MeetingTab() {
       ? (editingMeeting.time ? `${editingMeeting.date} ${editingMeeting.time}` : editingMeeting.date)
       : "";
     try {
-      const res = await fetch(`/api/instructors/${editingMeeting.id}`, {
+      const res = await fetch(`/api/instructors/${editingMeeting.instructor.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meeting_date: meetingDate, meeting_memo: editingMeeting.memo, meeting_confirmed: editingMeeting.confirmed }),
+        body: JSON.stringify({
+          meeting_date: meetingDate, meeting_memo: editingMeeting.memo,
+          meeting_confirmed: editingMeeting.confirmed, post_info: editingMeeting.postInfo,
+        }),
       });
       if (!res.ok) throw new Error("Failed");
       dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
       setEditingMeeting(null);
-      toast.success("미팅 일정 저장 완료");
+      toast.success("미팅 정보 저장 완료");
     } catch { toast.error("저장 실패"); }
   };
 
-  const handleRemove = async (id: string, name: string) => {
+  const handleRemove = async () => {
+    if (!editingMeeting) return;
     try {
-      const res = await fetch(`/api/instructors/${id}`, {
+      const res = await fetch(`/api/instructors/${editingMeeting.instructor.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meeting_date: "", meeting_memo: "" }),
+        body: JSON.stringify({ meeting_date: "", meeting_memo: "", meeting_confirmed: false, post_info: "" }),
       });
       if (!res.ok) throw new Error("Failed");
       dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
-      toast.success(`${name} 미팅 삭제`);
+      setEditingMeeting(null);
+      toast.success(`${editingMeeting.instructor.name} 미팅 삭제`);
     } catch { toast.error("삭제 실패"); }
+  };
+
+  // 미팅일 지났는데 사후 정보 없는 강사
+  const needsPostInfo = (i: Instructor) => {
+    if (!i.meeting_date || i.post_info) return false;
+    const d = extractDate(i.meeting_date);
+    return d ? d.getTime() < now.getTime() : false;
   };
 
   const renderRows = (list: Instructor[], showDate: boolean) =>
     list.map((i, idx) => (
       <tr key={i.id} className={`border-b hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => openEdit(i)}>
-        <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
+        <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">
+          <span className="flex items-center gap-1">
+            {i.name}
+            {needsPostInfo(i) && <span className="shrink-0 h-2 w-2 rounded-full bg-red-500" title="사후 정보 미입력" />}
+          </span>
+        </td>
         <td className="px-3 py-2 border-r border-gray-200/60">
           <Badge className={`text-[10px] px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
         </td>
@@ -379,49 +402,106 @@ export default function MeetingTab() {
         </div>
       </div>
 
-      {/* ── 미팅 수정 모달 ── */}
-      {editingMeeting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingMeeting(null)}>
-          <Card className="w-[440px]" onClick={(e) => e.stopPropagation()}>
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">{editingMeeting.name} 미팅 일정</p>
-                <button onClick={() => setEditingMeeting(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
-              </div>
-              <div
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
-                  editingMeeting.confirmed ? "bg-blue-50 border-blue-300" : "bg-gray-50 border-gray-200"
-                }`}
-                onClick={() => setEditingMeeting({ ...editingMeeting, confirmed: !editingMeeting.confirmed })}
-              >
-                <input type="checkbox" className="h-4 w-4 rounded accent-primary pointer-events-none" checked={editingMeeting.confirmed} readOnly />
-                <span className={`text-sm font-medium ${editingMeeting.confirmed ? "text-blue-800" : "text-gray-500"}`}>미팅 확정</span>
-              </div>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
-                  <Input type="date" className="h-9 text-sm" value={editingMeeting.date} onChange={(e) => setEditingMeeting({ ...editingMeeting, date: e.target.value })} />
+      {/* ── 미팅 상세 모달 ── */}
+      {editingMeeting && (() => {
+        const inst = editingMeeting.instructor;
+        const igUrl = inst.instagram ? (inst.instagram.startsWith("http") ? inst.instagram : `https://instagram.com/${inst.instagram}`) : "";
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setEditingMeeting(null)}>
+            <Card className="w-[1100px] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6">
+                {/* 헤더 */}
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-2">
+                    <p className="text-base font-semibold">{inst.name}</p>
+                    <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[inst.status as InstructorStatus] || ""}`}>{inst.status}</Badge>
+                  </div>
+                  <button onClick={() => setEditingMeeting(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
                 </div>
-                  <div className="w-[120px]">
-                    <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
-                    <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
+
+                <div className="flex gap-5">
+                  {/* ── 왼쪽: 기본 정보 + 미팅 설정 ── */}
+                  <div className="w-[320px] shrink-0 space-y-4">
+                    {/* 강사 기본 정보 */}
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm border rounded-lg p-3 bg-gray-50/50">
+                      <div><span className="text-muted-foreground">분야</span> <span className="ml-1 font-medium">{inst.field || "-"}</span></div>
+                      <div><span className="text-muted-foreground">담당자</span> <span className="ml-1 font-medium">{inst.assignee || "-"}</span></div>
+                      <div><span className="text-muted-foreground">강의</span> <span className="ml-1 font-medium">{inst.has_lecture_history || "-"}</span></div>
+                      <div><span className="text-muted-foreground">플랫폼</span> <span className="ml-1 font-medium">{inst.lecture_platform || "-"}</span></div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted-foreground">유튜브</span>
+                        {inst.youtube ? <a href={inst.youtube} target="_blank" rel="noopener noreferrer" className="ml-1 text-blue-600 hover:underline flex items-center gap-0.5">링크<ExternalLink className="h-3 w-3" /></a> : <span className="ml-1">-</span>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted-foreground">인스타</span>
+                        {igUrl ? <a href={igUrl} target="_blank" rel="noopener noreferrer" className="ml-1 text-pink-600 hover:underline flex items-center gap-0.5">링크<ExternalLink className="h-3 w-3" /></a> : <span className="ml-1">-</span>}
+                      </div>
+                    </div>
+
+                    {/* 미팅 확정 */}
+                    <div
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                        editingMeeting.confirmed ? "bg-blue-50 border-blue-300" : "bg-gray-50 border-gray-200"
+                      }`}
+                      onClick={() => setEditingMeeting({ ...editingMeeting, confirmed: !editingMeeting.confirmed })}
+                    >
+                      <input type="checkbox" className="h-4 w-4 rounded accent-primary pointer-events-none" checked={editingMeeting.confirmed} readOnly />
+                      <span className={`text-sm font-medium ${editingMeeting.confirmed ? "text-blue-800" : "text-gray-500"}`}>미팅 확정</span>
+                    </div>
+
+                    {/* 날짜 / 시간 */}
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
+                        <Input type="date" className="h-9 text-sm" value={editingMeeting.date} onChange={(e) => setEditingMeeting({ ...editingMeeting, date: e.target.value })} />
+                      </div>
+                      <div className="w-[110px]">
+                        <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
+                        <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
+                      </div>
+                    </div>
+
+                    {/* 메모 */}
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">메모</label>
+                      <Textarea className="text-sm" rows={4} value={editingMeeting.memo} onChange={(e) => setEditingMeeting({ ...editingMeeting, memo: e.target.value })} />
+                    </div>
+                  </div>
+
+                  {/* ── 중앙: 사전 정보 ── */}
+                  <div className="flex-1 min-w-0">
+                    <label className="text-xs text-muted-foreground mb-1 block">사전 정보</label>
+                    <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 text-foreground/80 whitespace-pre-wrap h-[calc(100%-20px)] overflow-y-auto">
+                      {inst.pre_info || "입력된 사전 정보가 없습니다."}
+                    </div>
+                  </div>
+
+                  {/* ── 오른쪽: 사후 정보 ── */}
+                  <div className="flex-1 min-w-0">
+                    <label className="text-xs text-muted-foreground mb-1 block">사후 정보</label>
+                    <Textarea
+                      className="text-sm h-[calc(100%-20px)]"
+                      rows={10}
+                      placeholder="미팅 후 기록할 내용..."
+                      value={editingMeeting.postInfo}
+                      onChange={(e) => setEditingMeeting({ ...editingMeeting, postInfo: e.target.value })}
+                    />
                   </div>
                 </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">메모</label>
-                <Textarea className="text-sm" rows={3} value={editingMeeting.memo} onChange={(e) => setEditingMeeting({ ...editingMeeting, memo: e.target.value })} />
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSave}><Save className="h-3.5 w-3.5 mr-1" />저장</Button>
-                {state.instructors.find(i => i.id === editingMeeting.id)?.meeting_date && (
-                  <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600" onClick={() => { handleRemove(editingMeeting.id, editingMeeting.name); setEditingMeeting(null); }}>삭제</Button>
-                )}
-                <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => setEditingMeeting(null)}>취소</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+
+                {/* 버튼 */}
+                <div className="flex gap-2 mt-5">
+                  <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSave}><Save className="h-3.5 w-3.5 mr-1" />저장</Button>
+                  {(inst.meeting_date || inst.meeting_confirmed) && (
+                    <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600" onClick={handleRemove}>삭제</Button>
+                  )}
+                  <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => setEditingMeeting(null)}>취소</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
       {/* ── 미팅 추가 모달 ── */}
       {showAddModal && (
         <AddMeetingModal
