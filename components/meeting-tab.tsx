@@ -69,7 +69,11 @@ export default function MeetingTab() {
     postSpecial: string; postPositive: string; postNegative: string;
     modalTab: "before" | "questions" | "after";
     preQuestions: Record<string, string>;
+    preInfo: string;
   } | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialOpen = useRef(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [remindModal, setRemindModal] = useState<Instructor | null>(null);
   const [remindDate, setRemindDate] = useState("");
@@ -212,6 +216,8 @@ export default function MeetingTab() {
       if (meetDate.getTime() === today.getTime()) defaultTab = "questions";
       else if (meetDate < today) defaultTab = "after";
     }
+    isInitialOpen.current = true;
+    setAutoSaveStatus("idle");
     setEditingMeeting({
       instructor: i, date, time, memo: i.meeting_memo || "",
       confirmed: !!i.meeting_confirmed, remindDate, meetingType: i.meeting_type || "",
@@ -220,34 +226,72 @@ export default function MeetingTab() {
     });
   };
 
-  const handleSave = async () => {
-    if (!editingMeeting) return;
-    const meetingDate = editingMeeting.date
-      ? (editingMeeting.time ? `${editingMeeting.date} ${editingMeeting.time}` : editingMeeting.date)
+  // 공통 저장 로직 (silent=true: 자동 저장, false: 수동 저장)
+  const saveMeeting = async (data: NonNullable<typeof editingMeeting>, silent: boolean) => {
+    const meetingDate = data.date
+      ? (data.time ? `${data.date} ${data.time}` : data.date)
       : "";
     try {
-      const res = await fetch(`/api/instructors/${editingMeeting.instructor.id}`, {
+      if (silent) setAutoSaveStatus("saving");
+      const res = await fetch(`/api/instructors/${data.instructor.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          meeting_date: meetingDate, meeting_memo: editingMeeting.memo,
-          meeting_confirmed: editingMeeting.confirmed,
-          remind_date: editingMeeting.remindDate || "",
-          meeting_type: editingMeeting.meetingType || "",
-          pre_info: editingMeeting.preInfo,
-          pre_questions: JSON.stringify(editingMeeting.preQuestions),
-          post_info: JSON.stringify({ special: editingMeeting.postSpecial, positive: editingMeeting.postPositive, negative: editingMeeting.postNegative }),
+          meeting_date: meetingDate, meeting_memo: data.memo,
+          meeting_confirmed: data.confirmed,
+          remind_date: data.remindDate || "",
+          meeting_type: data.meetingType || "",
+          pre_info: data.preInfo,
+          pre_questions: JSON.stringify(data.preQuestions),
+          post_info: JSON.stringify({ special: data.postSpecial, positive: data.postPositive, negative: data.postNegative }),
         }),
       });
       if (!res.ok) throw new Error("Failed");
       dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
+      if (silent) setAutoSaveStatus("saved");
+      return true;
+    } catch {
+      if (silent) setAutoSaveStatus("idle");
+      else toast.error("저장 실패");
+      return false;
+    }
+  };
+
+  // 자동 저장 대상 데이터 (modalTab 제외 — 탭 전환은 저장 트리거하지 않음)
+  const autoSaveDeps = editingMeeting
+    ? JSON.stringify({ ...editingMeeting, modalTab: undefined, instructor: undefined })
+    : null;
+
+  // 디바운스 자동 저장
+  useEffect(() => {
+    if (!editingMeeting || !autoSaveDeps) return;
+    // 모달 첫 오픈 시에는 저장하지 않음
+    if (isInitialOpen.current) {
+      isInitialOpen.current = false;
+      return;
+    }
+    setAutoSaveStatus("idle");
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      saveMeeting(editingMeeting, true);
+    }, 1500);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [autoSaveDeps]);
+
+  const handleSave = async () => {
+    if (!editingMeeting) return;
+    // 대기 중인 자동 저장 취소
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    const ok = await saveMeeting(editingMeeting, false);
+    if (ok) {
       setEditingMeeting(null);
       toast.success("미팅 정보 저장 완료");
-    } catch { toast.error("저장 실패"); }
+    }
   };
 
   const handleRemove = async () => {
     if (!editingMeeting) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     try {
       const res = await fetch(`/api/instructors/${editingMeeting.instructor.id}`, {
         method: "PATCH",
@@ -501,8 +545,10 @@ export default function MeetingTab() {
                   <div className="flex items-center gap-2">
                     <p className="text-base font-semibold">{inst.name}</p>
                     <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[inst.status as InstructorStatus] || ""}`}>{inst.status}</Badge>
+                    {autoSaveStatus === "saving" && <span className="text-xs text-muted-foreground animate-pulse">저장 중...</span>}
+                    {autoSaveStatus === "saved" && <span className="text-xs text-green-500">저장됨</span>}
                   </div>
-                  <button onClick={() => setEditingMeeting(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+                  <button onClick={() => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); setEditingMeeting(null); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
                 </div>
 
                 <div className="flex gap-5 flex-1 min-h-0">
@@ -707,7 +753,7 @@ export default function MeetingTab() {
                   {(inst.meeting_date || inst.meeting_confirmed) && (
                     <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600" onClick={handleRemove}>삭제</Button>
                   )}
-                  <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => setEditingMeeting(null)}>취소</Button>
+                  <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); setEditingMeeting(null); }}>닫기</Button>
                 </div>
               </CardContent>
             </Card>
