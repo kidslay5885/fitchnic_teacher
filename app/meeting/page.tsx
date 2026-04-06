@@ -50,7 +50,7 @@ export default function MeetingReportPage() {
   const [pageTab, setPageTab] = useState<"overview" | "report">("overview");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reportTitle, setReportTitle] = useState(`미팅 보고서 ${new Date().toLocaleDateString("ko-KR")}`);
-  const [reportFields, setReportFields] = useState<Set<string>>(new Set(["name", "status", "field", "contact_assignee", "meeting_date", "meeting_type", "meeting_memo"]));
+  const [reportFields, setReportFields] = useState<Set<string>>(new Set(["name", "status", "field", "meeting_date", "meeting_type", "meeting_confirmed", "remind_date", "phone", "email", "youtube", "instagram", "has_lecture_history", "lecture_platform", "pre_info", "pre_questions", "post_special", "post_positive", "post_negative"]));
   const [reportSaving, setReportSaving] = useState(false);
 
   const getDefaultTab = (meetingDate: string | undefined): "before" | "questions" | "after" => {
