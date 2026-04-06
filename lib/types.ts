@@ -95,11 +95,13 @@ export interface Application {
   activity_name: string;
   contact: string;
   experience: string;
+  lecture_format: string;
   topic: string;
   motivation: string;
   career: string;
   student_results: string;
   student_benefits: string;
+  sns_types: string;
   sns_link: string;
   review_status: ReviewStatus;
   reviewed_by: string;

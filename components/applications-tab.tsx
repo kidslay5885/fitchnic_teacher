@@ -18,6 +18,41 @@ import type { Application } from "@/lib/types";
 import { toast } from "sonner";
 import { Eye, UserPlus } from "lucide-react";
 
+// 출처별 상세 필드 순서
+function getDetailFields(app: Application): [string, string][] {
+  const common: [string, string][] = [
+    ["채널", app.source_platform],
+    ["이름", app.applicant_name],
+    ["강사명", app.activity_name],
+    ["연락처", app.contact],
+    ["강의 경험", app.experience],
+  ];
+
+  if (app.source_platform === "핏크닉메타") {
+    return [
+      ...common,
+      ["강의 형태", app.lecture_format],
+      ["지원 동기", app.motivation],
+      ["강의 주제", app.topic],
+      ["경력/성과", app.career],
+      ["수강생이 얻는 것", app.student_benefits],
+      ["SNS 종류", app.sns_types],
+      ["SNS 링크", app.sns_link],
+    ];
+  }
+
+  // 핏크닉홈, 핏크닉카, 머니업홈, 머니업카
+  return [
+    ...common,
+    ["강의 주제", app.topic],
+    ["지원 동기", app.motivation],
+    ["경력/성과", app.career],
+    ["수강생 성과 경험", app.student_results],
+    ["수강생이 얻는 것", app.student_benefits],
+    ["SNS 링크", app.sns_link],
+  ];
+}
+
 export default function ApplicationsTab() {
   const { state, dispatch, loadApplications } = useOutreach();
   const [activeSource, setActiveSource] = useState<string>("전체");
@@ -128,12 +163,7 @@ export default function ApplicationsTab() {
             <DialogHeader><DialogTitle className="text-base">{detailApp.applicant_name} 지원서</DialogTitle></DialogHeader>
             <ScrollArea className="max-h-[50vh]">
               <div className="space-y-3 text-sm">
-                {[
-                  ["이름", detailApp.applicant_name], ["활동명", detailApp.activity_name], ["채널", detailApp.source_platform],
-                  ["연락처", detailApp.contact], ["강의경험", detailApp.experience], ["강의주제", detailApp.topic],
-                  ["지원동기", detailApp.motivation], ["경력/성과", detailApp.career],
-                  ["수강생 성과", detailApp.student_results], ["수강생이 얻는 것", detailApp.student_benefits], ["SNS", detailApp.sns_link],
-                ].map(([l, v]) => v ? (
+                {getDetailFields(detailApp).map(([l, v]) => v ? (
                   <div key={l}><span className="text-muted-foreground text-xs">{l}</span><p className="whitespace-pre-wrap">{v}</p></div>
                 ) : null)}
               </div>
