@@ -19,7 +19,7 @@ function onFormSubmit(e) {
     sns_link: v[11] || "",            // 11. SNS 링크
     student_results: "",
     review_status: "미확인",
-    submitted_at: new Date(v[0]).toISOString(),
+    submitted_at: new Date().toISOString(),
   };
 
   UrlFetchApp.fetch(API_URL, {
@@ -35,7 +35,13 @@ function importAll() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    onFormSubmit({ values: data[i].map(String) });
+    const row = data[i];
+    // 타임스탬프를 ISO 형식으로 변환 후 나머지는 문자열로
+    const values = row.map(function(cell, idx) {
+      if (idx === 0 && cell instanceof Date) return cell.toISOString();
+      return String(cell);
+    });
+    onFormSubmit({ values: values });
     Utilities.sleep(200);
     Logger.log("Row " + (i + 1) + " 완료");
   }
