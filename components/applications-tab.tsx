@@ -15,8 +15,10 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { APPLICATION_SOURCES } from "@/lib/constants";
 import type { Application } from "@/lib/types";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Eye, UserPlus } from "lucide-react";
+import { Eye, UserPlus, Trash2, Search, ChevronUp, ChevronDown } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 // 출처별 상세 필드 순서
 function getDetailFields(app: Application): [string, string][] {
@@ -56,14 +58,54 @@ function getDetailFields(app: Application): [string, string][] {
 export default function ApplicationsTab() {
   const { state, dispatch, loadApplications } = useOutreach();
   const [activeSource, setActiveSource] = useState<string>("전체");
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<keyof Application | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [detailApp, setDetailApp] = useState<Application | null>(null);
+
+  const handleSort = (key: keyof Application) => {
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  const toggleAll = () => {
+    if (selected.size === sorted.length) setSelected(new Set());
+    else setSelected(new Set(sorted.map((a) => a.id)));
+  };
+
+  const toggleOne = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
 
   useEffect(() => { if (state.applications.length === 0) loadApplications(); }, []);
 
   const filtered = useMemo(() => {
-    if (activeSource === "전체") return state.applications;
-    return state.applications.filter((a) => a.source_platform === activeSource);
-  }, [state.applications, activeSource]);
+    return state.applications.filter((a) => {
+      if (activeSource !== "전체" && a.source_platform !== activeSource) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        return (
+          a.applicant_name?.toLowerCase().includes(q) ||
+          a.activity_name?.toLowerCase().includes(q) ||
+          a.topic?.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [state.applications, activeSource, search]);
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
+    return [...filtered].sort((a, b) => {
+      const av = (a[sortKey] || "") as string;
+      const bv = (b[sortKey] || "") as string;
+      const cmp = av.localeCompare(bv, "ko");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortKey, sortDir]);
 
   const handleReviewStatus = async (app: Application, status: string) => {
     try {
@@ -75,15 +117,81 @@ export default function ApplicationsTab() {
   };
 
   const handleAddToInstructors = async (app: Application) => {
+    if (app.instructor_id && state.instructors.some((i) => i.id === app.instructor_id)) { toast.error("이미 등록된 지원서입니다."); return; }
     try {
       const res = await fetch("/api/instructors", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: app.applicant_name || app.activity_name, phone: app.contact, source: "지원서", notes: `${app.source_platform} | ${app.experience} | ${app.topic}`, _force: true }),
       });
       if (!res.ok) throw new Error("Failed");
-      dispatch({ type: "ADD_INSTRUCTOR", instructor: await res.json() });
+      const instructor = await res.json();
+      dispatch({ type: "ADD_INSTRUCTOR", instructor });
+      // 지원서에 instructor_id 연결
+      await fetch(`/api/applications/${app.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instructor_id: instructor.id }) });
+      await loadApplications();
       toast.success(`${app.applicant_name} 강사찾기에 추가`);
     } catch { toast.error("추가 실패"); }
+  };
+
+  // 일괄 검토 상태 변경
+  const handleBulkReview = async (status: string) => {
+    try {
+      await Promise.all(
+        Array.from(selected).map((id) =>
+          fetch(`/api/applications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ review_status: status }) })
+        )
+      );
+      await loadApplications();
+      setSelected(new Set());
+      toast.success(`${selected.size}건 ${status}으로 변경`);
+    } catch { toast.error("실패"); }
+  };
+
+  // 일괄 강사 등록
+  const handleBulkAddToInstructors = async () => {
+    const apps = state.applications.filter((a) => selected.has(a.id) && !a.instructor_id);
+    if (apps.length === 0) { toast.error("등록 가능한 지원서가 없습니다."); return; }
+    try {
+      for (const app of apps) {
+        const res = await fetch("/api/instructors", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: app.applicant_name || app.activity_name, phone: app.contact, source: "지원서", notes: `${app.source_platform} | ${app.experience} | ${app.topic}`, _force: true }),
+        });
+        if (res.ok) {
+          const instructor = await res.json();
+          dispatch({ type: "ADD_INSTRUCTOR", instructor });
+          await fetch(`/api/applications/${app.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instructor_id: instructor.id }) });
+        }
+      }
+      await loadApplications();
+      setSelected(new Set());
+      toast.success(`${apps.length}명 강사찾기에 추가`);
+    } catch { toast.error("추가 실패"); }
+  };
+
+  // 개별 삭제
+  const handleDelete = async (id: string) => {
+    if (!confirm("이 지원서를 삭제하시겠습니까?")) return;
+    try {
+      await fetch(`/api/applications/${id}`, { method: "DELETE" });
+      await loadApplications();
+      toast.success("삭제 완료");
+    } catch { toast.error("삭제 실패"); }
+  };
+
+  // 일괄 삭제
+  const handleBulkDelete = async () => {
+    if (!confirm(`${selected.size}건의 지원서를 삭제하시겠습니까?`)) return;
+    try {
+      await Promise.all(
+        Array.from(selected).map((id) =>
+          fetch(`/api/applications/${id}`, { method: "DELETE" })
+        )
+      );
+      await loadApplications();
+      setSelected(new Set());
+      toast.success(`${selected.size}건 삭제 완료`);
+    } catch { toast.error("삭제 실패"); }
   };
 
   const sourceCounts = useMemo(() => {
@@ -94,10 +202,7 @@ export default function ApplicationsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">지원서</h2>
-        <span className="text-sm text-muted-foreground">{state.applications.length}건</span>
-      </div>
+      <h2 className="text-lg font-semibold">지원서</h2>
 
       <div className="flex gap-2 flex-wrap">
         {[{ key: "전체", label: `전체 (${state.applications.length})` }, ...APPLICATION_SOURCES.map((s) => ({ key: s, label: `${s} (${sourceCounts[s] || 0})` }))].map((f) => (
@@ -113,25 +218,61 @@ export default function ApplicationsTab() {
         ))}
       </div>
 
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">{selected.size}건 선택</span>
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleBulkReview("확인완료")}>
+            확인완료
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleBulkReview("미확인")}>
+            미확인
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleBulkAddToInstructors}>
+            <UserPlus className="h-3.5 w-3.5 mr-1" />강사 등록
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleBulkDelete}>
+            <Trash2 className="h-3.5 w-3.5 mr-1" />삭제
+          </Button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="이름, 활동명, 주제 검색..."
+            className="h-8 text-sm pl-8 w-[220px]"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <span className="text-sm text-muted-foreground">{sorted.length}건</span>
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="py-2 text-xs font-semibold">이름</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">활동명</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">채널</TableHead>
+              <TableHead className="py-2 w-10"><Checkbox checked={sorted.length > 0 && selected.size === sorted.length} onCheckedChange={toggleAll} /></TableHead>
+              <SortableHead label="이름" col="applicant_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHead label="활동명" col="activity_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHead label="채널" col="source_platform" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <TableHead className="py-2 text-xs font-semibold">강의주제</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">검토</TableHead>
+              <SortableHead label="검토" col="review_status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <TableHead className="py-2 text-xs font-semibold w-20"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-sm text-muted-foreground">지원서가 없습니다.</TableCell></TableRow>
+            {sorted.length === 0 ? (
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-sm text-muted-foreground">지원서가 없습니다.</TableCell></TableRow>
             ) : (
-              filtered.map((a, idx) => (
-                <TableRow key={a.id} className={idx % 2 === 1 ? "bg-muted/20" : ""}>
-                  <TableCell className="py-2 text-sm font-medium">{a.applicant_name}</TableCell>
+              sorted.map((a, idx) => (
+                <TableRow key={a.id} className={`${idx % 2 === 1 ? "bg-muted/20" : ""} ${selected.has(a.id) ? "!bg-primary/10" : ""}`}>
+                  <TableCell className="py-2"><Checkbox checked={selected.has(a.id)} onCheckedChange={() => toggleOne(a.id)} /></TableCell>
+                  <TableCell className="py-2 text-sm font-medium">
+                    {a.applicant_name}
+                    {a.instructor_id && state.instructors.some((i) => i.id === a.instructor_id) && <span className="ml-1.5 text-xs text-green-600 font-normal">등록됨</span>}
+                  </TableCell>
                   <TableCell className="py-2 text-sm text-muted-foreground">{a.activity_name}</TableCell>
                   <TableCell className="py-2 text-sm text-muted-foreground">{a.source_platform}</TableCell>
                   <TableCell className="py-2 text-sm text-muted-foreground max-w-[200px] truncate">{a.topic}</TableCell>
@@ -147,7 +288,8 @@ export default function ApplicationsTab() {
                   <TableCell className="py-2">
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setDetailApp(a)}><Eye className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleAddToInstructors(a)}><UserPlus className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleAddToInstructors(a)} disabled={!!a.instructor_id && state.instructors.some((i) => i.id === a.instructor_id)}><UserPlus className={`h-4 w-4 ${a.instructor_id && state.instructors.some((i) => i.id === a.instructor_id) ? "text-muted-foreground/40" : ""}`} /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => handleDelete(a.id)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -159,12 +301,18 @@ export default function ApplicationsTab() {
 
       {detailApp && (
         <Dialog open onOpenChange={() => setDetailApp(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader><DialogTitle className="text-base">{detailApp.applicant_name} 지원서</DialogTitle></DialogHeader>
-            <ScrollArea className="max-h-[50vh]">
-              <div className="space-y-3 text-sm">
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="text-lg">{detailApp.applicant_name} 지원서</DialogTitle>
+              <p className="text-sm text-muted-foreground">{detailApp.source_platform} · {detailApp.submitted_at ? new Date(detailApp.submitted_at).toLocaleDateString("ko-KR") : ""}</p>
+            </DialogHeader>
+            <ScrollArea className="max-h-[65vh]">
+              <div className="space-y-4 text-sm pr-3">
                 {getDetailFields(detailApp).map(([l, v]) => v ? (
-                  <div key={l}><span className="text-muted-foreground text-xs">{l}</span><p className="whitespace-pre-wrap">{v}</p></div>
+                  <div key={l}>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">{l}</p>
+                    <p className="whitespace-pre-wrap leading-relaxed">{v}</p>
+                  </div>
                 ) : null)}
               </div>
             </ScrollArea>
@@ -172,5 +320,24 @@ export default function ApplicationsTab() {
         </Dialog>
       )}
     </div>
+  );
+}
+
+function SortableHead({ label, col, sortKey, sortDir, onSort }: {
+  label: string; col: keyof Application;
+  sortKey: keyof Application | null; sortDir: "asc" | "desc";
+  onSort: (key: keyof Application) => void;
+}) {
+  const active = sortKey === col;
+  return (
+    <TableHead
+      className="py-2 text-xs font-semibold cursor-pointer hover:bg-muted select-none"
+      onClick={() => onSort(col)}
+    >
+      <div className="flex items-center gap-0.5">
+        {label}
+        {active && (sortDir === "asc" ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />)}
+      </div>
+    </TableHead>
   );
 }
