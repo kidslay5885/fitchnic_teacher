@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { OutreachProvider, useOutreach } from "@/hooks/use-outreach-store";
 import NavHeader from "@/components/nav-header";
 import DashboardTab from "@/components/dashboard-tab";
@@ -13,6 +14,7 @@ import ActivityTab from "@/components/activity-tab";
 
 function MainContent() {
   const { state } = useOutreach();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   if (!state.hydrated) {
     return (
@@ -27,8 +29,8 @@ function MainContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavHeader />
-      <main className="ml-52 p-6">
+      <NavHeader collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      <main className={`p-6 transition-[margin] duration-200 ${sidebarCollapsed ? "ml-14" : "ml-52"}`}>
         <div className={state.tab === "meeting" ? "" : "max-w-7xl"}>
           {state.tab === "dashboard" && <DashboardTab />}
           {state.tab === "instructors" && <InstructorsTab />}

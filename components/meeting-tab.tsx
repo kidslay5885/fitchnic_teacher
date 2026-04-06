@@ -328,26 +328,26 @@ export default function MeetingTab() {
         <td className="px-3 py-2 border-r border-gray-200/60">
           <Badge className={`text-[10px] px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
         </td>
-        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
-        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap">{i.contact_assignee || i.assignee}</td>
+        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px] hidden sm:table-cell">{i.field}</td>
+        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap hidden md:table-cell">{i.contact_assignee || i.assignee}</td>
         <td className="px-3 py-2 border-r border-gray-200/60 whitespace-nowrap font-medium text-blue-700">
           {showDate ? formatMeetingDate(i.meeting_date || "") : "-"}
         </td>
-        <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap">
+        <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap hidden sm:table-cell">
           {i.meeting_type ? (
             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${i.meeting_type === "줌미팅" ? "text-blue-600 border-blue-300 bg-blue-50" : "text-orange-600 border-orange-300 bg-orange-50"}`}>{i.meeting_type}</Badge>
           ) : <span className="text-muted-foreground text-xs">-</span>}
         </td>
-        <td className="px-3 py-2 border-r border-gray-200/60 text-sm text-foreground/70 truncate max-w-[200px]" title={i.meeting_memo || ""}>
+        <td className="px-3 py-2 border-r border-gray-200/60 text-sm text-foreground/70 truncate max-w-[200px] hidden lg:table-cell" title={i.meeting_memo || ""}>
           {i.meeting_memo || ""}
         </td>
       </tr>
     ));
 
   return (
-    <div className="flex gap-4" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="flex flex-col lg:flex-row gap-4" style={{ height: "calc(100vh - 56px)" }}>
       {/* ── 좌측: 전체 미팅 목록 ── */}
-      <div className="flex flex-col w-[750px] shrink-0">
+      <div className="flex flex-col w-full lg:w-[750px] shrink-0">
         <div className="shrink-0 space-y-3 pb-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">미팅관리</h2>
@@ -386,11 +386,11 @@ export default function MeetingTab() {
               <tr className="border-b">
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">이름</th>
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">상태</th>
-                <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">분야</th>
-                <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">담당자</th>
+                <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap hidden sm:table-cell">분야</th>
+                <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap hidden md:table-cell">담당자</th>
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">미팅일</th>
-                <th className="text-center px-2 py-2 border-r border-gray-200 whitespace-nowrap">방식</th>
-                <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">메모</th>
+                <th className="text-center px-2 py-2 border-r border-gray-200 whitespace-nowrap hidden sm:table-cell">방식</th>
+                <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap hidden lg:table-cell">메모</th>
               </tr>
             </thead>
             <tbody>
@@ -436,9 +436,9 @@ export default function MeetingTab() {
       </div>
 
       {/* ── 우측: 캘린더 ── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-[400px]">
         {/* 월 네비 */}
-        <div className="shrink-0 flex items-center gap-3 pb-3 pt-9">
+        <div className="shrink-0 flex items-center gap-2 sm:gap-3 pb-3 pt-3 lg:pt-9">
           <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setMonthOffset(monthOffset - 1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -537,9 +537,9 @@ export default function MeetingTab() {
         const inst = editingMeeting.instructor;
         const igUrl = inst.instagram ? (inst.instagram.startsWith("http") ? inst.instagram : `https://instagram.com/${inst.instagram}`) : "";
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <Card className="w-[1100px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-              <CardContent className="p-6 flex flex-col overflow-hidden">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4">
+            <Card className="w-full max-w-[1100px] max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-4 sm:p-6 flex flex-col overflow-hidden">
                 {/* 헤더 */}
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2">
@@ -551,9 +551,9 @@ export default function MeetingTab() {
                   <button onClick={() => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); setEditingMeeting(null); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
                 </div>
 
-                <div className="flex gap-5 flex-1 min-h-0">
+                <div className="flex flex-col md:flex-row gap-4 md:gap-5 flex-1 min-h-0 overflow-y-auto md:overflow-y-hidden">
                   {/* ── 왼쪽: 기본 정보 + 미팅 설정 ── */}
-                  <div className="w-[320px] shrink-0 space-y-4 overflow-y-auto">
+                  <div className="w-full md:w-[320px] shrink-0 space-y-4 md:overflow-y-auto">
                     {/* 강사 기본 정보 */}
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm border rounded-lg p-3 bg-gray-50/50">
                       <div><span className="text-muted-foreground">분야</span> <span className="ml-1 font-medium">{inst.field || "-"}</span></div>
@@ -590,7 +590,7 @@ export default function MeetingTab() {
                           setEditingMeeting({ ...editingMeeting, date: newDate, remindDate: newDate ? calcRemindDate(newDate) : "" });
                         }} />
                       </div>
-                      <div className="w-[140px]">
+                      <div className="w-[120px] sm:w-[140px]">
                         <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
                         <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
                       </div>
@@ -778,9 +778,9 @@ export default function MeetingTab() {
           } catch { toast.error("저장 실패"); }
         };
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setRemindModal(null)}>
-            <Card className="w-[440px]" onClick={(e) => e.stopPropagation()}>
-              <CardContent className="p-6 space-y-5">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onClick={() => setRemindModal(null)}>
+            <Card className="w-full max-w-[440px]" onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-4 sm:p-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-orange-600">📞</span>
@@ -909,9 +909,9 @@ function AddMeetingModal({ instructors, onSave, onClose }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <Card className="w-[440px]" onClick={(e) => e.stopPropagation()}>
-        <CardContent className="p-5 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onClick={onClose}>
+      <Card className="w-full max-w-[440px]" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="p-4 sm:p-5 space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">미팅 추가</p>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
