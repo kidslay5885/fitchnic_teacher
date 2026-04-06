@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity-log";
 
 // 일괄 상태 변경
 export async function PATCH(req: Request) {
@@ -39,5 +40,20 @@ export async function PATCH(req: Request) {
     .in("id", ids);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // 강사 이름 조회해서 활동 로그 기록
+  const { data: names } = await sb.from("instructors").select("id, name").in("id", ids);
+  const nameMap: Record<string, string> = {};
+  for (const n of names || []) nameMap[n.id] = n.name;
+
+  await logActivity({
+    actionType: "일괄상태변경",
+    targetType: "instructor",
+    targetId: ids.join(","),
+    targetName: (currents ?? []).map((c) => nameMap[c.id] || "").filter(Boolean).join(", "),
+    detail: `→ ${status} (${ids.length}명)${reason ? ` 사유: ${reason}` : ""}`,
+    performedBy: changed_by || "",
+  });
+
   return NextResponse.json({ updated: ids.length });
 }

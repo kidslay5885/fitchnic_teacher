@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { requiresReason } from "@/lib/status-machine";
+import { logActivity } from "@/lib/activity-log";
 import type { InstructorStatus } from "@/lib/types";
 
 export async function GET(
@@ -84,17 +85,55 @@ export async function PATCH(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // 활동 로그: 상태 변경
+  if (body.status) {
+    await logActivity({
+      actionType: "상태변경",
+      targetType: "instructor",
+      targetId: id,
+      targetName: data.name,
+      detail: `${body._from_status || ""} → ${body.status}${body._reason || body.exclude_reason ? ` (사유: ${body._reason || body.exclude_reason})` : ""}`,
+      performedBy: body._changed_by || "",
+    });
+  }
+
+  // 활동 로그: 정보 수정 (상태 외 필드 변경)
+  const infoFields = Object.keys(updateData).filter((k) => k !== "status" && k !== "exclude_reason" && k !== "updated_at");
+  if (infoFields.length > 0 && !body.status) {
+    await logActivity({
+      actionType: "강사수정",
+      targetType: "instructor",
+      targetId: id,
+      targetName: data.name,
+      detail: `수정 항목: ${infoFields.join(", ")}`,
+      performedBy: body._changed_by || "",
+    });
+  }
+
   return NextResponse.json(data);
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const sb = getSupabase();
-  const { error } = await sb.from("instructors").delete().eq("id", id);
 
+  // 삭제 전 이름 조회
+  const { data: inst } = await sb.from("instructors").select("name, assignee").eq("id", id).single();
+
+  const { error } = await sb.from("instructors").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logActivity({
+    actionType: "강사삭제",
+    targetType: "instructor",
+    targetId: id,
+    targetName: inst?.name || "",
+    performedBy: inst?.assignee || "",
+  });
+
   return NextResponse.json({ success: true });
 }

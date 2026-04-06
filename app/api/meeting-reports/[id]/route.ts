@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity-log";
 
 // 보고서 조회
 export async function GET(
@@ -37,7 +38,18 @@ export async function DELETE(
 ) {
   const { id } = await params;
   const sb = getSupabase();
+  // 삭제 전 제목 조회
+  const { data: rpt } = await sb.from("meeting_reports").select("title").eq("id", id).single();
+
   const { error } = await sb.from("meeting_reports").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logActivity({
+    actionType: "보고서삭제",
+    targetType: "meeting_report",
+    targetId: id,
+    targetName: rpt?.title || "",
+  });
+
   return NextResponse.json({ success: true });
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET() {
   const sb = getSupabase();
@@ -71,6 +72,15 @@ export async function POST(req: Request) {
     to_status: data.status || "미검토",
     changed_by: insertData.assignee || "",
     reason: "신규 등록",
+  });
+
+  await logActivity({
+    actionType: "강사등록",
+    targetType: "instructor",
+    targetId: data.id,
+    targetName: data.name,
+    detail: `상태: ${data.status || "미검토"}`,
+    performedBy: insertData.assignee || "",
   });
 
   return NextResponse.json(data, { status: 201 });

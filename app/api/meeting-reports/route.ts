@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity-log";
 
 // 보고서 생성
 export async function POST(req: Request) {
@@ -14,6 +15,15 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logActivity({
+    actionType: "보고서생성",
+    targetType: "meeting_report",
+    targetId: data.id,
+    targetName: data.title || "",
+    detail: `강사 ${(instructor_ids || []).length}명 포함`,
+  });
+
   return NextResponse.json(data, { status: 201 });
 }
 

@@ -103,6 +103,36 @@ CREATE TABLE IF NOT EXISTS message_templates (
   variant_label TEXT DEFAULT ''
 );
 
+-- 7. 활동 로그 (통합)
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  action_type TEXT NOT NULL,       -- 예: 강사등록, 강사삭제, 강사수정, 상태변경, 발송저장, 발송삭제, 지원서등록, 지원서수정, 지원서삭제, 금지플랫폼추가, 금지플랫폼삭제, 템플릿저장, 보고서생성, 보고서삭제
+  target_type TEXT NOT NULL,       -- 예: instructor, application, banned_platform, template, meeting_report
+  target_id TEXT DEFAULT '',
+  target_name TEXT DEFAULT '',
+  detail TEXT DEFAULT '',
+  performed_by TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- activity_logs 5000건 제한 함수
+CREATE OR REPLACE FUNCTION trim_activity_logs()
+RETURNS TRIGGER AS $$
+BEGIN
+  DELETE FROM activity_logs
+  WHERE id IN (
+    SELECT id FROM activity_logs
+    ORDER BY created_at DESC
+    OFFSET 5000
+  );
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER tr_trim_activity_logs
+  AFTER INSERT ON activity_logs
+  FOR EACH STATEMENT EXECUTE FUNCTION trim_activity_logs();
+
 -- 인덱스
 CREATE INDEX IF NOT EXISTS idx_instructors_status ON instructors(status);
 CREATE INDEX IF NOT EXISTS idx_instructors_assignee ON instructors(assignee);
@@ -111,6 +141,8 @@ CREATE INDEX IF NOT EXISTS idx_instructors_is_banned ON instructors(is_banned);
 CREATE INDEX IF NOT EXISTS idx_status_history_instructor ON status_history(instructor_id);
 CREATE INDEX IF NOT EXISTS idx_outreach_waves_instructor ON outreach_waves(instructor_id);
 CREATE INDEX IF NOT EXISTS idx_applications_platform ON applications(source_platform);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_target ON activity_logs(target_type, target_id);
 
 -- updated_at 자동 갱신 트리거
 CREATE OR REPLACE FUNCTION update_updated_at()

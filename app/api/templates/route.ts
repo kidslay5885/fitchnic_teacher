@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET() {
   const sb = getSupabase();
@@ -23,5 +24,14 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logActivity({
+    actionType: "템플릿저장",
+    targetType: "template",
+    targetId: data.id,
+    targetName: data.name || "",
+    detail: `채널: ${data.channel || ""}`,
+  });
+
   return NextResponse.json(data);
 }

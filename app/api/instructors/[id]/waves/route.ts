@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET(
   _req: Request,
@@ -50,6 +51,18 @@ export async function POST(
     .update({ has_response: hasResponse, updated_at: new Date().toISOString() })
     .eq("id", id);
 
+  // 강사 이름 조회
+  const { data: instInfo } = await sb.from("instructors").select("name, assignee").eq("id", id).single();
+
+  await logActivity({
+    actionType: "발송저장",
+    targetType: "instructor",
+    targetId: id,
+    targetName: instInfo?.name || "",
+    detail: `${body.wave_number}차 발송${body.result ? ` / 결과: ${body.result}` : ""}${body.sent_date ? ` / 날짜: ${body.sent_date}` : ""}`,
+    performedBy: instInfo?.assignee || "",
+  });
+
   // 발송 결과가 "거절"이면 강사 상태도 "거절"로 변경
   if (body.result === "거절") {
     const { data: inst } = await sb
@@ -94,5 +107,16 @@ export async function DELETE(
     .eq("wave_number", wave_number);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const { data: instDel } = await sb.from("instructors").select("name, assignee").eq("id", id).single();
+  await logActivity({
+    actionType: "발송삭제",
+    targetType: "instructor",
+    targetId: id,
+    targetName: instDel?.name || "",
+    detail: `${wave_number}차 발송 삭제`,
+    performedBy: instDel?.assignee || "",
+  });
+
   return NextResponse.json({ success: true });
 }
