@@ -667,7 +667,7 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
 }
 
 /* ── 발송 편집 팝오버 ── */
-const RESPONSE_METHODS = ["전화", "문자", "이메일", "기타"] as const;
+const RESPONSE_METHODS = ["전화", "문자", "이메일", "카톡", "DM", "기타"] as const;
 
 function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: initialMeetingType, contactAssignee: initialContactAssignee, onSave, onDelete, onClose }: {
   wave: OutreachWave | undefined;
