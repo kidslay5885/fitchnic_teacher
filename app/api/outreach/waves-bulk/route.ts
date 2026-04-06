@@ -8,16 +8,19 @@ export async function POST(req: Request) {
 
   const sb = getSupabase();
 
-  // 100개씩 배치 (Supabase REST API URL 길이 제한 대비)
+  // 100개씩 배치 후 병렬 처리
   const BATCH = 100;
-  const all: any[] = [];
+  const batches: string[][] = [];
   for (let i = 0; i < ids.length; i += BATCH) {
-    const chunk = ids.slice(i, i + BATCH);
-    const { data, error } = await sb
-      .from("outreach_waves")
-      .select("*")
-      .in("instructor_id", chunk)
-      .order("wave_number", { ascending: true });
+    batches.push(ids.slice(i, i + BATCH));
+  }
+  const results = await Promise.all(
+    batches.map((chunk) =>
+      sb.from("outreach_waves").select("*").in("instructor_id", chunk).order("wave_number", { ascending: true })
+    )
+  );
+  const all: any[] = [];
+  for (const { data, error } of results) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (data) all.push(...data);
   }

@@ -5,20 +5,36 @@ import type { Instructor, InstructorStatus, DashboardStats } from "@/lib/types";
 
 export async function GET() {
   const sb = getSupabase();
-  // 강사 전체 페이지네이션 조회 (Supabase 1000건 제한 우회)
   const PAGE = 1000;
-  const allInstructors: any[] = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await sb
-      .from("instructors")
-      .select("id, status, assignee, source, final_status, meeting_date")
-      .eq("is_banned", false)
-      .range(from, from + PAGE - 1);
-    if (error || !data || data.length === 0) break;
-    allInstructors.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
+
+  // 첫 요청에서 전체 카운트 + 첫 페이지 동시 조회
+  const { data: firstData, error: firstError, count } = await sb
+    .from("instructors")
+    .select("id, status, assignee, source, final_status, meeting_date", { count: "exact" })
+    .eq("is_banned", false)
+    .range(0, PAGE - 1);
+
+  if (firstError || !firstData) return NextResponse.json({ error: firstError?.message }, { status: 500 });
+
+  const total = count ?? firstData.length;
+  const allInstructors: any[] = [...firstData];
+
+  if (total > PAGE) {
+    const remainingPages: number[] = [];
+    for (let from = PAGE; from < total; from += PAGE) {
+      remainingPages.push(from);
+    }
+    const results = await Promise.all(
+      remainingPages.map((from) =>
+        sb.from("instructors")
+          .select("id, status, assignee, source, final_status, meeting_date")
+          .eq("is_banned", false)
+          .range(from, from + PAGE - 1)
+      )
+    );
+    for (const { data } of results) {
+      if (data) allInstructors.push(...data);
+    }
   }
 
   const [{ data: apps }, { data: waves }] = await Promise.all([

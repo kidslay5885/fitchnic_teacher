@@ -3,21 +3,35 @@ import { getSupabase } from "@/lib/supabase";
 
 export async function GET() {
   const sb = getSupabase();
-  // Supabase 서버 기본 한도 1000건 → 페이지네이션으로 전체 조회
   const PAGE = 1000;
-  const all: any[] = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await sb
-      .from("instructors")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .range(from, from + PAGE - 1);
+
+  // 첫 요청에서 전체 카운트 + 첫 페이지 동시 조회
+  const { data: firstData, error: firstError, count } = await sb
+    .from("instructors")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .range(0, PAGE - 1);
+
+  if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 });
+  if (!firstData) return NextResponse.json([]);
+
+  const total = count ?? firstData.length;
+  if (total <= PAGE) return NextResponse.json(firstData);
+
+  // 나머지 페이지 병렬 조회
+  const remainingPages: number[] = [];
+  for (let from = PAGE; from < total; from += PAGE) {
+    remainingPages.push(from);
+  }
+  const results = await Promise.all(
+    remainingPages.map((from) =>
+      sb.from("instructors").select("*").order("created_at", { ascending: false }).range(from, from + PAGE - 1)
+    )
+  );
+  const all: any[] = [...firstData];
+  for (const { data, error } of results) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    if (!data || data.length === 0) break;
-    all.push(...data);
-    if (data.length < PAGE) break;
-    from += PAGE;
+    if (data) all.push(...data);
   }
   return NextResponse.json(all);
 }
