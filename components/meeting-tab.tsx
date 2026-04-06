@@ -511,7 +511,7 @@ export default function MeetingTab() {
                     {/* 강사 기본 정보 */}
                     <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm border rounded-lg p-3 bg-gray-50/50">
                       <div><span className="text-muted-foreground">분야</span> <span className="ml-1 font-medium">{inst.field || "-"}</span></div>
-                      <div><span className="text-muted-foreground">담당자</span> <span className="ml-1 font-medium">{inst.assignee || "-"}</span></div>
+                      <div><span className="text-muted-foreground">담당자</span> <span className="ml-1 font-medium">{inst.contact_assignee || inst.assignee || "-"}</span></div>
                       <div><span className="text-muted-foreground">강의</span> <span className="ml-1 font-medium">{inst.has_lecture_history || "-"}</span></div>
                       <div><span className="text-muted-foreground">플랫폼</span> <span className="ml-1 font-medium">{inst.lecture_platform || "-"}</span></div>
                       <div className="flex items-center gap-1">
