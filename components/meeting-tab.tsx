@@ -216,7 +216,7 @@ export default function MeetingTab() {
       instructor: i, date, time, memo: i.meeting_memo || "",
       confirmed: !!i.meeting_confirmed, remindDate, meetingType: i.meeting_type || "",
       postSpecial: post.special, postPositive: post.positive, postNegative: post.negative,
-      modalTab: defaultTab, preQuestions: preQ,
+      modalTab: defaultTab, preQuestions: preQ, preInfo: i.pre_info || "",
     });
   };
 
@@ -234,6 +234,7 @@ export default function MeetingTab() {
           meeting_confirmed: editingMeeting.confirmed,
           remind_date: editingMeeting.remindDate || "",
           meeting_type: editingMeeting.meetingType || "",
+          pre_info: editingMeeting.preInfo,
           pre_questions: JSON.stringify(editingMeeting.preQuestions),
           post_info: JSON.stringify({ special: editingMeeting.postSpecial, positive: editingMeeting.postPositive, negative: editingMeeting.postNegative }),
         }),
@@ -623,9 +624,12 @@ export default function MeetingTab() {
                     <div className="flex-1 min-h-0 overflow-y-auto">
                       {/* 미팅 전 */}
                       {editingMeeting.modalTab === "before" && (
-                        <div className="border rounded-md px-3 py-2 text-sm bg-gray-50 text-foreground/80 whitespace-pre-wrap h-full overflow-y-auto">
-                          {inst.pre_info || "입력된 사전 정보가 없습니다."}
-                        </div>
+                        <Textarea
+                          className="text-sm h-full min-h-[200px]"
+                          placeholder="사전 정보를 입력하세요..."
+                          value={editingMeeting.preInfo}
+                          onChange={(e) => setEditingMeeting({ ...editingMeeting, preInfo: e.target.value })}
+                        />
                       )}
 
                       {/* 미팅 질문 */}
