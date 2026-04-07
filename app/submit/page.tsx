@@ -465,12 +465,12 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
         </div>
         <div>
           <Label className="text-xs">유튜브</Label>
-          <Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-8 text-sm" />
+          <Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-8 text-sm" placeholder="https://www.youtube.com/@채널명" />
           <UrlTitle loading={urlLoading.youtube} title={urlTitles.youtube} />
         </div>
         <div>
           <Label className="text-xs">인스타그램</Label>
-          <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" />
+          <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" placeholder="https://www.instagram.com/계정명" />
           <UrlTitle loading={urlLoading.instagram} title={urlTitles.instagram} />
         </div>
         <div>
