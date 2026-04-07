@@ -18,7 +18,7 @@ export type ApplicationSource =
   | "핏크닉카"
   | "머니업카";
 export type ReviewStatus = "미확인" | "확인완료";
-export type InstructorSource = "강사모집" | "콘텐츠팀" | "지원서";
+export type InstructorSource = "강사모집" | "콘텐츠팀" | "지원서" | "YT채널수집";
 export type YouTubeChannelStatus =
   | "미검토"
   | "컨펌 필요"
@@ -124,6 +124,7 @@ export interface Application {
 
 export interface YouTubeChannel {
   id: string;
+  instructor_id: string | null;
   profile: string;
   keyword: string;
   channel_name: string;

@@ -288,13 +288,16 @@ export default function YouTubeChannelsTab() {
                   <div className="px-1 flex justify-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
                     <Checkbox checked={selectedIds.has(ch.id)} onCheckedChange={() => toggleOne(ch.id)} />
                   </div>
-                  <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
+                  <div className="px-2 flex items-center gap-1 border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
                     <Badge
                       className={`text-xs px-1.5 py-0 cursor-pointer hover:ring-2 hover:ring-primary/30 transition whitespace-nowrap ${STATUS_COLORS[ch.status as keyof typeof STATUS_COLORS] || ""}`}
                       onClick={(e) => handleStatusClick(e, ch)}
                     >
                       {ch.status}
                     </Badge>
+                    {ch.instructor_id && (
+                      <span className="text-[10px] text-emerald-600 font-medium" title="컨택관리 연동됨">연동</span>
+                    )}
                   </div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 overflow-hidden"><span className="truncate">{ch.profile}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{ch.keyword}</span></div>

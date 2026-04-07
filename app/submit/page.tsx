@@ -38,6 +38,7 @@ export default function SubmitPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<InstructorStatus | "전체">("전체");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("전체");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [highlightId, setHighlightId] = useState<string | null>(null);
@@ -60,10 +61,18 @@ export default function SubmitPage() {
   useEffect(() => { loadInstructors(); }, [loadInstructors]);
 
   // 필터 + 금지 제외
+  // 찾은 사람 목록 (실제 데이터 기반)
+  const assigneeOptions = useMemo(() => {
+    const set = new Set<string>();
+    instructors.forEach((i) => { if (i.assignee) set.add(i.assignee); });
+    return [...set].sort((a, b) => a.localeCompare(b, "ko"));
+  }, [instructors]);
+
   const filtered = useMemo(() => {
     return instructors.filter((i) => {
       if (i.is_banned) return false;
       if (statusFilter !== "전체" && i.status !== statusFilter) return false;
+      if (assigneeFilter !== "전체" && i.assignee !== assigneeFilter) return false;
       if (search) {
         const q = search.toLowerCase();
         return (
@@ -75,7 +84,7 @@ export default function SubmitPage() {
       }
       return true;
     });
-  }, [instructors, search, statusFilter]);
+  }, [instructors, search, statusFilter, assigneeFilter]);
 
   // 정렬
   const sorted = useMemo(() => {
@@ -139,10 +148,23 @@ export default function SubmitPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-          <SelectTrigger className="w-[110px] h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-[130px] h-8 text-sm">
+            <span className="text-muted-foreground">상태:</span>
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
-            <SelectItem value="전체">상태: 전체</SelectItem>
+            <SelectItem value="전체">전체</SelectItem>
             {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+          <SelectTrigger className="w-[150px] h-8 text-sm">
+            <span className="text-muted-foreground">찾은 사람:</span>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="전체">전체</SelectItem>
+            {assigneeOptions.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">{sorted.length}명</span>

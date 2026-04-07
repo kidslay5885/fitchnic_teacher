@@ -146,6 +146,44 @@ export async function POST(req: Request) {
   return NextResponse.json(data, { status: 201 });
 }
 
+// 이관이 필요한 상태 (미검토 이후 단계)
+const MIGRATE_STATUSES = ["컨펌 필요", "발송 예정", "진행 중", "계약 완료", "제외", "보류", "거절"];
+
+// YT채널 → instructors 이관 (최초 1회)
+async function migrateToInstructor(sb: ReturnType<typeof getSupabase>, channel: any): Promise<string | null> {
+  const { data, error } = await sb
+    .from("instructors")
+    .insert({
+      name: channel.channel_name,
+      email: channel.email,
+      youtube: channel.channel_url || "",
+      field: channel.keyword || "",
+      status: channel.status,
+      notes: channel.memo || "",
+      source: "YT채널수집",
+      assignee: "",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("이관 실패:", error.message);
+    return null;
+  }
+  return data.id;
+}
+
+// 연결된 instructor 상태 동기화
+async function syncInstructorStatus(sb: ReturnType<typeof getSupabase>, instructorId: string, status: string) {
+  await sb.from("instructors").update({ status }).eq("id", instructorId);
+}
+
+// 연결된 instructor 삭제 (미검토로 되돌릴 때)
+async function removeInstructor(sb: ReturnType<typeof getSupabase>, instructorId: string, ytChannelId: string) {
+  await sb.from("instructors").delete().eq("id", instructorId);
+  await sb.from("youtube_channels").update({ instructor_id: null }).eq("id", ytChannelId);
+}
+
 export async function PATCH(req: Request) {
   const sb = getSupabase();
   const body = await req.json();
@@ -162,12 +200,68 @@ export async function PATCH(req: Request) {
       .in("id", body.ids);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // 상태 변경 시 이관/동기화/삭제 처리
+    if (body.status) {
+      const { data: channels } = await sb
+        .from("youtube_channels")
+        .select("id, instructor_id, channel_name, email, channel_url, keyword, memo, status")
+        .in("id", body.ids);
+
+      if (channels) {
+        for (const ch of channels) {
+          if (body.status === "미검토") {
+            // 미검토로 되돌림 → instructor 삭제
+            if (ch.instructor_id) await removeInstructor(sb, ch.instructor_id, ch.id);
+          } else if (MIGRATE_STATUSES.includes(body.status)) {
+            if (ch.instructor_id) {
+              await syncInstructorStatus(sb, ch.instructor_id, body.status);
+            } else {
+              const instructorId = await migrateToInstructor(sb, ch);
+              if (instructorId) {
+                await sb.from("youtube_channels").update({ instructor_id: instructorId }).eq("id", ch.id);
+              }
+            }
+          }
+        }
+      }
+    }
+
     return NextResponse.json({ updated: body.ids.length });
   }
 
   // 단건 수정: { id, ...fields }
   const { id, ...fields } = body;
   if (!id) return NextResponse.json({ error: "id는 필수입니다." }, { status: 400 });
+
+  // 상태 변경 시 이관/동기화/삭제 처리
+  if (fields.status) {
+    const { data: channel } = await sb
+      .from("youtube_channels")
+      .select("id, instructor_id, channel_name, email, channel_url, keyword, memo, status")
+      .eq("id", id)
+      .single();
+
+    if (channel) {
+      if (fields.status === "미검토") {
+        // 미검토로 되돌림 → instructor 삭제
+        if (channel.instructor_id) {
+          await removeInstructor(sb, channel.instructor_id, channel.id);
+          fields.instructor_id = null;
+        }
+      } else if (MIGRATE_STATUSES.includes(fields.status)) {
+        if (channel.instructor_id) {
+          await syncInstructorStatus(sb, channel.instructor_id, fields.status);
+        } else {
+          const merged = { ...channel, status: fields.status };
+          const instructorId = await migrateToInstructor(sb, merged);
+          if (instructorId) {
+            fields.instructor_id = instructorId;
+          }
+        }
+      }
+    }
+  }
 
   const { data, error } = await sb
     .from("youtube_channels")

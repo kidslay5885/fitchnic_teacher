@@ -136,6 +136,7 @@ CREATE OR REPLACE TRIGGER tr_trim_activity_logs
 -- 8. YouTube 채널 수집 데이터
 CREATE TABLE IF NOT EXISTS youtube_channels (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  instructor_id UUID REFERENCES instructors(id) ON DELETE SET NULL,
   profile TEXT NOT NULL DEFAULT '',
   keyword TEXT DEFAULT '',
   channel_name TEXT NOT NULL,

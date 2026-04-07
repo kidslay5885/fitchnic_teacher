@@ -86,6 +86,19 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // YT채널수집 역동기화: instructor 상태가 바뀌면 youtube_channels도 동기화
+  if (body.status && data.source === "YT채널수집") {
+    if (body.status === "미검토") {
+      // 미검토로 되돌림 → instructor 삭제, youtube_channels 연결 해제
+      await sb.from("youtube_channels").update({ status: "미검토", instructor_id: null }).eq("instructor_id", id);
+      await sb.from("instructors").delete().eq("id", id);
+      // 삭제된 instructor 반환 (status만 미검토로 변경해서)
+      return NextResponse.json({ ...data, status: "미검토", _deleted: true });
+    } else {
+      await sb.from("youtube_channels").update({ status: body.status }).eq("instructor_id", id);
+    }
+  }
+
   // 활동 로그: 상태 변경
   if (body.status) {
     await logActivity({
