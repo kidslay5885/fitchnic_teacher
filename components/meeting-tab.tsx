@@ -335,7 +335,7 @@ export default function MeetingTab() {
         </td>
         <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap hidden sm:table-cell">
           {i.meeting_type ? (
-            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${i.meeting_type === "줌미팅" ? "text-blue-600 border-blue-300 bg-blue-50" : "text-orange-600 border-orange-300 bg-orange-50"}`}>{i.meeting_type}</Badge>
+            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${i.meeting_type === "줌미팅" ? "text-blue-600 border-blue-300 bg-blue-50" : i.meeting_type === "보류" ? "text-gray-600 border-gray-300 bg-gray-50" : "text-orange-600 border-orange-300 bg-orange-50"}`}>{i.meeting_type}</Badge>
           ) : <span className="text-muted-foreground text-xs">-</span>}
         </td>
         <td className="px-3 py-2 border-r border-gray-200/60 text-sm text-foreground/70 truncate max-w-[200px] hidden lg:table-cell" title={i.meeting_memo || ""}>
@@ -492,15 +492,17 @@ export default function MeetingTab() {
                                       ? "bg-orange-100 border-orange-200 hover:bg-orange-200"
                                       : mt.meeting_type === "줌미팅"
                                       ? "bg-blue-100 border-blue-200 hover:bg-blue-200"
+                                      : mt.meeting_type === "보류"
+                                      ? "bg-gray-100 border-gray-300 hover:bg-gray-200"
                                       : "bg-gray-100 border-gray-200 hover:bg-gray-200"
                                   }`}
                                   title={`${mt.name} ${time || ""} ${mt.meeting_type || ""}`}
                                 >
                                   <span className={`font-medium ${
-                                    mt.meeting_type === "대면미팅" ? "text-orange-900" : mt.meeting_type === "줌미팅" ? "text-blue-900" : "text-gray-900"
+                                    mt.meeting_type === "대면미팅" ? "text-orange-900" : mt.meeting_type === "줌미팅" ? "text-blue-900" : mt.meeting_type === "보류" ? "text-gray-600" : "text-gray-900"
                                   }`}>{mt.name}</span>
                                   {time && <span className={`ml-1 ${
-                                    mt.meeting_type === "대면미팅" ? "text-orange-500" : mt.meeting_type === "줌미팅" ? "text-blue-500" : "text-gray-500"
+                                    mt.meeting_type === "대면미팅" ? "text-orange-500" : mt.meeting_type === "줌미팅" ? "text-blue-500" : mt.meeting_type === "보류" ? "text-gray-400" : "text-gray-500"
                                   }`}>{time}</span>}
                                 </button>
                               );
@@ -620,13 +622,15 @@ export default function MeetingTab() {
                     <div>
                       <label className="text-xs text-muted-foreground mb-1.5 block">미팅 방식</label>
                       <div className="flex gap-2">
-                        {(["줌미팅", "대면미팅"] as const).map((t) => (
+                        {(["줌미팅", "대면미팅", "보류"] as const).map((t) => (
                           <button
                             key={t}
                             onClick={() => setEditingMeeting({ ...editingMeeting, meetingType: editingMeeting.meetingType === t ? "" : t })}
                             className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                               editingMeeting.meetingType === t
-                                ? "bg-primary text-primary-foreground border-primary"
+                                ? t === "보류"
+                                  ? "bg-orange-500 text-white border-orange-500"
+                                  : "bg-primary text-primary-foreground border-primary"
                                 : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
                             }`}
                           >
