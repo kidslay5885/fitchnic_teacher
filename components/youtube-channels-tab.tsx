@@ -1,25 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import type { YouTubeChannel, YouTubeChannelStatus } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { STATUSES, STATUS_COLORS } from "@/lib/constants";
 import { toast } from "sonner";
-import { Search, Trash2, ExternalLink, Check } from "lucide-react";
+import { Search, Trash2, ExternalLink, ChevronUp, ChevronDown, X } from "lucide-react";
 
-const STATUS_OPTIONS: YouTubeChannelStatus[] = ["미검토", "검토완료", "컨택대상", "제외"];
+const STATUS_OPTIONS = STATUSES;
 
-const STATUS_COLOR: Record<YouTubeChannelStatus, string> = {
-  "미검토": "bg-gray-100 text-gray-700",
-  "검토완료": "bg-blue-100 text-blue-700",
-  "컨택대상": "bg-green-100 text-green-700",
-  "제외": "bg-red-100 text-red-700",
+const ROW_BG: Record<string, string> = {
+  "미검토": "bg-gray-50",
+  "컨펌 필요": "bg-yellow-50",
+  "발송 예정": "bg-blue-50",
+  "진행 중": "bg-indigo-50",
+  "계약 완료": "bg-green-50",
+  "제외": "bg-red-50",
+  "보류": "bg-orange-50",
+  "거절": "bg-rose-50",
 };
+
+type SortKey = "status" | "profile" | "keyword" | "channel_name" | "subscriber_count" | "email" | "memo";
+type SortDir = "asc" | "desc";
+
+const ROW_H = 36;
+// 체크 | 상태 | 프로필 | 키워드 | 채널명 | 구독자 | 이메일 | 메모 | 링크
+const GRID = "36px 84px 1fr 1fr 1.2fr 80px 1.2fr 1.5fr 40px";
+const MIN_W = 900;
 
 export default function YouTubeChannelsTab() {
   const { state, dispatch, loadYoutubeChannels } = useOutreach();
@@ -27,6 +42,11 @@ export default function YouTubeChannelsTab() {
   const [filterProfile, setFilterProfile] = useState("전체");
   const [filterStatus, setFilterStatus] = useState<YouTubeChannelStatus | "전체">("전체");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>("channel_name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [editingStatus, setEditingStatus] = useState<{ channel: YouTubeChannel; x: number; y: number } | null>(null);
+  const [editingMemo, setEditingMemo] = useState<{ id: string; memo: string } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (state.youtubeChannels.length === 0) loadYoutubeChannels();
@@ -35,7 +55,7 @@ export default function YouTubeChannelsTab() {
   // 고유 프로필 목록
   const profiles = useMemo(() => {
     const set = new Set(state.youtubeChannels.map((c) => c.profile).filter(Boolean));
-    return ["전체", ...Array.from(set).sort()];
+    return Array.from(set).sort();
   }, [state.youtubeChannels]);
 
   // 필터링
@@ -56,14 +76,27 @@ export default function YouTubeChannelsTab() {
     });
   }, [state.youtubeChannels, filterProfile, filterStatus, search]);
 
-  // 상태별 카운트
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { 전체: state.youtubeChannels.length };
-    for (const c of state.youtubeChannels) {
-      counts[c.status] = (counts[c.status] || 0) + 1;
-    }
-    return counts;
-  }, [state.youtubeChannels]);
+  // 정렬
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const av = (a[sortKey] || "") as string;
+      const bv = (b[sortKey] || "") as string;
+      const cmp = av.localeCompare(bv, "ko");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  const virtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_H,
+    overscan: 20,
+  });
+
+  const handleSort = useCallback((key: SortKey) => {
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  }, [sortKey, sortDir]);
 
   // 단건 상태 변경
   const handleStatusChange = useCallback(async (id: string, status: YouTubeChannelStatus) => {
@@ -79,13 +112,16 @@ export default function YouTubeChannelsTab() {
         type: "SET_YOUTUBE_CHANNELS",
         channels: state.youtubeChannels.map((c) => (c.id === id ? updated : c)),
       });
+      const ch = state.youtubeChannels.find((c) => c.id === id);
+      toast.success(`${ch?.channel_name} → ${status}`);
+      setEditingStatus(null);
     } catch {
       toast.error("상태 변경 실패");
     }
   }, [state.youtubeChannels, dispatch]);
 
   // 메모 변경
-  const handleMemoChange = useCallback(async (id: string, memo: string) => {
+  const handleMemoSave = useCallback(async (id: string, memo: string) => {
     try {
       const res = await fetch("/api/youtube-channels", {
         method: "PATCH",
@@ -98,6 +134,7 @@ export default function YouTubeChannelsTab() {
         type: "SET_YOUTUBE_CHANNELS",
         channels: state.youtubeChannels.map((c) => (c.id === id ? updated : c)),
       });
+      setEditingMemo(null);
     } catch {
       toast.error("메모 저장 실패");
     }
@@ -148,213 +185,244 @@ export default function YouTubeChannelsTab() {
     }
   }, [selectedIds, state.youtubeChannels, dispatch]);
 
+  const handleStatusClick = (e: React.MouseEvent, channel: YouTubeChannel) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setEditingStatus({ channel, x: rect.left, y: rect.bottom + 4 });
+  };
+
   // 전체 선택
-  const allSelected = filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id));
   const toggleAll = () => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filtered.map((c) => c.id)));
-    }
+    if (selectedIds.size === sorted.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(sorted.map((c) => c.id)));
   };
   const toggleOne = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">YouTube 채널 수집</h2>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {STATUS_OPTIONS.map((s) => (
-            <span key={s}>
-              {s}: <strong>{statusCounts[s] || 0}</strong>
-            </span>
-          ))}
-          <span className="ml-2">전체: <strong>{state.youtubeChannels.length}</strong></span>
-        </div>
-      </div>
-
+    <div className="flex flex-col flex-1 min-h-0">
       {/* 필터 바 */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative w-[240px]">
+      <div className="flex items-center gap-2 flex-wrap pb-3 shrink-0">
+        <div className="relative">
           <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="채널명, 이메일, 키워드 검색..."
-            className="h-8 text-sm pl-8"
+            placeholder="검색..."
+            className="h-8 text-sm pl-8 w-[200px]"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-
-        <select
-          className="h-8 text-sm border rounded-md px-2 bg-background"
-          value={filterProfile}
-          onChange={(e) => setFilterProfile(e.target.value)}
-        >
-          {profiles.map((p) => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-
-        <select
-          className="h-8 text-sm border rounded-md px-2 bg-background"
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as any)}
-        >
-          <option value="전체">상태: 전체</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-
-        <span className="text-sm text-muted-foreground ml-auto">
-          {filtered.length}건 표시
-        </span>
-      </div>
-
-      {/* 일괄 액션 바 */}
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md">
-          <span className="text-sm font-medium">{selectedIds.size}건 선택</span>
-          <div className="flex gap-1 ml-2">
-            {STATUS_OPTIONS.map((s) => (
-              <Button key={s} size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleBulkStatus(s)}>
-                → {s}
+        <Select value={filterProfile} onValueChange={setFilterProfile}>
+          <SelectTrigger className="w-[110px] h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="전체">프로필: 전체</SelectItem>
+            {profiles.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
+          <SelectTrigger className="w-[110px] h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="전체">상태: 전체</SelectItem>
+            {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <span className="text-sm text-muted-foreground">{sorted.length}건</span>
+        <div className="ml-auto flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <>
+              {STATUS_OPTIONS.map((s) => (
+                <Button key={s} size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleBulkStatus(s)}>
+                  → {s} ({selectedIds.size})
+                </Button>
+              ))}
+              <Button size="sm" variant="outline" className="h-8 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleBulkDelete}>
+                <Trash2 className="h-3.5 w-3.5 mr-1" />삭제 ({selectedIds.size})
               </Button>
-            ))}
-          </div>
-          <Button size="sm" variant="destructive" className="h-7 text-xs ml-auto" onClick={handleBulkDelete}>
-            <Trash2 className="h-3 w-3 mr-1" />삭제
-          </Button>
+            </>
+          )}
         </div>
-      )}
-
-      {/* 테이블 */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="py-2 w-10">
-                <input type="checkbox" checked={allSelected} onChange={toggleAll} className="rounded" />
-              </TableHead>
-              <TableHead className="py-2 text-xs font-semibold">상태</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">프로필</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">키워드</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">채널명</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">구독자</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">이메일</TableHead>
-              <TableHead className="py-2 text-xs font-semibold">메모</TableHead>
-              <TableHead className="py-2 text-xs font-semibold w-10"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-sm text-muted-foreground">
-                  수집된 채널이 없습니다.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((ch, idx) => (
-                <ChannelRow
-                  key={ch.id}
-                  channel={ch}
-                  odd={idx % 2 === 1}
-                  selected={selectedIds.has(ch.id)}
-                  onToggle={() => toggleOne(ch.id)}
-                  onStatusChange={handleStatusChange}
-                  onMemoChange={handleMemoChange}
-                />
-              ))
-            )}
-          </TableBody>
-        </Table>
       </div>
+
+      {/* 가상화 테이블 */}
+      <div ref={scrollRef} className="border rounded flex-1 min-h-0 overflow-auto">
+        {/* 헤더 */}
+        <div
+          className="sticky top-0 z-10 grid items-center bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
+          style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
+        >
+          <div className="px-1 flex justify-center border-r border-gray-200 cursor-pointer" onClick={toggleAll}>
+            <Checkbox checked={sorted.length > 0 && selectedIds.size === sorted.length} />
+          </div>
+          <HeaderCell label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="프로필" col="profile" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="키워드" col="keyword" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="채널명" col="channel_name" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="구독자" col="subscriber_count" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="메모" col="memo" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="" last />
+        </div>
+
+        {/* 본문 */}
+        {sorted.length === 0 ? (
+          <div className="text-center py-12 text-sm text-muted-foreground">수집된 채널이 없습니다.</div>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), position: "relative", minWidth: MIN_W }}>
+            {virtualizer.getVirtualItems().map((vRow) => {
+              const ch = sorted[vRow.index];
+              return (
+                <div
+                  key={ch.id}
+                  className={`grid items-center border-b text-sm ${
+                    ROW_BG[ch.status] || "bg-white"
+                  } hover:brightness-95`}
+                  style={{
+                    position: "absolute", top: 0, left: 0, right: 0,
+                    height: ROW_H, gridTemplateColumns: GRID,
+                    transform: `translateY(${vRow.start}px)`,
+                  }}
+                >
+                  <div className="px-1 flex justify-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox checked={selectedIds.has(ch.id)} onCheckedChange={() => toggleOne(ch.id)} />
+                  </div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
+                    <Badge
+                      className={`text-xs px-1.5 py-0 cursor-pointer hover:ring-2 hover:ring-primary/30 transition whitespace-nowrap ${STATUS_COLORS[ch.status as keyof typeof STATUS_COLORS] || ""}`}
+                      onClick={(e) => handleStatusClick(e, ch)}
+                    >
+                      {ch.status}
+                    </Badge>
+                  </div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 overflow-hidden"><span className="truncate">{ch.profile}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{ch.keyword}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 font-medium overflow-hidden"><span className="truncate">{ch.channel_name}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{ch.subscriber_count}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{ch.email}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                    {editingMemo?.id === ch.id ? (
+                      <div className="flex items-center gap-1 w-full">
+                        <Input
+                          className="h-6 text-xs flex-1"
+                          value={editingMemo.memo}
+                          onChange={(e) => setEditingMemo({ ...editingMemo, memo: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleMemoSave(ch.id, editingMemo.memo);
+                            if (e.key === "Escape") setEditingMemo(null);
+                          }}
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <span
+                        className="truncate cursor-pointer hover:text-foreground"
+                        onClick={() => setEditingMemo({ id: ch.id, memo: ch.memo })}
+                      >
+                        {ch.memo || "-"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="px-2 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                    {ch.channel_url && (
+                      <a href={ch.channel_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {editingStatus && (
+        <StatusPopover
+          channel={editingStatus.channel}
+          x={editingStatus.x}
+          y={editingStatus.y}
+          onConfirm={handleStatusChange}
+          onClose={() => setEditingStatus(null)}
+        />
+      )}
     </div>
   );
 }
 
-// 개별 행 컴포넌트 (메모 인라인 편집 포함)
-function ChannelRow({
-  channel: ch,
-  odd,
-  selected,
-  onToggle,
-  onStatusChange,
-  onMemoChange,
-}: {
-  channel: YouTubeChannel;
-  odd: boolean;
-  selected: boolean;
-  onToggle: () => void;
-  onStatusChange: (id: string, status: YouTubeChannelStatus) => void;
-  onMemoChange: (id: string, memo: string) => void;
+/* ── 헤더 셀 ── */
+function HeaderCell({ label, col, sk, sd, onSort, last }: {
+  label: string; col?: SortKey; sk?: SortKey; sd?: SortDir;
+  onSort?: (k: SortKey) => void; last?: boolean;
 }) {
-  const [editingMemo, setEditingMemo] = useState(false);
-  const [memo, setMemo] = useState(ch.memo);
+  const active = col && sk === col;
+  return (
+    <div
+      className={`px-2 py-2.5 whitespace-nowrap flex items-center ${!last ? "border-r border-gray-200" : ""} ${col ? "cursor-pointer hover:bg-gray-200/50" : ""}`}
+      onClick={() => col && onSort?.(col)}
+    >
+      {label}
+      {active && (sd === "asc" ? <ChevronUp className="h-3.5 w-3.5 ml-0.5" /> : <ChevronDown className="h-3.5 w-3.5 ml-0.5" />)}
+    </div>
+  );
+}
 
-  const saveMemo = () => {
-    if (memo !== ch.memo) onMemoChange(ch.id, memo);
-    setEditingMemo(false);
+/* ── 상태 변경 팝오버 ── */
+function StatusPopover({ channel, x, y, onConfirm, onClose }: {
+  channel: YouTubeChannel;
+  x: number; y: number;
+  onConfirm: (id: string, status: YouTubeChannelStatus) => Promise<void>;
+  onClose: () => void;
+}) {
+  const nextStatuses = STATUS_OPTIONS.filter(s => s !== channel.status);
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const popW = 180;
+  const adjustedX = Math.min(x, window.innerWidth - popW - 16);
+  const adjustedY = y + 160 > window.innerHeight ? y - 160 - 8 : y;
+
+  const handleSelect = async (status: YouTubeChannelStatus) => {
+    setSaving(true);
+    await onConfirm(channel.id, status);
+    setSaving(false);
   };
 
   return (
-    <TableRow className={odd ? "bg-muted/20" : ""}>
-      <TableCell className="py-1.5">
-        <input type="checkbox" checked={selected} onChange={onToggle} className="rounded" />
-      </TableCell>
-      <TableCell className="py-1.5">
-        <select
-          className={`text-xs rounded px-1.5 py-0.5 border-0 font-medium ${STATUS_COLOR[ch.status as YouTubeChannelStatus] || ""}`}
-          value={ch.status}
-          onChange={(e) => onStatusChange(ch.id, e.target.value as YouTubeChannelStatus)}
-        >
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      </TableCell>
-      <TableCell className="py-1.5 text-xs">{ch.profile}</TableCell>
-      <TableCell className="py-1.5 text-xs text-muted-foreground">{ch.keyword}</TableCell>
-      <TableCell className="py-1.5 text-sm font-medium">{ch.channel_name}</TableCell>
-      <TableCell className="py-1.5 text-xs">{ch.subscriber_count}</TableCell>
-      <TableCell className="py-1.5 text-xs text-muted-foreground">{ch.email}</TableCell>
-      <TableCell className="py-1.5">
-        {editingMemo ? (
-          <div className="flex gap-1">
-            <Input
-              className="h-6 text-xs"
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") saveMemo(); if (e.key === "Escape") setEditingMemo(false); }}
-              autoFocus
-            />
-            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={saveMemo}>
-              <Check className="h-3 w-3" />
-            </Button>
-          </div>
-        ) : (
-          <span
-            className="text-xs text-muted-foreground cursor-pointer hover:text-foreground min-w-[60px] inline-block"
-            onClick={() => { setMemo(ch.memo); setEditingMemo(true); }}
+    <div
+      ref={ref}
+      className="fixed z-50 bg-white border rounded-lg shadow-lg p-3 space-y-2"
+      style={{ left: adjustedX, top: adjustedY, width: popW }}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground">
+          {channel.channel_name} 상태 변경
+        </p>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="space-y-1">
+        {nextStatuses.map(s => (
+          <button
+            key={s}
+            onClick={() => handleSelect(s)}
+            disabled={saving}
+            className={`w-full text-left px-3 py-1.5 rounded text-sm font-medium transition-colors hover:ring-1 hover:ring-primary/30 ${STATUS_COLORS[s]}`}
           >
-            {ch.memo || "-"}
-          </span>
-        )}
-      </TableCell>
-      <TableCell className="py-1.5">
-        {ch.channel_url && (
-          <a href={ch.channel_url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground">
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        )}
-      </TableCell>
-    </TableRow>
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

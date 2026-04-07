@@ -19,7 +19,15 @@ export type ApplicationSource =
   | "머니업카";
 export type ReviewStatus = "미확인" | "확인완료";
 export type InstructorSource = "강사모집" | "콘텐츠팀" | "지원서";
-export type YouTubeChannelStatus = "미검토" | "검토완료" | "컨택대상" | "제외";
+export type YouTubeChannelStatus =
+  | "미검토"
+  | "컨펌 필요"
+  | "발송 예정"
+  | "진행 중"
+  | "계약 완료"
+  | "제외"
+  | "보류"
+  | "거절";
 
 // ===== DB 테이블 타입 =====
 export interface Instructor {

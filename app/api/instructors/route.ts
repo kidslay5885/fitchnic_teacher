@@ -42,14 +42,26 @@ export async function POST(req: Request) {
   const body = await req.json();
   const { _force, ...insertData } = body;
 
-  // 중복 이름 체크
+  // 중복 이름 체크 (공백 제거 후 비교: "감동 상영관" === "감동상영관")
   if (insertData.name && !_force) {
-    const { data: duplicates } = await sb
+    const normalizedName = insertData.name.trim().replace(/\s+/g, "");
+    const { data: allByName } = await sb
       .from("instructors")
-      .select("id, name, field, assignee, status")
-      .eq("name", insertData.name.trim());
+      .select("id, name, field, assignee, status, is_banned");
+
+    const duplicates = allByName?.filter((i: any) =>
+      i.name.replace(/\s+/g, "").toLowerCase() === normalizedName.toLowerCase()
+    );
 
     if (duplicates && duplicates.length > 0) {
+      // 금지 대상 체크
+      const banned = duplicates.some((d: any) => d.is_banned);
+      if (banned) {
+        return NextResponse.json(
+          { error: "연락 금지 대상입니다. 추가할 수 없습니다." },
+          { status: 403 }
+        );
+      }
       return NextResponse.json(
         { warning: "duplicate_name", duplicates },
         { status: 200 }

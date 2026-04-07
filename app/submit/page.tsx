@@ -265,8 +265,11 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
   const nameCheck = useMemo(() => {
     const name = form.name.trim();
     if (!name) return null;
+    // 공백 제거 후 비교 (예: "감동 상영관" === "감동상영관")
+    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const normalized = normalize(name);
     const duplicates = instructors.filter((i) =>
-      i.name.trim().toLowerCase() === name.toLowerCase()
+      normalize(i.name) === normalized
     );
     if (duplicates.length === 0) return { type: "ok" as const };
     const banned = duplicates.some((d) => d.is_banned);
