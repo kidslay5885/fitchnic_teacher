@@ -210,7 +210,9 @@ function InstructorListView() {
           />
         </div>
         <Select value={state.filters.status} onValueChange={(v) => dispatch({ type: "SET_FILTER", filters: { status: v as any } })}>
-          <SelectTrigger className="w-[120px] h-8 text-sm"><SelectValue placeholder="상태: 전체" /></SelectTrigger>
+          <SelectTrigger className="w-[120px] h-8 text-sm">
+            <span className="truncate">{state.filters.status === "전체" ? "상태: 전체" : state.filters.status}</span>
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="전체">상태: 전체</SelectItem>
             {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
