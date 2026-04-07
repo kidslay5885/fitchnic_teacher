@@ -133,6 +133,25 @@ CREATE OR REPLACE TRIGGER tr_trim_activity_logs
   AFTER INSERT ON activity_logs
   FOR EACH STATEMENT EXECUTE FUNCTION trim_activity_logs();
 
+-- 8. YouTube 채널 수집 데이터
+CREATE TABLE IF NOT EXISTS youtube_channels (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile TEXT NOT NULL DEFAULT '',
+  keyword TEXT DEFAULT '',
+  channel_name TEXT NOT NULL,
+  subscriber_count TEXT DEFAULT '',
+  channel_url TEXT DEFAULT '',
+  email TEXT NOT NULL UNIQUE,
+  status TEXT DEFAULT '미검토',
+  memo TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE OR REPLACE TRIGGER tr_youtube_channels_updated
+  BEFORE UPDATE ON youtube_channels
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 -- 인덱스
 CREATE INDEX IF NOT EXISTS idx_instructors_status ON instructors(status);
 CREATE INDEX IF NOT EXISTS idx_instructors_assignee ON instructors(assignee);
@@ -143,6 +162,9 @@ CREATE INDEX IF NOT EXISTS idx_outreach_waves_instructor ON outreach_waves(instr
 CREATE INDEX IF NOT EXISTS idx_applications_platform ON applications(source_platform);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_target ON activity_logs(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_youtube_channels_email ON youtube_channels(email);
+CREATE INDEX IF NOT EXISTS idx_youtube_channels_profile ON youtube_channels(profile);
+CREATE INDEX IF NOT EXISTS idx_youtube_channels_status ON youtube_channels(status);
 
 -- updated_at 자동 갱신 트리거
 CREATE OR REPLACE FUNCTION update_updated_at()

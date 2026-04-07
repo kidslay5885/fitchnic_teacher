@@ -16,6 +16,7 @@ import type {
   Application,
   MessageTemplate,
   BannedPlatform,
+  YouTubeChannel,
   DashboardStats,
   TabId,
   FilterState,
@@ -33,6 +34,7 @@ interface AppState {
   applications: Application[];
   templates: MessageTemplate[];
   bannedPlatforms: BannedPlatform[];
+  youtubeChannels: YouTubeChannel[];
   filters: FilterState;
   stats: DashboardStats | null;
 }
@@ -48,6 +50,7 @@ const initialState: AppState = {
   applications: [],
   templates: [],
   bannedPlatforms: [],
+  youtubeChannels: [],
   filters: {
     search: "",
     status: "전체",
@@ -73,6 +76,7 @@ type Action =
   | { type: "SET_APPLICATIONS"; applications: Application[] }
   | { type: "SET_TEMPLATES"; templates: MessageTemplate[] }
   | { type: "SET_BANNED_PLATFORMS"; platforms: BannedPlatform[] }
+  | { type: "SET_YOUTUBE_CHANNELS"; channels: YouTubeChannel[] }
   | { type: "SET_FILTER"; filters: Partial<FilterState> }
   | { type: "SET_STATS"; stats: DashboardStats };
 
@@ -123,6 +127,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, templates: action.templates };
     case "SET_BANNED_PLATFORMS":
       return { ...state, bannedPlatforms: action.platforms };
+    case "SET_YOUTUBE_CHANNELS":
+      return { ...state, youtubeChannels: action.channels };
     case "SET_FILTER":
       return {
         ...state,
@@ -146,6 +152,7 @@ interface StoreCtx {
   loadApplications: () => Promise<void>;
   loadTemplates: () => Promise<void>;
   loadBannedPlatforms: () => Promise<void>;
+  loadYoutubeChannels: () => Promise<void>;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -223,6 +230,16 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadYoutubeChannels = useCallback(async () => {
+    try {
+      const res = await fetch("/api/youtube-channels");
+      const data = await res.json();
+      dispatch({ type: "SET_YOUTUBE_CHANNELS", channels: Array.isArray(data) ? data : [] });
+    } catch (e) {
+      console.error("Failed to load youtube channels", e);
+    }
+  }, []);
+
   // Initial hydration
   useEffect(() => {
     async function hydrate() {
@@ -289,6 +306,7 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
         loadApplications,
         loadTemplates,
         loadBannedPlatforms,
+        loadYoutubeChannels,
       },
     },
     children

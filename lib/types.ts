@@ -19,6 +19,7 @@ export type ApplicationSource =
   | "머니업카";
 export type ReviewStatus = "미확인" | "확인완료";
 export type InstructorSource = "강사모집" | "콘텐츠팀" | "지원서";
+export type YouTubeChannelStatus = "미검토" | "검토완료" | "컨택대상" | "제외";
 
 // ===== DB 테이블 타입 =====
 export interface Instructor {
@@ -113,6 +114,20 @@ export interface Application {
   created_at: string;
 }
 
+export interface YouTubeChannel {
+  id: string;
+  profile: string;
+  keyword: string;
+  channel_name: string;
+  subscriber_count: string;
+  channel_url: string;
+  email: string;
+  status: YouTubeChannelStatus;
+  memo: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MessageTemplate {
   id: string;
   name: string;
@@ -131,7 +146,8 @@ export type TabId =
   | "applications"
   | "banned"
   | "messages"
-  | "activity";
+  | "activity"
+  | "youtube-channels";
 
 export interface InstructorWithWaves extends Instructor {
   waves: OutreachWave[];
