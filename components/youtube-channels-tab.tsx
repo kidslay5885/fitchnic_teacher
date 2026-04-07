@@ -216,14 +216,14 @@ export default function YouTubeChannelsTab() {
           />
         </div>
         <Select value={filterProfile} onValueChange={setFilterProfile}>
-          <SelectTrigger className="w-[110px] h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-[130px] h-8 text-sm"><SelectValue placeholder="프로필: 전체" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="전체">프로필: 전체</SelectItem>
             {profiles.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as any)}>
-          <SelectTrigger className="w-[110px] h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-[120px] h-8 text-sm"><SelectValue placeholder="상태: 전체" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="전체">상태: 전체</SelectItem>
             {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
