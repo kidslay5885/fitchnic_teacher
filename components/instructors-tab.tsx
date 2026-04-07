@@ -303,8 +303,13 @@ function InstructorListView() {
                     <span className="truncate">{i.name}</span>
                     {i.is_banned && <span className="text-red-500 ml-1 text-xs shrink-0">[금지]</span>}
                   </div>
-                  <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
-                    {i.ref_link ? <a href={i.ref_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
+                  <div className="px-2 flex items-center gap-0.5 border-r border-gray-200/60 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                    {i.ref_link ? i.ref_link.split(/\s*,\s*/).filter(Boolean).map((link, idx) => (
+                      <span key={idx} className="shrink-0">
+                        {idx > 0 && <span className="text-muted-foreground text-xs">,</span>}
+                        <a href={link.trim()} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크{i.ref_link!.split(/\s*,\s*/).filter(Boolean).length > 1 ? idx + 1 : ""}</a>
+                      </span>
+                    )) : ""}
                   </div>
                   <div className="px-2 flex items-center justify-center border-r border-gray-200/60 text-muted-foreground">{i.has_lecture_history}</div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden" onClick={(e) => e.stopPropagation()}>

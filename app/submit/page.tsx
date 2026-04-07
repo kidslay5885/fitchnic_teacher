@@ -11,15 +11,15 @@ import {
 } from "@/components/ui/select";
 import { STATUSES, STATUS_COLORS, ASSIGNEES, SOURCES } from "@/lib/constants";
 import type { Instructor, InstructorStatus } from "@/lib/types";
-import { Search, ChevronUp, ChevronDown, AlertTriangle, Ban, CheckCircle2 } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, AlertTriangle, Ban, CheckCircle2, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 
 type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email";
 type SortDir = "asc" | "desc";
 
 const ROW_H = 36;
-// 상태 | 분야 | 찾은 사람 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처
-const GRID = "84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px";
+// 상태 | 찾은 사람 | 분야 | 강사명 | 강의 여부 | 플랫폼 | 유튜브 | 인스타 | 참조 | 이메일 | 메모
+const GRID = "84px 72px 1.2fr 1fr 64px 1fr 48px 48px 48px 1.2fr 1.5fr";
 const MIN_W = 940;
 
 const ROW_BG: Record<string, string> = {
@@ -180,17 +180,16 @@ export default function SubmitPage() {
               style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
             >
               <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
-              <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
               <SortHeader label="찾은 사람" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
-              <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} />
-              <SortHeader label="참조" />
+              <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
+              <SortHeader label="강사명" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} />
               <SortHeader label="강의" col="has_lecture_history" sk={sortKey} sd={sortDir} onSort={handleSort} center />
               <SortHeader label="플랫폼" col="lecture_platform" sk={sortKey} sd={sortDir} onSort={handleSort} />
               <div className="px-1 py-2.5 border-r border-gray-200 text-center whitespace-nowrap">유튜브</div>
               <div className="px-1 py-2.5 border-r border-gray-200 text-center whitespace-nowrap">인스타</div>
+              <div className="px-1 py-2.5 border-r border-gray-200 text-center whitespace-nowrap">참조</div>
               <SortHeader label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} />
-              <SortHeader label="비고" />
-              <SortHeader label="출처" col="source" sk={sortKey} sd={sortDir} onSort={handleSort} last />
+              <SortHeader label="메모" last />
             </div>
 
             {sorted.length === 0 ? (
@@ -211,14 +210,11 @@ export default function SubmitPage() {
                           {i.status}
                         </Badge>
                       </div>
-                      <div className="px-2 flex items-center border-r border-gray-200/60 overflow-hidden"><span className="truncate">{i.field}</span></div>
                       <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.assignee}</span></div>
+                      <div className="px-2 flex items-center border-r border-gray-200/60 overflow-hidden"><span className="truncate">{i.field}</span></div>
                       <div className="px-2 flex items-center border-r border-gray-200/60 font-medium overflow-hidden">
                         <span className="truncate">{i.name}</span>
                         {i.is_banned && <span className="text-red-500 ml-1 text-xs shrink-0">[금지]</span>}
-                      </div>
-                      <div className="px-2 flex items-center border-r border-gray-200/60">
-                        {i.ref_link ? <a href={i.ref_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
                       </div>
                       <div className="px-2 flex items-center justify-center border-r border-gray-200/60 text-muted-foreground">{i.has_lecture_history}</div>
                       <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden">
@@ -234,9 +230,16 @@ export default function SubmitPage() {
                       <div className="px-2 flex items-center border-r border-gray-200/60">
                         {igUrl ? <a href={igUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
                       </div>
+                      <div className="px-2 flex items-center gap-0.5 border-r border-gray-200/60 overflow-hidden">
+                        {i.ref_link ? i.ref_link.split(/\s*,\s*/).filter(Boolean).map((link, idx) => (
+                          <span key={idx} className="shrink-0">
+                            {idx > 0 && <span className="text-muted-foreground text-xs">,</span>}
+                            <a href={link.trim()} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크{i.ref_link!.split(/\s*,\s*/).filter(Boolean).length > 1 ? idx + 1 : ""}</a>
+                          </span>
+                        )) : ""}
+                      </div>
                       <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.email}</span></div>
-                      <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.notes}</span></div>
-                      <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate">{i.source}</span></div>
+                      <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate">{i.notes}</span></div>
                     </div>
                   );
                 })}
@@ -246,7 +249,7 @@ export default function SubmitPage() {
         </div>
 
         {/* 오른쪽 — 강사 추가 폼 */}
-        <div className="w-[420px] shrink-0">
+        <div className="w-[480px] shrink-0">
           <SubmitForm
             instructors={instructors}
             onAdded={(inst) => setInstructors((prev) => [...prev, inst])}
@@ -288,12 +291,13 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
     source: "강사모집" as string, notes: "",
   });
   const [saving, setSaving] = useState(false);
+  const [refLinks, setRefLinks] = useState<string[]>([""]);
   const [urlTitles, setUrlTitles] = useState<Record<string, string>>({});
   const [urlLoading, setUrlLoading] = useState<Record<string, boolean>>({});
 
-  // URL 제목 가져오기 (디바운스)
+  // URL 제목 가져오기 (디바운스) - youtube, instagram
   useEffect(() => {
-    const fields = ["youtube", "instagram", "ref_link"] as const;
+    const fields = ["youtube", "instagram"] as const;
     const timers: ReturnType<typeof setTimeout>[] = [];
     for (const key of fields) {
       let url = form[key].trim();
@@ -321,7 +325,35 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
       timers.push(t);
     }
     return () => timers.forEach(clearTimeout);
-  }, [form.youtube, form.instagram, form.ref_link]);
+  }, [form.youtube, form.instagram]);
+
+  // URL 제목 가져오기 (디바운스) - 추가 링크들
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    refLinks.forEach((link, idx) => {
+      const key = `ref_${idx}`;
+      const url = link.trim();
+      if (!url || !url.startsWith("http")) {
+        setUrlTitles((prev) => ({ ...prev, [key]: "" }));
+        setUrlLoading((prev) => ({ ...prev, [key]: false }));
+        return;
+      }
+      setUrlLoading((prev) => ({ ...prev, [key]: true }));
+      const t = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/url-title?url=${encodeURIComponent(url)}`);
+          const { title } = await res.json();
+          setUrlTitles((prev) => ({ ...prev, [key]: title || "" }));
+        } catch {
+          setUrlTitles((prev) => ({ ...prev, [key]: "" }));
+        } finally {
+          setUrlLoading((prev) => ({ ...prev, [key]: false }));
+        }
+      }, 500);
+      timers.push(t);
+    });
+    return () => timers.forEach(clearTimeout);
+  }, [refLinks]);
 
   // 실시간 중복/금지 체크
   const nameCheck = useMemo(() => {
@@ -353,6 +385,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
       has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
       source: "강사모집", notes: "",
     });
+    setRefLinks([""]);
     setUrlTitles({});
   };
 
@@ -365,7 +398,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
       const res = await fetch("/api/instructors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, _force: force }),
+        body: JSON.stringify({ ...form, ref_link: refLinks.filter((l) => l.trim()).join(" , "), _force: force }),
       });
       const data = await res.json();
       if (data.warning === "duplicate_name" && !force) return;
@@ -385,9 +418,40 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
       <div className="p-4 space-y-4 flex-1 overflow-y-auto">
 
       <div className="space-y-3">
-        {/* 이름 + 실시간 체크 */}
+        {/* 찾은 사람 */}
+        <div className="relative">
+          <Label className="text-xs">찾은 사람</Label>
+          <Input
+            value={form.assignee}
+            onChange={(e) => setForm({ ...form, assignee: e.target.value })}
+            className="h-8 text-sm"
+            placeholder="이름 입력"
+          />
+          {form.assignee && !ASSIGNEES.includes(form.assignee) && (
+            <div className="absolute z-10 mt-0.5 w-full bg-white border rounded shadow-md">
+              {ASSIGNEES.filter((a) => a.includes(form.assignee)).map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100"
+                  onClick={() => setForm({ ...form, assignee: a })}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 분야 */}
         <div>
-          <Label className="text-xs">이름 *</Label>
+          <Label className="text-xs">분야</Label>
+          <Input value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })} className="h-8 text-sm" />
+        </div>
+
+        {/* 강사명 + 실시간 중복 체크 */}
+        <div>
+          <Label className="text-xs">강사명 *</Label>
           <Input
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -425,10 +489,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
           )}
         </div>
 
-        <div>
-          <Label className="text-xs">분야</Label>
-          <Input value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })} className="h-8 text-sm" />
-        </div>
+        {/* 강의 여부 */}
         <div>
           <Label className="text-xs">강의 여부</Label>
           <div className="flex gap-1.5 mt-1">
@@ -448,6 +509,8 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
             ))}
           </div>
         </div>
+
+        {/* 강의 플랫폼 */}
         <div>
           <Label className="text-xs">강의 플랫폼</Label>
           <Input
@@ -463,71 +526,73 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
             placeholder="주소 (URL)"
           />
         </div>
+
+        {/* 유튜브 */}
         <div>
           <Label className="text-xs">유튜브</Label>
           <Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-8 text-sm" placeholder="https://www.youtube.com/@채널명" />
           <UrlTitle loading={urlLoading.youtube} title={urlTitles.youtube} />
         </div>
+
+        {/* 인스타그램 */}
         <div>
           <Label className="text-xs">인스타그램</Label>
           <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" placeholder="https://www.instagram.com/계정명" />
           <UrlTitle loading={urlLoading.instagram} title={urlTitles.instagram} />
         </div>
+
+        {/* 추가 링크 (복수) */}
         <div>
-          <Label className="text-xs">참조 링크</Label>
-          <Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" />
-          <UrlTitle loading={urlLoading.ref_link} title={urlTitles.ref_link} />
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">추가 링크</Label>
+            <button
+              type="button"
+              onClick={() => setRefLinks([...refLinks, ""])}
+              className="flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800"
+            >
+              <Plus className="h-3.5 w-3.5" />추가
+            </button>
+          </div>
+          {refLinks.map((link, idx) => (
+            <div key={idx} className="mt-1.5">
+              <div className="flex items-center gap-1">
+                <Input
+                  value={link}
+                  onChange={(e) => {
+                    const next = [...refLinks];
+                    next[idx] = e.target.value;
+                    setRefLinks(next);
+                  }}
+                  className="h-8 text-sm flex-1"
+                  placeholder="https://"
+                />
+                {refLinks.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setRefLinks(refLinks.filter((_, i) => i !== idx))}
+                    className="shrink-0 h-8 w-8 flex items-center justify-center rounded border border-gray-200 text-muted-foreground hover:text-red-500 hover:border-red-300"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <UrlTitle loading={urlLoading[`ref_${idx}`]} title={urlTitles[`ref_${idx}`]} />
+            </div>
+          ))}
         </div>
+
+        {/* 이메일 */}
         <div>
           <Label className="text-xs">이메일</Label>
           <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-8 text-sm" />
         </div>
+
+        {/* 메모 */}
         <div>
-          <Label className="text-xs">비고</Label>
-          <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="h-8 text-sm" />
+          <Label className="text-xs">메모</Label>
+          <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none h-20" />
         </div>
-        <div className="relative">
-          <Label className="text-xs">찾은 사람</Label>
-          <Input
-            value={form.assignee}
-            onChange={(e) => setForm({ ...form, assignee: e.target.value })}
-            className="h-8 text-sm"
-            placeholder="이름 입력"
-          />
-          {form.assignee && !ASSIGNEES.includes(form.assignee) && (
-            <div className="absolute z-10 mt-0.5 w-full bg-white border rounded shadow-md">
-              {ASSIGNEES.filter((a) => a.includes(form.assignee)).map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100"
-                  onClick={() => setForm({ ...form, assignee: a })}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div>
-          <Label className="text-xs">출처</Label>
-          <div className="flex gap-1.5 mt-1">
-            {SOURCES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setForm({ ...form, source: s })}
-                className={`h-8 px-2.5 rounded border text-xs font-medium transition-colors ${
-                  form.source === s
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-muted-foreground border-gray-200 hover:border-gray-400"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* 출처는 "강사모집" 기본값으로 자동 설정 */}
       </div>
 
       {/* 버튼 */}

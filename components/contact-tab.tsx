@@ -18,9 +18,10 @@ import { Send, Search, X, ChevronUp, ChevronDown } from "lucide-react";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
 const FINAL_STATUSES = ["진행 중", "미팅 완료", "계약 완료", "보류", "거절"] as const;
-type ViewFilter = "all" | "no_preinfo" | InstructorStatus;
+type ViewFilter = "all" | "no_preinfo" | "check_needed" | InstructorStatus;
 type SortKey = "name" | "status" | "field" | "assignee" | "final_status";
 type SortDir = "asc" | "desc";
+type WaveSortKey = "none" | "check_needed" | "date_asc" | "date_desc";
 
 const ROW_H = 40;
 const GRID = "36px 1.5fr 88px 1fr 76px 1fr 1fr 1fr 88px";
@@ -54,6 +55,7 @@ export default function ContactTab() {
   const [bulkDate, setBulkDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [bulkResult, setBulkResult] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [waveSort, setWaveSort] = useState<{ wave: number; key: WaveSortKey }>({ wave: 0, key: "none" });
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
 
@@ -88,21 +90,60 @@ export default function ContactTab() {
   // 응답 받았지만 사전 정보 없는 강사
   const noPreInfoCount = useMemo(() => contactInstructors.filter((i) => i.has_response && !i.pre_info).length, [contactInstructors]);
 
+  // 체크필요 강사 (웨이브 결과가 체크필요이거나, 발송일 있고 결과 미입력)
+  const checkNeededIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const inst of contactInstructors) {
+      const waves = wavesMap[inst.id] || [];
+      for (const w of waves) {
+        if (w.result === "체크필요" || (!w.result && w.sent_date)) {
+          ids.add(inst.id);
+          break;
+        }
+      }
+    }
+    return ids;
+  }, [contactInstructors, wavesMap]);
+
   const filtered = useMemo(() => {
     let list = contactInstructors;
     if (viewFilter === "no_preinfo") list = list.filter((i) => i.has_response && !i.pre_info);
+    else if (viewFilter === "check_needed") list = list.filter((i) => checkNeededIds.has(i.id));
     else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
     if (search) {
       const q = search.toLowerCase();
       list = list.filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q) || i.email?.toLowerCase().includes(q));
     }
-    return [...list].sort((a, b) => {
+    let sorted = [...list].sort((a, b) => {
       const av = (a[sortKey] || "") as string;
       const bv = (b[sortKey] || "") as string;
       const cmp = av.localeCompare(bv, "ko");
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [contactInstructors, viewFilter, search, sortKey, sortDir]);
+
+    // 웨이브 정렬
+    if (waveSort.key !== "none" && waveSort.wave > 0) {
+      const wn = waveSort.wave;
+      sorted = [...sorted].sort((a, b) => {
+        const wa = (wavesMap[a.id] || []).find((w) => w.wave_number === wn);
+        const wb = (wavesMap[b.id] || []).find((w) => w.wave_number === wn);
+        if (waveSort.key === "check_needed") {
+          const aCheck = wa && (!wa.result || wa.result === "체크필요") && wa.sent_date ? 1 : 0;
+          const bCheck = wb && (!wb.result || wb.result === "체크필요") && wb.sent_date ? 1 : 0;
+          if (aCheck !== bCheck) return bCheck - aCheck;
+          // 체크필요 내에서 D-day 오래된 순 (발송일 빠른 순)
+          if (aCheck && bCheck) return (wa!.sent_date || "").localeCompare(wb!.sent_date || "");
+          return 0;
+        }
+        const dateA = wa?.sent_date || "";
+        const dateB = wb?.sent_date || "";
+        if (waveSort.key === "date_asc") return dateA.localeCompare(dateB);
+        return dateB.localeCompare(dateA);
+      });
+    }
+
+    return sorted;
+  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveSort, wavesMap, checkNeededIds]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -309,12 +350,30 @@ export default function ContactTab() {
   const cnt = (s: string) => contactInstructors.filter((i) => i.status === s).length;
   const getWave = (id: string, n: number) => (wavesMap[id] || []).find((w) => w.wave_number === n);
 
+  // D-day 계산 (발송일 + 7일 기준)
+  const getDday = (sentDate: string | undefined) => {
+    if (!sentDate) return null;
+    const sent = new Date(sentDate);
+    const target = new Date(sent.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    target.setHours(0, 0, 0, 0);
+    return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
   const formatWave = (w: OutreachWave | undefined) => {
-    if (!w || (!w.sent_date && !w.result)) return "-";
+    if (!w || (!w.sent_date && !w.result)) return { text: "-", overdue: false };
     const d = w.sent_date ? (() => { const p = w.sent_date.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; })() : "";
-    const r = w.result || (w.sent_date ? "무응답" : "");
-    if (d && r) return `${d} · ${r}`;
-    return d || r;
+    const r = w.result || (w.sent_date ? "체크필요" : "");
+    let dDay = "";
+    let overdue = false;
+    if (w.sent_date && (!w.result || w.result === "체크필요")) {
+      const diff = getDday(w.sent_date)!;
+      dDay = diff > 0 ? `D-${diff}` : diff === 0 ? "D-Day" : `D+${Math.abs(diff)}`;
+      overdue = diff <= 0;
+    }
+    const parts = [d, r, dDay].filter(Boolean);
+    return { text: parts.join(" · ") || "-", overdue };
   };
 
   const waveColor = (w: OutreachWave | undefined) => {
@@ -322,7 +381,7 @@ export default function ContactTab() {
     if (!w?.result) return "";
     if (w.result === "응답") return "text-green-700 bg-green-50";
     if (w.result === "거절") return "text-red-600 bg-red-50";
-    if (w.result === "읽씹") return "text-amber-700 bg-amber-50";
+    if (w.result === "체크필요") return "text-amber-700 bg-amber-50";
     if (w.result === "무응답") return "text-gray-500 bg-gray-50";
     return "";
   };
@@ -364,6 +423,7 @@ export default function ContactTab() {
             { key: "진행 중" as ViewFilter, label: `진행 중 (${cnt("진행 중")})`, active: "bg-indigo-200 text-indigo-900 border-indigo-400", idle: "bg-indigo-50 text-indigo-700 border-indigo-200" },
             { key: "보류" as ViewFilter, label: `보류 (${cnt("보류")})`, active: "bg-orange-200 text-orange-900 border-orange-400", idle: "bg-orange-50 text-orange-700 border-orange-200" },
             { key: "계약 완료" as ViewFilter, label: `계약 완료 (${cnt("계약 완료")})`, active: "bg-green-200 text-green-900 border-green-400", idle: "bg-green-50 text-green-700 border-green-200" },
+            ...(checkNeededIds.size > 0 ? [{ key: "check_needed" as ViewFilter, label: `체크필요 (${checkNeededIds.size})`, active: "bg-amber-200 text-amber-900 border-amber-400", idle: "bg-amber-50 text-amber-700 border-amber-200" }] : []),
             ...(noPreInfoCount > 0 ? [{ key: "no_preinfo" as ViewFilter, label: `사전 정보 미입력 (${noPreInfoCount})`, active: "bg-red-200 text-red-900 border-red-400", idle: "bg-red-50 text-red-700 border-red-200" }] : []),
           ]).map((f) => (
             <button
@@ -402,9 +462,16 @@ export default function ContactTab() {
           <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <SortHeader label="찾은 사람" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <div className="px-2 py-2.5 text-center border-r border-gray-200">1차</div>
-          <div className="px-2 py-2.5 text-center border-r border-gray-200">2차</div>
-          <div className="px-2 py-2.5 text-center border-r border-gray-200">3차</div>
+          {[1, 2, 3].map((n) => (
+            <WaveHeader
+              key={n}
+              wave={n}
+              active={waveSort.wave === n ? waveSort.key : "none"}
+              onSort={(key) => setWaveSort(prev =>
+                prev.wave === n && prev.key === key ? { wave: 0, key: "none" } : { wave: n, key }
+              )}
+            />
+          ))}
           <SortHeader label="최종" col="final_status" sk={sortKey} sd={sortDir} onSort={handleSort} last />
         </div>
 
@@ -459,13 +526,14 @@ export default function ContactTab() {
                   {/* 1차 2차 3차 */}
                   {[1, 2, 3].map((n) => {
                     const w = getWave(i.id, n);
+                    const { text, overdue } = formatWave(w);
                     return (
                       <div
                         key={n}
                         className={`px-2 flex items-center justify-center cursor-pointer hover:brightness-95 transition-colors border-r border-gray-200/60 ${waveColor(w)}`}
                         onClick={(e) => handleCellClick(e, i.id, n)}
                       >
-                        <span className="text-sm whitespace-nowrap">{formatWave(w)}</span>
+                        <span className={`text-sm whitespace-nowrap ${overdue ? "text-red-600 font-semibold" : ""}`}>{text}</span>
                       </div>
                     );
                   })}
@@ -754,7 +822,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await onSave({ sent_date: date, result: result || "무응답", response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee, has_own_lecture: hasOwnLecture, lecture_appeal: lectureAppeal, sns_over_10k: snsOver10k, meeting_type_override: isOverride });
+      await onSave({ sent_date: date, result: result || "체크필요", response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee, has_own_lecture: hasOwnLecture, lecture_appeal: lectureAppeal, sns_over_10k: snsOver10k, meeting_type_override: isOverride });
     } finally { setSaving(false); }
   };
 
@@ -778,7 +846,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
               </div>
               <div>
                 <label className="text-xs text-muted-foreground mb-1 block">결과</label>
-                <Select value={result || "무응답"} onValueChange={setResult}>
+                <Select value={result || "체크필요"} onValueChange={setResult}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
@@ -1037,6 +1105,65 @@ function SortHeader({ label, col, sk, sd, onSort, last }: {
     >
       {label}
       {active && (sd === "asc" ? <ChevronUp className="h-3.5 w-3.5 ml-0.5" /> : <ChevronDown className="h-3.5 w-3.5 ml-0.5" />)}
+    </div>
+  );
+}
+
+/* ── 웨이브 헤더 (필터/정렬) ── */
+function WaveHeader({ wave, active, onSort }: {
+  wave: number;
+  active: WaveSortKey;
+  onSort: (key: WaveSortKey) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="relative border-r border-gray-200" ref={ref}>
+      <div
+        className={`px-2 py-2.5 text-center cursor-pointer hover:bg-gray-200/50 flex items-center justify-center gap-1 ${active !== "none" ? "text-primary font-bold" : ""}`}
+        onClick={() => setOpen(!open)}
+      >
+        {wave}차
+        {active !== "none" && <ChevronDown className="h-3 w-3" />}
+      </div>
+      {open && (
+        <div className="absolute top-full left-0 z-20 bg-white border rounded-md shadow-lg py-1 min-w-[120px]">
+          {([
+            { key: "check_needed" as WaveSortKey, label: "체크필요 우선" },
+            { key: "date_asc" as WaveSortKey, label: "발송일 오래된순" },
+            { key: "date_desc" as WaveSortKey, label: "발송일 최신순" },
+          ]).map((opt) => (
+            <button
+              key={opt.key}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 ${active === opt.key ? "text-primary font-semibold bg-primary/5" : ""}`}
+              onClick={() => { onSort(opt.key); setOpen(false); }}
+            >
+              {opt.label}
+            </button>
+          ))}
+          {active !== "none" && (
+            <>
+              <div className="border-t my-1" />
+              <button
+                className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-gray-100"
+                onClick={() => { onSort("none"); setOpen(false); }}
+              >
+                정렬 해제
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

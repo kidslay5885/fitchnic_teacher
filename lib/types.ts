@@ -10,7 +10,7 @@ export type InstructorStatus =
   | "거절";
 
 export type OutreachChannel = "DM" | "이메일" | "DM+이메일" | "";
-export type WaveResult = "무응답" | "읽씹" | "응답" | "거절" | "";
+export type WaveResult = "체크필요" | "무응답" | "응답" | "거절" | "";
 export type ApplicationSource =
   | "핏크닉메타"
   | "핏크닉홈"

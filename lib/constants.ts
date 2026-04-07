@@ -30,7 +30,7 @@ export const ASSIGNEES = [
   "정세희", "정승요", "정승희", "조솔비", "주수현", "최기쁨", "홍성빈",
 ];
 
-export const WAVE_RESULTS = ["무응답", "읽씹", "응답", "거절"] as const;
+export const WAVE_RESULTS = ["체크필요", "무응답", "응답", "거절"] as const;
 
 export const OUTREACH_CHANNELS = ["DM", "이메일", "DM+이메일"] as const;
 
