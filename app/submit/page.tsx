@@ -221,7 +221,13 @@ export default function SubmitPage() {
                         {i.ref_link ? <a href={i.ref_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
                       </div>
                       <div className="px-2 flex items-center justify-center border-r border-gray-200/60 text-muted-foreground">{i.has_lecture_history}</div>
-                      <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.lecture_platform}</span></div>
+                      <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden">
+                        {i.lecture_platform_url ? (
+                          <a href={i.lecture_platform_url} target="_blank" rel="noopener noreferrer" className="truncate text-blue-600 hover:underline">{i.lecture_platform}</a>
+                        ) : (
+                          <span className="truncate">{i.lecture_platform}</span>
+                        )}
+                      </div>
                       <div className="px-2 flex items-center border-r border-gray-200/60">
                         {i.youtube ? <a href={i.youtube} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
                       </div>
@@ -240,7 +246,7 @@ export default function SubmitPage() {
         </div>
 
         {/* 오른쪽 — 강사 추가 폼 */}
-        <div className="w-[320px] shrink-0">
+        <div className="w-[420px] shrink-0">
           <SubmitForm
             instructors={instructors}
             onAdded={(inst) => setInstructors((prev) => [...prev, inst])}
@@ -282,6 +288,40 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
     source: "강사모집" as string, notes: "",
   });
   const [saving, setSaving] = useState(false);
+  const [urlTitles, setUrlTitles] = useState<Record<string, string>>({});
+  const [urlLoading, setUrlLoading] = useState<Record<string, boolean>>({});
+
+  // URL 제목 가져오기 (디바운스)
+  useEffect(() => {
+    const fields = ["youtube", "instagram", "ref_link"] as const;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    for (const key of fields) {
+      let url = form[key].trim();
+      if (!url) {
+        setUrlTitles((prev) => ({ ...prev, [key]: "" }));
+        setUrlLoading((prev) => ({ ...prev, [key]: false }));
+        continue;
+      }
+      if (key === "instagram" && !url.startsWith("http")) {
+        url = `https://instagram.com/${url.replace(/^@/, "")}`;
+      }
+      if (!url.startsWith("http")) continue;
+      setUrlLoading((prev) => ({ ...prev, [key]: true }));
+      const t = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/url-title?url=${encodeURIComponent(url)}`);
+          const { title } = await res.json();
+          setUrlTitles((prev) => ({ ...prev, [key]: title || "" }));
+        } catch {
+          setUrlTitles((prev) => ({ ...prev, [key]: "" }));
+        } finally {
+          setUrlLoading((prev) => ({ ...prev, [key]: false }));
+        }
+      }, 500);
+      timers.push(t);
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [form.youtube, form.instagram, form.ref_link]);
 
   // 실시간 중복/금지 체크
   const nameCheck = useMemo(() => {
@@ -313,6 +353,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
       has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
       source: "강사모집", notes: "",
     });
+    setUrlTitles({});
   };
 
   const handleSubmit = async (force = false) => {
@@ -425,14 +466,17 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
         <div>
           <Label className="text-xs">유튜브</Label>
           <Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-8 text-sm" />
+          <UrlTitle loading={urlLoading.youtube} title={urlTitles.youtube} />
         </div>
         <div>
           <Label className="text-xs">인스타그램</Label>
           <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" />
+          <UrlTitle loading={urlLoading.instagram} title={urlTitles.instagram} />
         </div>
         <div>
           <Label className="text-xs">참조 링크</Label>
           <Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" />
+          <UrlTitle loading={urlLoading.ref_link} title={urlTitles.ref_link} />
         </div>
         <div>
           <Label className="text-xs">이메일</Label>
@@ -503,6 +547,24 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
         )}
       </div>
       </div>
+    </div>
+  );
+}
+
+/* ── URL 제목 미리보기 ── */
+function UrlTitle({ loading, title }: { loading?: boolean; title?: string }) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-1.5 mt-1 px-2 py-1 rounded bg-gray-50 border border-gray-100">
+        <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent shrink-0" />
+        <span className="text-xs text-muted-foreground">확인 중...</span>
+      </div>
+    );
+  }
+  if (!title) return null;
+  return (
+    <div className="mt-1 px-2 py-1 rounded bg-blue-50 border border-blue-100">
+      <p className="text-xs text-blue-700 font-medium truncate">{title}</p>
     </div>
   );
 }

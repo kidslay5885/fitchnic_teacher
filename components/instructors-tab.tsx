@@ -307,7 +307,13 @@ function InstructorListView() {
                     {i.ref_link ? <a href={i.ref_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
                   </div>
                   <div className="px-2 flex items-center justify-center border-r border-gray-200/60 text-muted-foreground">{i.has_lecture_history}</div>
-                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.lecture_platform}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                    {i.lecture_platform_url ? (
+                      <a href={i.lecture_platform_url} target="_blank" rel="noopener noreferrer" className="truncate text-blue-600 hover:underline">{i.lecture_platform}</a>
+                    ) : (
+                      <span className="truncate">{i.lecture_platform}</span>
+                    )}
+                  </div>
                   <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
                     {i.youtube ? <a href={i.youtube} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
                   </div>
