@@ -16,8 +16,11 @@ import type { Instructor, InstructorStatus } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
 import BulkActions from "@/components/bulk-actions";
+import YouTubeChannelsTab from "@/components/youtube-channels-tab";
 import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+
+type SubTab = "instructors" | "youtube-channels";
 
 type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email";
 type SortDir = "asc" | "desc";
@@ -39,6 +42,44 @@ const ROW_BG: Record<string, string> = {
 };
 
 export default function InstructorsTab() {
+  const [subTab, setSubTab] = useState<SubTab>("instructors");
+
+  return (
+    <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
+      {/* 서브탭 */}
+      <div className="flex items-center gap-1 border-b mb-3 shrink-0">
+        <button
+          onClick={() => setSubTab("instructors")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            subTab === "instructors"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          강사찾기
+        </button>
+        <button
+          onClick={() => setSubTab("youtube-channels")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            subTab === "youtube-channels"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          YT채널수집
+        </button>
+      </div>
+
+      {subTab === "youtube-channels" ? (
+        <YouTubeChannelsTab />
+      ) : (
+        <InstructorListView />
+      )}
+    </div>
+  );
+}
+
+function InstructorListView() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
@@ -155,7 +196,7 @@ export default function InstructorsTab() {
   };
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="flex flex-col flex-1 min-h-0">
       {/* 필터 바 */}
       <div className="flex items-center gap-2 flex-wrap pb-3 shrink-0">
         <div className="relative">

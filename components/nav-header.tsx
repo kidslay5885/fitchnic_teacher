@@ -4,7 +4,7 @@ import { useOutreach } from "@/hooks/use-outreach-store";
 import type { TabId } from "@/lib/types";
 import {
   LayoutDashboard, Users, MessageSquare, Calendar,
-  FileText, Ban, Mail, Activity, PanelLeftClose, PanelLeftOpen, Youtube,
+  FileText, Ban, Mail, Activity, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
@@ -15,7 +15,6 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "applications", label: "지원서", icon: FileText },
   { id: "banned", label: "연락금지", icon: Ban },
   { id: "messages", label: "메시지", icon: Mail },
-  { id: "youtube-channels", label: "YT채널수집", icon: Youtube },
 ];
 
 export default function NavHeader({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {

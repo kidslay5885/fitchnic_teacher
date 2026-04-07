@@ -146,8 +146,7 @@ export type TabId =
   | "applications"
   | "banned"
   | "messages"
-  | "activity"
-  | "youtube-channels";
+  | "activity";
 
 export interface InstructorWithWaves extends Instructor {
   waves: OutreachWave[];

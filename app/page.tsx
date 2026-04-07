@@ -11,7 +11,6 @@ import ApplicationsTab from "@/components/applications-tab";
 import BannedTab from "@/components/banned-tab";
 import MessagesTab from "@/components/messages-tab";
 import ActivityTab from "@/components/activity-tab";
-import YouTubeChannelsTab from "@/components/youtube-channels-tab";
 
 function MainContent() {
   const { state } = useOutreach();
@@ -41,7 +40,6 @@ function MainContent() {
           {state.tab === "banned" && <BannedTab />}
           {state.tab === "messages" && <MessagesTab />}
           {state.tab === "activity" && <ActivityTab />}
-          {state.tab === "youtube-channels" && <YouTubeChannelsTab />}
         </div>
       </main>
     </div>
