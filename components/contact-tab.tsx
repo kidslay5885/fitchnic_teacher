@@ -120,9 +120,9 @@ export default function ContactTab() {
   });
 
   /* ── 개별 발송 저장 ── */
-  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string; contact_assignee: string }) => {
+  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => {
     try {
-      const { pre_info, meeting_type, contact_assignee, ...waveData } = data;
+      const { pre_info, meeting_type, contact_assignee, has_own_lecture, lecture_appeal, sns_over_10k, meeting_type_override, ...waveData } = data;
       // 발송 기록 저장
       const res = await fetch(`/api/instructors/${instructorId}/waves`, {
         method: "POST",
@@ -130,13 +130,15 @@ export default function ContactTab() {
         body: JSON.stringify({ wave_number: waveNumber, ...waveData }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "저장 실패");
-      // 사전 정보 + 미팅 방식은 강사 테이블에 저장 (1~3차 공유)
+      // 사전 정보 + 미팅 방식 + 평가 데이터는 강사 테이블에 저장 (1~3차 공유)
       const inst = state.instructors.find(i => i.id === instructorId);
-      if (inst?.pre_info !== pre_info || inst?.meeting_type !== meeting_type || inst?.contact_assignee !== contact_assignee) {
+      const instructorUpdate = { pre_info, meeting_type, contact_assignee, has_own_lecture, lecture_appeal, sns_over_10k, meeting_type_override };
+      const hasChanges = inst?.pre_info !== pre_info || inst?.meeting_type !== meeting_type || inst?.contact_assignee !== contact_assignee || inst?.has_own_lecture !== has_own_lecture || inst?.lecture_appeal !== lecture_appeal || inst?.sns_over_10k !== sns_over_10k || inst?.meeting_type_override !== meeting_type_override;
+      if (hasChanges) {
         const r2 = await fetch(`/api/instructors/${instructorId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pre_info, meeting_type, contact_assignee }),
+          body: JSON.stringify(instructorUpdate),
         });
         if (r2.ok) dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await r2.json() });
       }
@@ -541,6 +543,10 @@ export default function ContactTab() {
           preInfo={state.instructors.find(i => i.id === editingWave.instructorId)?.pre_info || ""}
           meetingType={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type || ""}
           contactAssignee={state.instructors.find(i => i.id === editingWave.instructorId)?.contact_assignee || ""}
+          hasOwnLecture={state.instructors.find(i => i.id === editingWave.instructorId)?.has_own_lecture || ""}
+          lectureAppeal={state.instructors.find(i => i.id === editingWave.instructorId)?.lecture_appeal || ""}
+          snsOver10k={state.instructors.find(i => i.id === editingWave.instructorId)?.sns_over_10k || ""}
+          meetingTypeOverride={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type_override || false}
           onSave={(data) => handleWaveSave(editingWave.instructorId, editingWave.wave, data)}
           onDelete={() => handleWaveDelete(editingWave.instructorId, editingWave.wave)}
           onClose={() => setEditingWave(null)}
@@ -669,13 +675,37 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
 /* ── 발송 편집 팝오버 ── */
 const RESPONSE_METHODS = ["전화", "문자", "이메일", "카톡", "DM", "기타"] as const;
 
-function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: initialMeetingType, contactAssignee: initialContactAssignee, onSave, onDelete, onClose }: {
+// 평가 항목 기반 미팅 방식 자동 산출
+function calculateMeetingType(hasLecture: string, appeal: string, sns: string): string {
+  if (hasLecture === "O") {
+    if (appeal === "높음") return "대면미팅";
+    if (appeal === "낮음") return "줌미팅";
+  }
+  if (hasLecture === "X") {
+    if (sns === "O") return "줌미팅";
+    if (sns === "X") return "보류";
+  }
+  return "";
+}
+
+// 미팅 방식별 안내 문구
+const MEETING_TYPE_DESCRIPTIONS: Record<string, string> = {
+  "대면미팅": "핵심 조건 충족. 최우선 진행. → 본부장님 일정 조율 후 대면 미팅 세팅",
+  "줌미팅": "가능성 있음. 검토 후 진행. → 줌 일정 조율. 미팅 후 대면 전환 여부 결정",
+  "보류": "현재 조건 미충족. → 강사모집 탭 상태 \"보류\" 처리 후 대기",
+};
+
+function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: initialMeetingType, contactAssignee: initialContactAssignee, hasOwnLecture: initialHasOwnLecture, lectureAppeal: initialLectureAppeal, snsOver10k: initialSnsOver10k, meetingTypeOverride: initialOverride, onSave, onDelete, onClose }: {
   wave: OutreachWave | undefined;
   waveNumber: number;
   preInfo: string;
   meetingType: string;
   contactAssignee: string;
-  onSave: (data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string; contact_assignee: string }) => Promise<void>;
+  hasOwnLecture: string;
+  lectureAppeal: string;
+  snsOver10k: string;
+  meetingTypeOverride: boolean;
+  onSave: (data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -685,110 +715,231 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   const [preInfo, setPreInfo] = useState(initialPreInfo);
   const [meetingType, setMeetingType] = useState(initialMeetingType);
   const [contactAssignee, setContactAssignee] = useState(initialContactAssignee);
+  const [hasOwnLecture, setHasOwnLecture] = useState(initialHasOwnLecture);
+  const [lectureAppeal, setLectureAppeal] = useState(initialLectureAppeal);
+  const [snsOver10k, setSnsOver10k] = useState(initialSnsOver10k);
+  const [isOverride, setIsOverride] = useState(initialOverride);
   const [saving, setSaving] = useState(false);
+
+  // 평가 입력 변경 시 자동 산출
+  const autoMeetingType = calculateMeetingType(hasOwnLecture, lectureAppeal, snsOver10k);
+
+  // 강의 X 선택 시 매력도 초기화
+  const handleLectureChange = (value: string) => {
+    setHasOwnLecture(hasOwnLecture === value ? "" : value);
+    if (value === "X" || (hasOwnLecture === "O" && value === "O")) {
+      setLectureAppeal("");
+    }
+    setIsOverride(false);
+  };
+
+  // 평가 항목 변경 시 오버라이드 해제 + 자동 반영
+  useEffect(() => {
+    if (!isOverride && autoMeetingType) {
+      setMeetingType(autoMeetingType);
+    }
+  }, [autoMeetingType, isOverride]);
+
+  // 미팅 방식 수동 변경
+  const handleMeetingTypeManual = (type: string) => {
+    if (meetingType === type) {
+      setMeetingType("");
+      setIsOverride(false);
+    } else {
+      setMeetingType(type);
+      setIsOverride(type !== autoMeetingType);
+    }
+  };
 
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await onSave({ sent_date: date, result: result || "무응답", response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee });
+      await onSave({ sent_date: date, result: result || "무응답", response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee, has_own_lecture: hasOwnLecture, lecture_appeal: lectureAppeal, sns_over_10k: snsOver10k, meeting_type_override: isOverride });
     } finally { setSaving(false); }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg w-[520px] p-6 space-y-5" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
+      <div className="bg-white rounded-lg shadow-lg w-[820px] max-h-[90vh] p-6 flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
           <p className="text-base font-semibold">{waveNumber}차 발송</p>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">발송일</label>
-            <Input type="date" className="h-9 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+        <div className="flex gap-6 flex-1 min-h-0">
+          {/* ── 왼쪽: 발송 정보 + 평가 ── */}
+          <div className="w-[380px] space-y-4 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">발송일</label>
+                <Input type="date" className="h-9 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">결과</label>
+                <Select value={result || "무응답"} onValueChange={setResult}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">응답 방식</label>
+              <div className="flex flex-wrap gap-2">
+                {RESPONSE_METHODS.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setResponseMethod(responseMethod === m ? "" : m)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                      responseMethod === m
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">담당자</label>
+              <div className="flex gap-2">
+                {(["정승희", "김보성"] as const).map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => setContactAssignee(contactAssignee === a ? "" : a)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                      contactAssignee === a
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── 강사 평가 ── */}
+            <div className="border rounded-lg p-3 space-y-3 bg-gray-50/50">
+              <label className="text-xs font-semibold text-foreground block">강사 평가</label>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">① 자체 강의 보유</label>
+                <div className="flex gap-2">
+                  {(["O", "X"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => handleLectureChange(v)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        hasOwnLecture === v
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">② 강의 매력도 (핏크닉과의 핏)</label>
+                <div className="flex gap-2">
+                  {(["높음", "낮음"] as const).map((v) => (
+                    <button
+                      key={v}
+                      disabled={hasOwnLecture !== "O"}
+                      onClick={() => { setLectureAppeal(lectureAppeal === v ? "" : v); setIsOverride(false); }}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        hasOwnLecture !== "O"
+                          ? "bg-gray-100 text-gray-300 border-gray-200 cursor-not-allowed"
+                          : lectureAppeal === v
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                  {hasOwnLecture === "X" && (
+                    <span className="text-xs text-muted-foreground self-center ml-1">강의 X → 비활성</span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">③ SNS 팔로워 1만 이상</label>
+                <div className="flex gap-2">
+                  {(["O", "X"] as const).map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => { setSnsOver10k(snsOver10k === v ? "" : v); setIsOverride(false); }}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                        snsOver10k === v
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                      }`}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ── 미팅 방식 (자동 산출 + 수동 변경) ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <label className="text-xs text-muted-foreground block">미팅 방식</label>
+                {autoMeetingType && !isOverride && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">자동</span>
+                )}
+                {isOverride && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 font-medium">수동 변경</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {(["줌미팅", "대면미팅", "보류"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => handleMeetingTypeManual(t)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                      meetingType === t
+                        ? t === "보류"
+                          ? "bg-orange-500 text-white border-orange-500"
+                          : "bg-primary text-primary-foreground border-primary"
+                        : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+              {meetingType && MEETING_TYPE_DESCRIPTIONS[meetingType] && (
+                <p className="text-xs text-muted-foreground mt-1.5">{MEETING_TYPE_DESCRIPTIONS[meetingType]}</p>
+              )}
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">결과</label>
-            <Select value={result || "무응답"} onValueChange={setResult}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-              </SelectContent>
-            </Select>
+
+          {/* ── 오른쪽: 사전 정보 ── */}
+          <div className="flex-1 flex flex-col min-w-0">
+            <label className="text-xs text-muted-foreground mb-1 block">사전 정보</label>
+            <textarea
+              className="w-full flex-1 border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder="강사에 대한 사전 정보나 메모..."
+              value={preInfo}
+              onChange={(e) => setPreInfo(e.target.value)}
+            />
           </div>
         </div>
 
-        <div>
-          <label className="text-xs text-muted-foreground mb-1.5 block">응답 방식</label>
-          <div className="flex gap-2">
-            {RESPONSE_METHODS.map((m) => (
-              <button
-                key={m}
-                onClick={() => setResponseMethod(responseMethod === m ? "" : m)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-                  responseMethod === m
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs text-muted-foreground mb-1.5 block">담당자</label>
-          <div className="flex gap-2">
-            {(["정승희", "김보성"] as const).map((a) => (
-              <button
-                key={a}
-                onClick={() => setContactAssignee(contactAssignee === a ? "" : a)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-                  contactAssignee === a
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                {a}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs text-muted-foreground mb-1.5 block">미팅 방식</label>
-          <div className="flex gap-2">
-            {(["줌미팅", "대면미팅"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setMeetingType(meetingType === t ? "" : t)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-                  meetingType === t
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-xs text-muted-foreground mb-1 block">사전 정보</label>
-          <textarea
-            className="w-full border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
-            rows={10}
-            placeholder="강사에 대한 사전 정보나 메모..."
-            value={preInfo}
-            onChange={(e) => setPreInfo(e.target.value)}
-          />
-        </div>
-
-        <div className="flex gap-2">
+        <div className="flex gap-2 mt-5">
           <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSubmit} disabled={saving}>
             {saving ? "저장 중..." : "저장"}
           </Button>

@@ -57,6 +57,10 @@ export interface Instructor {
   has_response: boolean;
   pre_questions: string;
   meeting_type: string;
+  has_own_lecture: string;
+  lecture_appeal: string;
+  sns_over_10k: string;
+  meeting_type_override: boolean;
   created_at: string;
   updated_at: string;
 }
