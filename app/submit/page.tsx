@@ -564,7 +564,7 @@ function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange,
             value={form.assignee}
             onChange={(e) => setForm({ ...form, assignee: e.target.value })}
             className="h-8 text-sm"
-            placeholder="이름 입력"
+            placeholder="본인 이름 입력"
           />
           {form.assignee && !ASSIGNEES.includes(form.assignee) && (
             <div className="absolute z-10 mt-0.5 w-full bg-white border rounded shadow-md">
