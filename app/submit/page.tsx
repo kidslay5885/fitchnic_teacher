@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { STATUSES, STATUS_COLORS, ASSIGNEES, SOURCES } from "@/lib/constants";
 import type { Instructor, InstructorStatus } from "@/lib/types";
-import { Search, ChevronUp, ChevronDown, AlertTriangle, Ban, CheckCircle2, Plus, Minus, RotateCcw } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, AlertTriangle, Ban, CheckCircle2, Plus, Minus, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 
 type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email" | "created_at";
@@ -59,6 +59,7 @@ export default function SubmitPage() {
   const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [editingInstructor, setEditingInstructor] = useState<Instructor | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 강사 목록 로드
@@ -264,8 +265,9 @@ export default function SubmitPage() {
                   return (
                     <div
                       key={i.id}
-                      className={`grid items-center border-b text-sm ${highlightId === i.id ? "!bg-yellow-200 ring-2 ring-yellow-400 ring-inset transition-all duration-300" : ROW_BG[i.status] || "bg-white"}`}
+                      className={`grid items-center border-b text-sm cursor-pointer hover:bg-blue-50/50 ${editingInstructor?.id === i.id ? "!bg-blue-100 ring-2 ring-blue-400 ring-inset" : highlightId === i.id ? "!bg-yellow-200 ring-2 ring-yellow-400 ring-inset transition-all duration-300" : ROW_BG[i.status] || "bg-white"}`}
                       style={{ position: "absolute", top: 0, left: 0, right: 0, height: ROW_H, gridTemplateColumns: GRID, transform: `translateY(${vRow.start}px)` }}
+                      onClick={() => setEditingInstructor(i)}
                     >
                       <div className="px-2 flex items-center border-r border-gray-200/60">
                         <Badge className={`text-xs px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>
@@ -315,8 +317,11 @@ export default function SubmitPage() {
           <SubmitForm
             instructors={instructors}
             onAdded={(inst) => setInstructors((prev) => [...prev, inst])}
+            onUpdated={(inst) => setInstructors((prev) => prev.map((p) => p.id === inst.id ? inst : p))}
             onScrollTo={scrollToInstructor}
             onNameChange={setSearch}
+            editing={editingInstructor}
+            onCancelEdit={() => setEditingInstructor(null)}
           />
         </div>
       </div>
@@ -341,23 +346,50 @@ function SortHeader({ label, col, sk, sd, onSort, center, last }: {
   );
 }
 
-/* ── 강사 추가 폼 (실시간 중복/금지 체크) ── */
-function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
+/* ── 강사 추가/수정 폼 ── */
+function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange, editing, onCancelEdit }: {
   instructors: Instructor[];
   onAdded: (inst: Instructor) => void;
+  onUpdated: (inst: Instructor) => void;
   onScrollTo: (id: string) => void;
   onNameChange: (name: string) => void;
+  editing: Instructor | null;
+  onCancelEdit: () => void;
 }) {
-  const [form, setForm] = useState({
+  const emptyForm = {
     name: "", field: "", assignee: "", email: "",
     instagram: "", youtube: "", phone: "", ref_link: "",
     has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
     source: "강사모집" as string, notes: "",
-  });
+  };
+  const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [refLinks, setRefLinks] = useState<string[]>([""]);
   const [urlTitles, setUrlTitles] = useState<Record<string, string>>({});
   const [urlLoading, setUrlLoading] = useState<Record<string, boolean>>({});
+
+  // 수정 모드: editing 변경 시 폼에 데이터 채우기
+  useEffect(() => {
+    if (editing) {
+      setForm({
+        name: editing.name || "",
+        field: editing.field || "",
+        assignee: editing.assignee || "",
+        email: editing.email || "",
+        instagram: editing.instagram || "",
+        youtube: editing.youtube || "",
+        phone: editing.phone || "",
+        ref_link: editing.ref_link || "",
+        has_lecture_history: editing.has_lecture_history || "",
+        lecture_platform: editing.lecture_platform || "",
+        lecture_platform_url: editing.lecture_platform_url || "",
+        source: editing.source || "강사모집",
+        notes: editing.notes || "",
+      });
+      setRefLinks(editing.ref_link ? editing.ref_link.split(/\s*,\s*/).filter(Boolean) : [""]);
+      setUrlTitles({});
+    }
+  }, [editing]);
 
   // URL 제목 가져오기 (디바운스) - youtube, instagram
   useEffect(() => {
@@ -419,10 +451,10 @@ function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
     return () => timers.forEach(clearTimeout);
   }, [refLinks]);
 
-  // 강사명 입력 시 왼쪽 테이블 검색어 연동
+  // 강사명 입력 시 왼쪽 테이블 검색어 연동 (추가 모드에서만)
   useEffect(() => {
-    onNameChange(form.name.trim());
-  }, [form.name, onNameChange]);
+    if (!editing) onNameChange(form.name.trim());
+  }, [form.name, onNameChange, editing]);
 
   // 실시간 중복/금지/유사 체크
   const nameCheck = useMemo(() => {
@@ -432,7 +464,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
     const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
     const normalized = normalize(name);
     const duplicates = instructors.filter((i) =>
-      normalize(i.name) === normalized
+      normalize(i.name) === normalized && (!editing || i.id !== editing.id)
     );
     if (duplicates.length > 0) {
       const banned = duplicates.some((d) => d.is_banned);
@@ -442,6 +474,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
     // 유사도 체크: 편집 거리 2 이하 또는 한쪽이 다른쪽을 포함
     if (normalized.length >= 2) {
       const similars = instructors.filter((i) => {
+        if (editing && i.id === editing.id) return false;
         const n = normalize(i.name);
         if (n === normalized) return false;
         if (n.includes(normalized) || normalized.includes(n)) return true;
@@ -452,7 +485,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
       if (similars.length > 0) return { type: "similar" as const, matches: similars };
     }
     return { type: "ok" as const };
-  }, [form.name, instructors]);
+  }, [form.name, instructors, editing]);
 
   // 중복/금지 감지 시 자동 스크롤
   useEffect(() => {
@@ -462,34 +495,46 @@ function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
   }, [nameCheck, onScrollTo]);
 
   const resetForm = () => {
-    setForm({
-      name: "", field: "", assignee: "", email: "",
-      instagram: "", youtube: "", phone: "", ref_link: "",
-      has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
-      source: "강사모집", notes: "",
-    });
+    setForm(emptyForm);
     setRefLinks([""]);
     setUrlTitles({});
     onNameChange("");
+    onCancelEdit();
   };
 
   const handleSubmit = async (force = false) => {
     if (!form.name.trim()) { toast.error("강사 이름을 입력하세요."); return; }
-    if (nameCheck?.type === "banned") { toast.error("연락 금지 대상입니다. 추가할 수 없습니다."); return; }
-    if (nameCheck?.type === "duplicate" && !force) return;
+    if (!editing && nameCheck?.type === "banned") { toast.error("연락 금지 대상입니다. 추가할 수 없습니다."); return; }
+    if (!editing && nameCheck?.type === "duplicate" && !force) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/instructors", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, ref_link: refLinks.filter((l) => l.trim()).join(" , "), _force: force }),
-      });
-      const data = await res.json();
-      if (data.warning === "duplicate_name" && !force) return;
-      if (!res.ok && !data.warning) throw new Error(data.error);
-      toast.success(`${form.name} 추가 완료`);
-      onAdded(data);
-      resetForm();
+      const payload = { ...form, ref_link: refLinks.filter((l) => l.trim()).join(" , ") };
+      if (editing) {
+        // 수정 모드
+        const res = await fetch(`/api/instructors/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, _expected_updated_at: editing.updated_at }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        toast.success(`${form.name} 수정 완료`);
+        onUpdated(data);
+        resetForm();
+      } else {
+        // 추가 모드
+        const res = await fetch("/api/instructors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, _force: force }),
+        });
+        const data = await res.json();
+        if (data.warning === "duplicate_name" && !force) return;
+        if (!res.ok && !data.warning) throw new Error(data.error);
+        toast.success(`${form.name} 추가 완료`);
+        onAdded(data);
+        resetForm();
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -500,6 +545,16 @@ function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
   return (
     <div className="border rounded-lg bg-white h-full overflow-y-auto flex flex-col">
       <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+
+      {/* 모드 표시 헤더 */}
+      {editing && (
+        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded px-3 py-2">
+          <span className="text-sm font-medium text-blue-700">수정 모드: {editing.name}</span>
+          <button onClick={resetForm} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
+            <X className="h-3.5 w-3.5" />새로 추가로 전환
+          </button>
+        </div>
+      )}
 
       <div className="space-y-3">
         {/* 찾은 사람 */}
@@ -692,8 +747,17 @@ function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
       </div>
 
       {/* 버튼 */}
-      <div className="pt-1">
-        {nameCheck?.type === "duplicate" ? (
+      <div className="pt-1 space-y-2">
+        {editing ? (
+          <>
+            <Button className="w-full h-9 text-sm" onClick={() => handleSubmit(false)} disabled={saving}>
+              {saving ? "저장 중..." : "수정"}
+            </Button>
+            <Button variant="outline" className="w-full h-9 text-sm" onClick={resetForm}>
+              새로 추가로 전환
+            </Button>
+          </>
+        ) : nameCheck?.type === "duplicate" ? (
           <Button className="w-full h-9 text-sm" onClick={() => handleSubmit(true)} disabled={saving}>
             {saving ? "저장 중..." : "그래도 추가"}
           </Button>
