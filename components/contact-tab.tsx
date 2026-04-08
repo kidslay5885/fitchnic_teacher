@@ -21,7 +21,7 @@ const FINAL_STATUSES = ["진행 중", "미팅 완료", "계약 완료", "보류"
 type ViewFilter = "all" | "no_preinfo" | "check_needed" | InstructorStatus;
 type SortKey = "name" | "status" | "field" | "assignee" | "final_status";
 type SortDir = "asc" | "desc";
-type WaveSortKey = "none" | "check_needed" | "date_asc" | "date_desc";
+type WaveFilterKey = "none" | "체크필요" | "무응답" | "응답" | "거절";
 
 const ROW_H = 40;
 const GRID = "36px 1.5fr 88px 1fr 76px 1fr 1fr 1fr 88px";
@@ -55,7 +55,7 @@ export default function ContactTab() {
   const [bulkDate, setBulkDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [bulkResult, setBulkResult] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [waveSort, setWaveSort] = useState<{ wave: number; key: WaveSortKey }>({ wave: 0, key: "none" });
+  const [waveFilter, setWaveFilter] = useState<{ wave: number; key: WaveFilterKey }>({ wave: 0, key: "none" });
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
 
@@ -121,29 +121,19 @@ export default function ContactTab() {
       return sortDir === "asc" ? cmp : -cmp;
     });
 
-    // 웨이브 정렬
-    if (waveSort.key !== "none" && waveSort.wave > 0) {
-      const wn = waveSort.wave;
-      sorted = [...sorted].sort((a, b) => {
-        const wa = (wavesMap[a.id] || []).find((w) => w.wave_number === wn);
-        const wb = (wavesMap[b.id] || []).find((w) => w.wave_number === wn);
-        if (waveSort.key === "check_needed") {
-          const aCheck = wa && (!wa.result || wa.result === "체크필요") && wa.sent_date ? 1 : 0;
-          const bCheck = wb && (!wb.result || wb.result === "체크필요") && wb.sent_date ? 1 : 0;
-          if (aCheck !== bCheck) return bCheck - aCheck;
-          // 체크필요 내에서 D-day 오래된 순 (발송일 빠른 순)
-          if (aCheck && bCheck) return (wa!.sent_date || "").localeCompare(wb!.sent_date || "");
-          return 0;
-        }
-        const dateA = wa?.sent_date || "";
-        const dateB = wb?.sent_date || "";
-        if (waveSort.key === "date_asc") return dateA.localeCompare(dateB);
-        return dateB.localeCompare(dateA);
+    // 웨이브 상태 필터
+    if (waveFilter.key !== "none" && waveFilter.wave > 0) {
+      const wn = waveFilter.wave;
+      sorted = sorted.filter((i) => {
+        const w = (wavesMap[i.id] || []).find((w) => w.wave_number === wn);
+        if (!w) return false;
+        if (waveFilter.key === "체크필요") return !w.result || w.result === "체크필요";
+        return w.result === waveFilter.key;
       });
     }
 
     return sorted;
-  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveSort, wavesMap, checkNeededIds]);
+  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveFilter, wavesMap, checkNeededIds]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -466,8 +456,8 @@ export default function ContactTab() {
             <WaveHeader
               key={n}
               wave={n}
-              active={waveSort.wave === n ? waveSort.key : "none"}
-              onSort={(key) => setWaveSort(prev =>
+              active={waveFilter.wave === n ? waveFilter.key : "none"}
+              onFilter={(key) => setWaveFilter(prev =>
                 prev.wave === n && prev.key === key ? { wave: 0, key: "none" } : { wave: n, key }
               )}
             />
@@ -1109,11 +1099,11 @@ function SortHeader({ label, col, sk, sd, onSort, last }: {
   );
 }
 
-/* ── 웨이브 헤더 (필터/정렬) ── */
-function WaveHeader({ wave, active, onSort }: {
+/* ── 웨이브 헤더 (상태 필터) ── */
+function WaveHeader({ wave, active, onFilter }: {
   wave: number;
-  active: WaveSortKey;
-  onSort: (key: WaveSortKey) => void;
+  active: WaveFilterKey;
+  onFilter: (key: WaveFilterKey) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1137,18 +1127,14 @@ function WaveHeader({ wave, active, onSort }: {
         {active !== "none" && <ChevronDown className="h-3 w-3" />}
       </div>
       {open && (
-        <div className="absolute top-full left-0 z-20 bg-white border rounded-md shadow-lg py-1 min-w-[120px]">
-          {([
-            { key: "check_needed" as WaveSortKey, label: "체크필요 우선" },
-            { key: "date_asc" as WaveSortKey, label: "발송일 오래된순" },
-            { key: "date_desc" as WaveSortKey, label: "발송일 최신순" },
-          ]).map((opt) => (
+        <div className="absolute top-full left-0 z-20 bg-white border rounded-md shadow-lg py-1 min-w-[100px]">
+          {(["체크필요", "무응답", "응답", "거절"] as WaveFilterKey[]).map((key) => (
             <button
-              key={opt.key}
-              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 ${active === opt.key ? "text-primary font-semibold bg-primary/5" : ""}`}
-              onClick={() => { onSort(opt.key); setOpen(false); }}
+              key={key}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 ${active === key ? "text-primary font-semibold bg-primary/5" : ""}`}
+              onClick={() => { onFilter(key); setOpen(false); }}
             >
-              {opt.label}
+              {key}
             </button>
           ))}
           {active !== "none" && (
@@ -1156,9 +1142,9 @@ function WaveHeader({ wave, active, onSort }: {
               <div className="border-t my-1" />
               <button
                 className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-gray-100"
-                onClick={() => { onSort("none"); setOpen(false); }}
+                onClick={() => { onFilter("none"); setOpen(false); }}
               >
-                정렬 해제
+                필터 해제
               </button>
             </>
           )}
