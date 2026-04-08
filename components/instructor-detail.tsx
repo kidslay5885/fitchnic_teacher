@@ -17,7 +17,7 @@ import { STATUS_COLORS, STATUSES, ASSIGNEES, WAVE_RESULTS } from "@/lib/constant
 import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, StatusHistory, OutreachWave } from "@/lib/types";
 import { toast } from "sonner";
-import { ExternalLink, Clock, Send, Pencil, Trash2, ArrowRight } from "lucide-react";
+import { ExternalLink, Clock, Send, Pencil, Trash2, ArrowRight, Plus, Minus } from "lucide-react";
 
 interface Props {
   instructor: Instructor;
@@ -30,6 +30,7 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
   const [form, setForm] = useState(instructor);
   const [history, setHistory] = useState<StatusHistory[]>([]);
   const [waves, setWaves] = useState<OutreachWave[]>([]);
+  const [refLinks, setRefLinks] = useState<string[]>([""]);
   const [statusChange, setStatusChange] = useState({ to: "", reason: "", changed_by: "" });
 
   const loadDetails = useCallback(async () => {
@@ -212,7 +213,11 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold">기본 정보</p>
                 {!editing && (
-                  <button className="text-xs text-primary hover:underline flex items-center gap-1" onClick={() => setEditing(true)}>
+                  <button className="text-xs text-primary hover:underline flex items-center gap-1" onClick={() => {
+                    const links = form.ref_link ? form.ref_link.split(/\s*,\s*/).filter(Boolean) : [""];
+                    setRefLinks(links.length ? links : [""]);
+                    setEditing(true);
+                  }}>
                     <Pencil className="h-3 w-3" />수정
                   </button>
                 )}
@@ -244,7 +249,52 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                     </Select>
                   </div>
                   <div className="col-span-2"><Label className="text-xs">강의 플랫폼</Label><Input value={form.lecture_platform} onChange={(e) => setForm({ ...form, lecture_platform: e.target.value })} className="h-8 text-sm" /></div>
-                  <div className="col-span-2"><Label className="text-xs">참조 링크</Label><Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" /></div>
+                  <div className="col-span-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">참조 링크</Label>
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                        onClick={() => {
+                          const next = [...refLinks, ""];
+                          setRefLinks(next);
+                          setForm({ ...form, ref_link: next.filter((l) => l.trim()).join(" , ") });
+                        }}
+                      >
+                        <Plus className="h-3 w-3" />추가
+                      </button>
+                    </div>
+                    {refLinks.map((link, idx) => (
+                      <div key={idx} className="flex gap-1 mt-1">
+                        <Input
+                          value={link}
+                          placeholder="https://"
+                          onChange={(e) => {
+                            const next = [...refLinks];
+                            next[idx] = e.target.value;
+                            setRefLinks(next);
+                            setForm({ ...form, ref_link: next.filter((l) => l.trim()).join(" , ") });
+                          }}
+                          className="h-8 text-sm"
+                        />
+                        {refLinks.length > 1 && (
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => {
+                              const next = refLinks.filter((_, i) => i !== idx);
+                              setRefLinks(next);
+                              setForm({ ...form, ref_link: next.filter((l) => l.trim()).join(" , ") });
+                            }}
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                   <div className="col-span-2"><Label className="text-xs">미팅 일정</Label><Input value={form.meeting_date} onChange={(e) => setForm({ ...form, meeting_date: e.target.value })} className="h-8 text-sm" /></div>
                   <div className="col-span-2"><Label className="text-xs">미팅 메모</Label><Textarea value={form.meeting_memo} onChange={(e) => setForm({ ...form, meeting_memo: e.target.value })} rows={3} className="text-sm" /></div>
                   <div className="col-span-2"><Label className="text-xs">비고</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="text-sm" /></div>
@@ -261,7 +311,23 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                   <InfoRow label="전화" value={instructor.phone} />
                   <InfoRow label="강의이력" value={instructor.has_lecture_history} />
                   <InfoRow label="플랫폼" value={instructor.lecture_platform} />
-                  <InfoRow label="참조링크" value={instructor.ref_link} link />
+                  {instructor.ref_link && (() => {
+                    const links = instructor.ref_link.split(/\s*,\s*/).filter(Boolean);
+                    if (links.length <= 1) return <InfoRow label="참조링크" value={instructor.ref_link} link />;
+                    return (
+                      <div className="flex items-start gap-2 py-0.5">
+                        <span className="text-xs text-muted-foreground min-w-[60px] shrink-0 pt-0.5">참조링크</span>
+                        <div className="space-y-0.5">
+                          {links.map((l, i) => (
+                            <a key={i} href={l} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1 break-all">
+                              {l.length > 35 ? l.slice(0, 35) + "..." : l}
+                              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <InfoRow label="미팅일정" value={instructor.meeting_date} />
                   <InfoRow label="출처" value={instructor.source} />
                   {instructor.exclude_reason && <InfoRow label="제외사유" value={instructor.exclude_reason} />}
