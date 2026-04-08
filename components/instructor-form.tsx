@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { ASSIGNEES, SOURCES, STATUSES } from "@/lib/constants";
 import { toast } from "sonner";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Plus, Minus } from "lucide-react";
 
 interface Props {
   onClose: () => void;
@@ -31,6 +31,7 @@ export default function InstructorForm({ onClose }: Props) {
     has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
     source: "강사모집", notes: "", status: "미검토",
   });
+  const [refLinks, setRefLinks] = useState<string[]>([""]);
   const [saving, setSaving] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null);
 
@@ -41,7 +42,7 @@ export default function InstructorForm({ onClose }: Props) {
       const res = await fetch("/api/instructors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, _force: force }),
+        body: JSON.stringify({ ...form, ref_link: refLinks.filter((l) => l.trim()).join(" , "), _force: force }),
       });
       const data = await res.json();
       if (data.warning === "duplicate_name" && !force) {
@@ -170,10 +171,41 @@ export default function InstructorForm({ onClose }: Props) {
                 <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" />
               </div>
 
-              {/* 참조 링크 */}
+              {/* 참조 링크 (복수) */}
               <div className="col-span-2">
-                <Label className="text-xs">참조 링크</Label>
-                <Input value={form.ref_link} onChange={(e) => setForm({ ...form, ref_link: e.target.value })} className="h-8 text-sm" />
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">참조 링크</Label>
+                  <button
+                    type="button"
+                    onClick={() => setRefLinks([...refLinks, ""])}
+                    className="flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800"
+                  >
+                    <Plus className="h-3.5 w-3.5" />추가
+                  </button>
+                </div>
+                {refLinks.map((link, idx) => (
+                  <div key={idx} className="flex items-center gap-1 mt-1.5">
+                    <Input
+                      value={link}
+                      onChange={(e) => {
+                        const next = [...refLinks];
+                        next[idx] = e.target.value;
+                        setRefLinks(next);
+                      }}
+                      className="h-8 text-sm flex-1"
+                      placeholder="https://"
+                    />
+                    {refLinks.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setRefLinks(refLinks.filter((_, i) => i !== idx))}
+                        className="shrink-0 h-8 w-8 flex items-center justify-center rounded border border-gray-200 text-muted-foreground hover:text-red-500 hover:border-red-300"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
 
               {/* 이메일 */}
