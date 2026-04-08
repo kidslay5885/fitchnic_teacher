@@ -551,7 +551,7 @@ function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange,
         <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded px-3 py-2">
           <span className="text-sm font-medium text-blue-700">수정 모드: {editing.name}</span>
           <button onClick={resetForm} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800">
-            <X className="h-3.5 w-3.5" />새로 추가로 전환
+            <X className="h-3.5 w-3.5" />취소
           </button>
         </div>
       )}
@@ -754,7 +754,7 @@ function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange,
               {saving ? "저장 중..." : "수정"}
             </Button>
             <Button variant="outline" className="w-full h-9 text-sm" onClick={resetForm}>
-              새로 추가로 전환
+              취소
             </Button>
           </>
         ) : nameCheck?.type === "duplicate" ? (
