@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { STATUS_COLORS } from "@/lib/constants";
+import { STATUS_COLORS, STATUSES } from "@/lib/constants";
+import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus } from "@/lib/types";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -61,7 +62,7 @@ const PRE_QUESTIONS = [
 ];
 
 export default function MeetingTab() {
-  const { state, dispatch } = useOutreach();
+  const { state, dispatch, loadStats } = useOutreach();
   const [monthOffset, setMonthOffset] = useState(0);
   const [editingMeeting, setEditingMeeting] = useState<{
     instructor: Instructor; date: string; time: string; memo: string;
@@ -79,13 +80,42 @@ export default function MeetingTab() {
   const [remindDate, setRemindDate] = useState("");
   const [remindDone, setRemindDone] = useState(false);
   const [search, setSearch] = useState("");
+  const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
+
+  // 상태 클릭 → 팝오버
+  const handleStatusClick = (e: React.MouseEvent, instructor: Instructor) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setEditingStatus({ instructor, x: rect.left, y: rect.bottom + 4 });
+  };
+
+  // 상태 변경 처리
+  const handleStatusChange = async (instructorId: string, newStatus: InstructorStatus, reason: string) => {
+    try {
+      const inst = state.instructors.find(i => i.id === instructorId);
+      const body: any = { status: newStatus, _changed_by: inst?.assignee || "", _reason: reason };
+      if (newStatus === "컨펌 필요") body.confirm_reason = reason;
+      if (requiresReason(newStatus)) body.exclude_reason = reason;
+      const res = await fetch(`/api/instructors/${instructorId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      const updated = await res.json();
+      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: updated });
+      await loadStats();
+      toast.success(`${inst?.name} → ${newStatus}`);
+      setEditingStatus(null);
+    } catch (e: any) { toast.error(e.message); }
+  };
 
   // 응답을 받은 강사 (거절/제외/보류 제외) + 미팅 관련 강사
   const EXCLUDE_STATUSES = ["거절", "제외", "보류"];
   const respondedInstructors = useMemo(() => {
     return state.instructors.filter((i) => {
-      if (i.meeting_date || i.meeting_confirmed) return true;
       if (EXCLUDE_STATUSES.includes(i.status)) return false;
+      if (i.meeting_date || i.meeting_confirmed) return true;
       return i.has_response;
     });
   }, [state.instructors]);
@@ -326,7 +356,10 @@ export default function MeetingTab() {
           </span>
         </td>
         <td className="px-3 py-2 border-r border-gray-200/60">
-          <Badge className={`text-[10px] px-1.5 py-0 whitespace-nowrap ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge>
+          <Badge
+            className={`text-[10px] px-1.5 py-0 whitespace-nowrap cursor-pointer hover:ring-1 hover:ring-primary/30 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}
+            onClick={(e) => handleStatusClick(e, i)}
+          >{i.status}</Badge>
         </td>
         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px] hidden sm:table-cell">{i.field}</td>
         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap hidden md:table-cell">{i.contact_assignee || i.assignee}</td>
@@ -854,6 +887,16 @@ export default function MeetingTab() {
           </div>
         );
       })()}
+      {/* ── 상태 변경 팝오버 ── */}
+      {editingStatus && (
+        <StatusPopover
+          instructor={editingStatus.instructor}
+          x={editingStatus.x}
+          y={editingStatus.y}
+          onConfirm={handleStatusChange}
+          onClose={() => setEditingStatus(null)}
+        />
+      )}
       {/* ── 미팅 추가 모달 ── */}
       {showAddModal && (
         <AddMeetingModal
@@ -988,6 +1031,103 @@ function AddMeetingModal({ instructors, onSave, onClose }: {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/* ── 상태 변경 팝오버 ── */
+function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
+  instructor: Instructor;
+  x: number; y: number;
+  onConfirm: (id: string, status: InstructorStatus, reason: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const nextStatuses = STATUSES.filter(s => s !== instructor.status);
+  const [pendingStatus, setPendingStatus] = useState<InstructorStatus | null>(null);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const popW = 220;
+  const adjustedX = Math.min(x, window.innerWidth - popW - 16);
+  const adjustedY = y + 200 > window.innerHeight ? y - 200 - 8 : y;
+
+  const needsInput = (status: InstructorStatus) => requiresReason(status) || status === "컨펌 필요";
+
+  const handleSelect = async (status: InstructorStatus) => {
+    if (needsInput(status)) {
+      setPendingStatus(status);
+      return;
+    }
+    setSaving(true);
+    await onConfirm(instructor.id, status, "");
+    setSaving(false);
+  };
+
+  const handleReasonSubmit = async () => {
+    if (requiresReason(pendingStatus!) && !reason.trim()) { toast.error("사유를 입력하세요."); return; }
+    if (!pendingStatus) return;
+    setSaving(true);
+    await onConfirm(instructor.id, pendingStatus, reason);
+    setSaving(false);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-50 bg-white border rounded-lg shadow-lg p-3 space-y-2"
+      style={{ left: adjustedX, top: adjustedY, width: popW }}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-muted-foreground">
+          {pendingStatus ? (pendingStatus === "컨펌 필요" ? "컨펌 필요 메모" : `${pendingStatus} 사유`) : `${instructor.name} 상태 변경`}
+        </p>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {!pendingStatus ? (
+        <div className="space-y-1">
+          {nextStatuses.map(s => (
+            <button
+              key={s}
+              onClick={() => handleSelect(s)}
+              disabled={saving}
+              className={`w-full text-left px-3 py-1.5 rounded text-sm font-medium transition-colors hover:ring-1 hover:ring-primary/30 ${STATUS_COLORS[s]}`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Input
+            placeholder={pendingStatus === "컨펌 필요" ? "메모 입력 (선택)..." : "사유 입력..."}
+            className="h-8 text-sm"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleReasonSubmit(); }}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button size="sm" className="h-7 text-xs flex-1" onClick={handleReasonSubmit} disabled={saving}>
+              {saving ? "처리 중..." : "확인"}
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setPendingStatus(null); setReason(""); }}>
+              뒤로
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
