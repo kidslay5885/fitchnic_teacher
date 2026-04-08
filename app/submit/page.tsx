@@ -11,11 +11,28 @@ import {
 } from "@/components/ui/select";
 import { STATUSES, STATUS_COLORS, ASSIGNEES, SOURCES } from "@/lib/constants";
 import type { Instructor, InstructorStatus } from "@/lib/types";
-import { Search, ChevronUp, ChevronDown, AlertTriangle, Ban, CheckCircle2, Plus, Minus } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, AlertTriangle, Ban, CheckCircle2, Plus, Minus, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
-type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email";
+type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email" | "created_at";
 type SortDir = "asc" | "desc";
+
+const DEFAULT_SORT_KEY: SortKey = "created_at";
+const DEFAULT_SORT_DIR: SortDir = "desc";
+
+// 편집 거리 (Levenshtein) - 유사도 체크용
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+  return dp[m][n];
+}
 
 const ROW_H = 36;
 // 상태 | 찾은 사람 | 분야 | 강사명 | 강의 여부 | 플랫폼 | 유튜브 | 인스타 | 참조 | 이메일 | 메모
@@ -39,8 +56,8 @@ export default function SubmitPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<InstructorStatus | "전체">("전체");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("전체");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
+  const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +76,35 @@ export default function SubmitPage() {
   }, []);
 
   useEffect(() => { loadInstructors(); }, [loadInstructors]);
+
+  // 경량 동기화: 15초마다 변경 여부 확인 후 필요할 때만 리로드
+  useEffect(() => {
+    let syncRef = { count: 0, ts: "" };
+    const checkSync = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await fetch("/api/sync");
+        if (!res.ok) return;
+        const { count, latest_updated_at } = await res.json();
+        if (syncRef.count !== count || syncRef.ts !== latest_updated_at) {
+          syncRef = { count, ts: latest_updated_at };
+          loadInstructors();
+        }
+      } catch {}
+    };
+    fetch("/api/sync").then(r => r.json()).then(d => {
+      syncRef = { count: d.count, ts: d.latest_updated_at };
+    }).catch(() => {});
+    const interval = setInterval(checkSync, 15000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") checkSync();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loadInstructors]);
 
   // 필터 + 금지 제외
   // 찾은 사람 목록 (실제 데이터 기반)
@@ -89,12 +135,23 @@ export default function SubmitPage() {
   // 정렬
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
+      if (sortKey === "created_at") {
+        const at = new Date(a.created_at || 0).getTime();
+        const bt = new Date(b.created_at || 0).getTime();
+        return sortDir === "asc" ? at - bt : bt - at;
+      }
       const av = (a[sortKey] || "") as string;
       const bv = (b[sortKey] || "") as string;
       const cmp = av.localeCompare(bv, "ko");
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortKey, sortDir]);
+
+  const isDefaultSort = sortKey === DEFAULT_SORT_KEY && sortDir === DEFAULT_SORT_DIR;
+  const resetSort = useCallback(() => {
+    setSortKey(DEFAULT_SORT_KEY);
+    setSortDir(DEFAULT_SORT_DIR);
+  }, []);
 
   const virtualizer = useVirtualizer({
     count: sorted.length,
@@ -168,6 +225,11 @@ export default function SubmitPage() {
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">{sorted.length}명</span>
+        {!isDefaultSort && (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground" onClick={resetSort}>
+            <RotateCcw className="h-3 w-3 mr-1" />정렬 초기화
+          </Button>
+        )}
       </div>
 
       {/* 메인: 왼쪽 테이블 + 오른쪽 입력 폼 */}
@@ -254,6 +316,7 @@ export default function SubmitPage() {
             instructors={instructors}
             onAdded={(inst) => setInstructors((prev) => [...prev, inst])}
             onScrollTo={scrollToInstructor}
+            onNameChange={setSearch}
           />
         </div>
       </div>
@@ -279,10 +342,11 @@ function SortHeader({ label, col, sk, sd, onSort, center, last }: {
 }
 
 /* ── 강사 추가 폼 (실시간 중복/금지 체크) ── */
-function SubmitForm({ instructors, onAdded, onScrollTo }: {
+function SubmitForm({ instructors, onAdded, onScrollTo, onNameChange }: {
   instructors: Instructor[];
   onAdded: (inst: Instructor) => void;
   onScrollTo: (id: string) => void;
+  onNameChange: (name: string) => void;
 }) {
   const [form, setForm] = useState({
     name: "", field: "", assignee: "", email: "",
@@ -355,7 +419,12 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
     return () => timers.forEach(clearTimeout);
   }, [refLinks]);
 
-  // 실시간 중복/금지 체크
+  // 강사명 입력 시 왼쪽 테이블 검색어 연동
+  useEffect(() => {
+    onNameChange(form.name.trim());
+  }, [form.name, onNameChange]);
+
+  // 실시간 중복/금지/유사 체크
   const nameCheck = useMemo(() => {
     const name = form.name.trim();
     if (!name) return null;
@@ -365,10 +434,24 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
     const duplicates = instructors.filter((i) =>
       normalize(i.name) === normalized
     );
-    if (duplicates.length === 0) return { type: "ok" as const };
-    const banned = duplicates.some((d) => d.is_banned);
-    if (banned) return { type: "banned" as const, matches: duplicates };
-    return { type: "duplicate" as const, matches: duplicates };
+    if (duplicates.length > 0) {
+      const banned = duplicates.some((d) => d.is_banned);
+      if (banned) return { type: "banned" as const, matches: duplicates };
+      return { type: "duplicate" as const, matches: duplicates };
+    }
+    // 유사도 체크: 편집 거리 2 이하 또는 한쪽이 다른쪽을 포함
+    if (normalized.length >= 2) {
+      const similars = instructors.filter((i) => {
+        const n = normalize(i.name);
+        if (n === normalized) return false;
+        if (n.includes(normalized) || normalized.includes(n)) return true;
+        const maxLen = Math.max(n.length, normalized.length);
+        const threshold = maxLen <= 3 ? 1 : 2;
+        return editDistance(n, normalized) <= threshold;
+      });
+      if (similars.length > 0) return { type: "similar" as const, matches: similars };
+    }
+    return { type: "ok" as const };
   }, [form.name, instructors]);
 
   // 중복/금지 감지 시 자동 스크롤
@@ -387,6 +470,7 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
     });
     setRefLinks([""]);
     setUrlTitles({});
+    onNameChange("");
   };
 
   const handleSubmit = async (force = false) => {
@@ -482,6 +566,18 @@ function SubmitForm({ instructors, onAdded, onScrollTo }: {
               </div>
               {nameCheck.matches.map((d) => (
                 <div key={d.id} className="text-xs text-orange-600 bg-orange-100 rounded px-2 py-1">
+                  {d.name} {d.field && `| ${d.field}`} | {d.status}
+                </div>
+              ))}
+            </div>
+          )}
+          {nameCheck?.type === "similar" && (
+            <div className="mt-1.5 rounded border border-yellow-300 bg-yellow-50 p-2 space-y-1">
+              <div className="flex items-center gap-1 text-xs text-yellow-700 font-semibold">
+                <AlertTriangle className="h-3.5 w-3.5" />비슷한 이름이 있습니다
+              </div>
+              {nameCheck.matches.map((d) => (
+                <div key={d.id} className="text-xs text-yellow-600 bg-yellow-100 rounded px-2 py-1 cursor-pointer hover:bg-yellow-200" onClick={() => onScrollTo(d.id)}>
                   {d.name} {d.field && `| ${d.field}`} | {d.status}
                 </div>
               ))}
