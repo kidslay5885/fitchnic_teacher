@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { STATUSES, STATUS_COLORS } from "@/lib/constants";
 import { toast } from "sonner";
-import { Search, Trash2, ExternalLink, ChevronUp, ChevronDown, X } from "lucide-react";
+import { Search, Trash2, ExternalLink, ChevronUp, ChevronDown, X, Copy } from "lucide-react";
 
 const STATUS_OPTIONS = STATUSES;
 
@@ -242,6 +242,20 @@ export default function YouTubeChannelsTab() {
                   → {s} ({selectedIds.size})
                 </Button>
               ))}
+              <Button
+                size="sm" variant="outline"
+                className="h-8 text-xs"
+                onClick={() => {
+                  const emails = state.youtubeChannels
+                    .filter((c) => selectedIds.has(c.id) && c.email)
+                    .map((c) => c.email);
+                  if (emails.length === 0) { toast.error("이메일이 없습니다"); return; }
+                  navigator.clipboard.writeText(emails.join(", "));
+                  toast.success(`${emails.length}개 이메일 복사됨`);
+                }}
+              >
+                <Copy className="h-3.5 w-3.5 mr-1" />이메일 복사 ({selectedIds.size})
+              </Button>
               <Button size="sm" variant="outline" className="h-8 text-xs text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleBulkDelete}>
                 <Trash2 className="h-3.5 w-3.5 mr-1" />삭제 ({selectedIds.size})
               </Button>
