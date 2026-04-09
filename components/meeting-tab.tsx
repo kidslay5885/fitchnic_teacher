@@ -82,6 +82,27 @@ export default function MeetingTab() {
   const [search, setSearch] = useState("");
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
 
+  // 강의현황(구글시트)에 있는 강사명 Set
+  const [scheduleNames, setScheduleNames] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const now = new Date();
+    const monthName = `${now.getMonth() + 1}월`;
+    fetch(`/api/schedule?sheet=${encodeURIComponent(monthName)}`)
+      .then(res => res.json())
+      .then(data => {
+        const names = new Set<string>();
+        for (const week of data.weeks || []) {
+          for (const day of week.days || []) {
+            for (const lec of day.lectures || []) {
+              if (lec.instructor) names.add(lec.instructor.trim());
+            }
+          }
+        }
+        setScheduleNames(names);
+      })
+      .catch(() => {});
+  }, []);
+
   // 상태 클릭 → 팝오버
   const handleStatusClick = (e: React.MouseEvent, instructor: Instructor) => {
     e.stopPropagation();
@@ -348,10 +369,11 @@ export default function MeetingTab() {
 
   const renderRows = (list: Instructor[], showDate: boolean) =>
     list.map((i, idx) => (
-      <tr key={i.id} className={`border-b hover:bg-blue-50/40 cursor-pointer ${idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => openEdit(i)}>
+      <tr key={i.id} className={`border-b hover:bg-blue-50/40 cursor-pointer ${scheduleNames.has(i.name.trim()) ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => openEdit(i)}>
         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">
           <span className="flex items-center gap-1">
             {i.name}
+            {scheduleNames.has(i.name.trim()) && <span className="text-xs text-red-600 font-bold whitespace-nowrap">(타플랫폼 데뷔)</span>}
             {needsPostInfo(i) && <span className="shrink-0 h-2 w-2 rounded-full bg-red-500" title="사후 정보 미입력" />}
           </span>
         </td>
