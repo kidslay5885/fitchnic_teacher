@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
-import { readFileSync } from "fs";
-import { join } from "path";
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID!;
 const DAY_NAMES = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -24,10 +22,11 @@ interface WeekSchedule {
 }
 
 function getAuth() {
-  const credPath = join(process.cwd(), process.env.GOOGLE_CREDENTIALS_JSON || "google-credentials.json");
-  const creds = JSON.parse(readFileSync(credPath, "utf-8"));
   return new google.auth.GoogleAuth({
-    credentials: creds,
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    },
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
   });
 }
