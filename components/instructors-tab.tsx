@@ -98,15 +98,16 @@ function InstructorListView() {
       const f = state.filters;
       if (f.status !== "전체" && i.status !== f.status) return false;
       if (f.search) {
-        const q = f.search.toLowerCase();
+        const q = f.search.toLowerCase().replace(/\s/g, "");
+        const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
         return (
-          i.name?.toLowerCase().includes(q) ||
-          i.email?.toLowerCase().includes(q) ||
-          i.field?.toLowerCase().includes(q) ||
-          i.youtube?.toLowerCase().includes(q) ||
-          i.instagram?.toLowerCase().includes(q) ||
-          i.lecture_platform?.toLowerCase().includes(q) ||
-          i.notes?.toLowerCase().includes(q)
+          strip(i.name).includes(q) ||
+          strip(i.email).includes(q) ||
+          strip(i.field).includes(q) ||
+          strip(i.youtube).includes(q) ||
+          strip(i.instagram).includes(q) ||
+          strip(i.lecture_platform).includes(q) ||
+          strip(i.notes).includes(q)
         );
       }
       return true;

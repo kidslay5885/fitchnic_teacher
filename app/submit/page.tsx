@@ -121,12 +121,13 @@ export default function SubmitPage() {
       if (statusFilter !== "전체" && i.status !== statusFilter) return false;
       if (assigneeFilter !== "전체" && i.assignee !== assigneeFilter) return false;
       if (search) {
-        const q = search.toLowerCase();
+        const q = search.toLowerCase().replace(/\s/g, "");
+        const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
         return (
-          i.name?.toLowerCase().includes(q) ||
-          i.email?.toLowerCase().includes(q) ||
-          i.field?.toLowerCase().includes(q) ||
-          i.lecture_platform?.toLowerCase().includes(q)
+          strip(i.name).includes(q) ||
+          strip(i.email).includes(q) ||
+          strip(i.field).includes(q) ||
+          strip(i.lecture_platform).includes(q)
         );
       }
       return true;
