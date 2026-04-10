@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useOutreach } from "@/hooks/use-outreach-store";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,7 +84,6 @@ export default function InstructorsTab() {
 
 function InstructorListView() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
@@ -127,6 +127,15 @@ function InstructorListView() {
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortKey, sortDir]);
+
+  const sortedIds = useMemo(() => sorted.map((i) => i.id), [sorted]);
+  const { selected, setSelected, toggleAll, handleClick: handleRowClick, handleMouseDown, handleMouseEnter, handleMouseUp } = useRowSelection(sortedIds);
+
+  // 글로벌 mouseup 등록 (드래그 종료)
+  useEffect(() => {
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => document.removeEventListener("mouseup", handleMouseUp);
+  }, [handleMouseUp]);
 
   const isDefaultSort = sortKey === DEFAULT_SORT_KEY && sortDir === DEFAULT_SORT_DIR;
   const resetSort = useCallback(() => {
@@ -200,15 +209,7 @@ function InstructorListView() {
     } catch (e: any) { toast.error(e.message); }
   };
 
-  const toggleAll = () => {
-    if (selected.size === sorted.length) setSelected(new Set());
-    else setSelected(new Set(sorted.map((i) => i.id)));
-  };
-  const toggleOne = (id: string) => {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setSelected(next);
-  };
+  // toggleAll, handleClick(shift+클릭), handleMouseDown/Enter(드래그) → useRowSelection 훅에서 제공
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -308,8 +309,13 @@ function InstructorListView() {
                   style={{ position: "absolute", top: 0, left: 0, right: 0, height: ROW_H, gridTemplateColumns: GRID, transform: `translateY(${vRow.start}px)` }}
                   onClick={() => dispatch({ type: "SELECT_INSTRUCTOR", id: i.id })}
                 >
-                  <div className="px-1 flex justify-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
-                    <Checkbox checked={selected.has(i.id)} onCheckedChange={() => toggleOne(i.id)} />
+                  <div
+                    className="px-1 flex justify-center border-r border-gray-200/60 select-none"
+                    onClick={(e) => { e.stopPropagation(); handleRowClick(i.id, e); }}
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleMouseDown(i.id, e); }}
+                    onMouseEnter={() => handleMouseEnter(i.id)}
+                  >
+                    <Checkbox checked={selected.has(i.id)} tabIndex={-1} />
                   </div>
                   <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
                     <Badge

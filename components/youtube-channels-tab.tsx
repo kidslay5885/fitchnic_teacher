@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useOutreach } from "@/hooks/use-outreach-store";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import type { YouTubeChannel, YouTubeChannelStatus } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ export default function YouTubeChannelsTab() {
   const [search, setSearch] = useState("");
   const [filterProfile, setFilterProfile] = useState("전체");
   const [filterStatus, setFilterStatus] = useState<YouTubeChannelStatus | "전체">("전체");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // selectedIds는 useRowSelection 훅에서 관리
   const [sortKey, setSortKey] = useState<SortKey>("channel_name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [editingStatus, setEditingStatus] = useState<{ channel: YouTubeChannel; x: number; y: number } | null>(null);
@@ -85,6 +86,15 @@ export default function YouTubeChannelsTab() {
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortKey, sortDir]);
+
+  const sortedIds = useMemo(() => sorted.map((c) => c.id), [sorted]);
+  const { selected: selectedIds, setSelected: setSelectedIds, toggleAll, handleClick: handleRowClick, handleMouseDown, handleMouseEnter, handleMouseUp } = useRowSelection(sortedIds);
+
+  // 글로벌 mouseup 등록 (드래그 종료)
+  useEffect(() => {
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => document.removeEventListener("mouseup", handleMouseUp);
+  }, [handleMouseUp]);
 
   const virtualizer = useVirtualizer({
     count: sorted.length,
@@ -191,11 +201,7 @@ export default function YouTubeChannelsTab() {
     setEditingStatus({ channel, x: rect.left, y: rect.bottom + 4 });
   };
 
-  // 전체 선택
-  const toggleAll = () => {
-    if (selectedIds.size === sorted.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(sorted.map((c) => c.id)));
-  };
+  // toggleAll, handleClick(shift+클릭), handleMouseDown/Enter(드래그) → useRowSelection 훅에서 제공
   const toggleOne = (id: string) => {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -303,8 +309,13 @@ export default function YouTubeChannelsTab() {
                     transform: `translateY(${vRow.start}px)`,
                   }}
                 >
-                  <div className="px-1 flex justify-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
-                    <Checkbox checked={selectedIds.has(ch.id)} onCheckedChange={() => toggleOne(ch.id)} />
+                  <div
+                    className="px-1 flex justify-center border-r border-gray-200/60 select-none"
+                    onClick={(e) => { e.stopPropagation(); handleRowClick(ch.id, e); }}
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleMouseDown(ch.id, e); }}
+                    onMouseEnter={() => handleMouseEnter(ch.id)}
+                  >
+                    <Checkbox checked={selectedIds.has(ch.id)} tabIndex={-1} />
                   </div>
                   <div className="px-2 flex items-center gap-1 border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
                     <Badge
