@@ -556,7 +556,7 @@ export default function MeetingTab() {
                                 >
                                   <span className={`font-medium ${
                                     mt.meeting_type === "대면미팅" ? "text-orange-900" : mt.meeting_type === "줌미팅" ? "text-blue-900" : mt.meeting_type === "보류" ? "text-gray-600" : "text-gray-900"
-                                  }`}>{mt.name}</span>
+                                  }`}>{mt.meeting_type === "줌미팅" ? "(줌) " : mt.meeting_type === "대면미팅" ? "(대면) " : ""}{mt.name}</span>
                                   {time && <span className={`ml-1 ${
                                     mt.meeting_type === "대면미팅" ? "text-orange-500" : mt.meeting_type === "줌미팅" ? "text-blue-500" : mt.meeting_type === "보류" ? "text-gray-400" : "text-gray-500"
                                   }`}>{time}</span>}
