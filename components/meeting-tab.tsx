@@ -6,15 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { STATUS_COLORS, STATUSES } from "@/lib/constants";
+import { STATUS_COLORS, STATUSES, ASSIGNEES, SOURCES } from "@/lib/constants";
 import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus } from "@/lib/types";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Save, ExternalLink,
-  MessageSquare, X, Search, Calendar, Clock, Plus, ArrowUpRight, Trash2,
+  MessageSquare, X, Search, Calendar, Clock, Plus, Minus, ArrowUpRight, Trash2,
 } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
@@ -937,6 +938,8 @@ export default function MeetingTab() {
       {showAddModal && (
         <AddMeetingModal
           instructors={state.instructors}
+          dispatch={dispatch}
+          loadStats={loadStats}
           onSave={async (id, meetingDate, memo) => {
             try {
               const res = await fetch(`/api/instructors/${id}`, {
@@ -958,18 +961,37 @@ export default function MeetingTab() {
 }
 
 /* ── 미팅 추가 모달 ── */
-function AddMeetingModal({ instructors, onSave, onClose }: {
+type AddMode = "existing" | "new";
+
+function AddMeetingModal({ instructors, dispatch, loadStats, onSave, onClose }: {
   instructors: Instructor[];
+  dispatch: ReturnType<typeof useOutreach>["dispatch"];
+  loadStats: ReturnType<typeof useOutreach>["loadStats"];
   onSave: (id: string, meetingDate: string, memo: string) => Promise<void>;
   onClose: () => void;
 }) {
+  const [mode, setMode] = useState<AddMode>("existing");
+
+  // 기존 강사 선택 상태
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // 공통: 미팅 정보
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 새 강사 등록 폼
+  const [form, setForm] = useState({
+    name: "", field: "", assignee: "", email: "",
+    instagram: "", youtube: "", phone: "", ref_link: "",
+    has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
+    source: "강사모집" as string, notes: "",
+  });
+  const [refLinks, setRefLinks] = useState<string[]>([""]);
+  const [confirmed, setConfirmed] = useState(false);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
@@ -983,7 +1005,8 @@ function AddMeetingModal({ instructors, onSave, onClose }: {
 
   const selected = selectedId ? instructors.find((i) => i.id === selectedId) : null;
 
-  const handleSubmit = async () => {
+  // 기존 강사 미팅 추가
+  const handleSubmitExisting = async () => {
     if (!selectedId || !date) { toast.error("강사와 날짜를 선택하세요."); return; }
     const meetingDate = time ? `${date} ${time}` : date;
     setSaving(true);
@@ -991,80 +1014,293 @@ function AddMeetingModal({ instructors, onSave, onClose }: {
     setSaving(false);
   };
 
+  // 새 강사 등록 + 미팅 추가
+  const handleSubmitNew = async () => {
+    if (!form.name.trim()) { toast.error("강사 이름을 입력하세요."); return; }
+    setSaving(true);
+    try {
+      // 1. 강사 등록 (상태: 진행 중)
+      const instructorBody: Record<string, unknown> = {
+        ...form,
+        status: "진행 중",
+        ref_link: refLinks.filter((l) => l.trim()).join(" , "),
+        meeting_confirmed: confirmed,
+      };
+      // 미팅 날짜가 있으면 함께 저장
+      if (date) {
+        instructorBody.meeting_date = time ? `${date} ${time}` : date;
+        instructorBody.meeting_memo = memo || "";
+      }
+      if (memo && !date) {
+        instructorBody.meeting_memo = memo;
+      }
+      const res = await fetch("/api/instructors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(instructorBody),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      dispatch({ type: "ADD_INSTRUCTOR", instructor: data });
+      await loadStats();
+      toast.success(`${form.name} 등록 + 미팅 추가 완료`);
+      onClose();
+    } catch (e: any) {
+      toast.error(e.message || "등록 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onClick={onClose}>
-      <Card className="w-full max-w-[440px]" onClick={(e) => e.stopPropagation()}>
+      <Card className="w-full max-w-[480px] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <CardContent className="p-4 sm:p-5 space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold">미팅 추가</p>
             <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
           </div>
 
-          {/* 강사 검색 */}
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">강사 검색</label>
-            {selected ? (
-              <div className="flex items-center justify-between border rounded-md px-3 py-2">
-                <div>
-                  <span className="text-sm font-medium">{selected.name}</span>
-                  {selected.field && <span className="text-xs text-muted-foreground ml-2">{selected.field}</span>}
-                </div>
-                <button onClick={() => { setSelectedId(null); setSearch(""); }} className="text-muted-foreground hover:text-foreground">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ) : (
-              <div className="relative">
-                <Input
-                  ref={inputRef}
-                  placeholder="이름 또는 분야로 검색..."
-                  className="h-9 text-sm"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {results.length > 0 && (
-                  <div className="absolute z-10 top-full left-0 right-0 mt-1 border rounded-md bg-white shadow-lg max-h-[200px] overflow-auto">
-                    {results.map((i) => (
-                      <button
-                        key={i.id}
-                        onClick={() => { setSelectedId(i.id); setSearch(""); }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between border-b last:border-b-0"
-                      >
-                        <span className="font-medium">{i.name}</span>
-                        <span className="text-xs text-muted-foreground">{i.field} · {i.assignee}</span>
-                      </button>
-                    ))}
+          {/* 모드 탭 */}
+          <div className="flex border-b">
+            <button
+              onClick={() => setMode("existing")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                mode === "existing" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              기존 강사
+            </button>
+            <button
+              onClick={() => setMode("new")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                mode === "new" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              새 강사 등록
+            </button>
+          </div>
+
+          {mode === "existing" ? (
+            <>
+              {/* 강사 검색 */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">강사 검색</label>
+                {selected ? (
+                  <div className="flex items-center justify-between border rounded-md px-3 py-2">
+                    <div>
+                      <span className="text-sm font-medium">{selected.name}</span>
+                      {selected.field && <span className="text-xs text-muted-foreground ml-2">{selected.field}</span>}
+                    </div>
+                    <button onClick={() => { setSelectedId(null); setSearch(""); }} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Input
+                      ref={inputRef}
+                      placeholder="이름 또는 분야로 검색..."
+                      className="h-9 text-sm"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                    {results.length > 0 && (
+                      <div className="absolute z-10 top-full left-0 right-0 mt-1 border rounded-md bg-white shadow-lg max-h-[200px] overflow-auto">
+                        {results.map((i) => (
+                          <button
+                            key={i.id}
+                            onClick={() => { setSelectedId(i.id); setSearch(""); }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between border-b last:border-b-0"
+                          >
+                            <span className="font-medium">{i.name}</span>
+                            <span className="text-xs text-muted-foreground">{i.field} · {i.assignee}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
 
-          {/* 날짜 + 시간 */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
-              <Input type="date" className="h-9 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-            <div className="w-[120px]">
-              <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
-              <Input type="time" className="h-9 text-sm" value={time} onChange={(e) => setTime(e.target.value)} />
-            </div>
-          </div>
+              {/* 날짜 + 시간 */}
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
+                  <Input type="date" className="h-9 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+                </div>
+                <div className="w-[120px]">
+                  <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
+                  <Input type="time" className="h-9 text-sm" value={time} onChange={(e) => setTime(e.target.value)} />
+                </div>
+              </div>
 
-          {/* 메모 */}
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">메모 (선택)</label>
-            <Textarea className="text-sm" rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="미팅 관련 메모..." />
-          </div>
+              {/* 메모 */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">메모 (선택)</label>
+                <Textarea className="text-sm" rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="미팅 관련 메모..." />
+              </div>
 
-          {/* 버튼 */}
-          <div className="flex gap-2">
-            <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSubmit} disabled={saving || !selectedId || !date}>
-              {saving ? "저장 중..." : "미팅 추가"}
-            </Button>
-            <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
-          </div>
+              {/* 버튼 */}
+              <div className="flex gap-2">
+                <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSubmitExisting} disabled={saving || !selectedId || !date}>
+                  {saving ? "저장 중..." : "미팅 추가"}
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* 새 강사 정보 입력 */}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-3">
+                <div className="col-span-2">
+                  <Label className="text-xs">이름 *</Label>
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="h-8 text-sm" autoFocus />
+                </div>
+                <div>
+                  <Label className="text-xs">분야</Label>
+                  <Input value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">강의 여부</Label>
+                  <div className="flex gap-1.5 mt-1">
+                    {["O", "X", "?"].map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setForm({ ...form, has_lecture_history: form.has_lecture_history === v ? "" : v })}
+                        className={`h-8 w-10 rounded border text-sm font-medium transition-colors ${
+                          form.has_lecture_history === v
+                            ? "bg-primary text-white border-primary"
+                            : "bg-white text-muted-foreground border-gray-200 hover:border-gray-400"
+                        }`}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">강의 플랫폼</Label>
+                  <Input value={form.lecture_platform} onChange={(e) => setForm({ ...form, lecture_platform: e.target.value })} className="h-8 text-sm" placeholder="플랫폼 이름" />
+                  <Input value={form.lecture_platform_url} onChange={(e) => setForm({ ...form, lecture_platform_url: e.target.value })} className="h-8 text-sm mt-1.5" placeholder="주소 (URL)" />
+                </div>
+                <div>
+                  <Label className="text-xs">유튜브</Label>
+                  <Input value={form.youtube} onChange={(e) => setForm({ ...form, youtube: e.target.value })} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">인스타그램</Label>
+                  <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} className="h-8 text-sm" />
+                </div>
+                {/* 참조 링크 */}
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">참조 링크</Label>
+                    <button type="button" onClick={() => setRefLinks([...refLinks, ""])} className="flex items-center gap-0.5 text-xs text-blue-600 hover:text-blue-800">
+                      <Plus className="h-3.5 w-3.5" />추가
+                    </button>
+                  </div>
+                  {refLinks.map((link, idx) => (
+                    <div key={idx} className="flex items-center gap-1 mt-1.5">
+                      <Input
+                        value={link}
+                        onChange={(e) => { const next = [...refLinks]; next[idx] = e.target.value; setRefLinks(next); }}
+                        className="h-8 text-sm flex-1"
+                        placeholder="https://"
+                      />
+                      {refLinks.length > 1 && (
+                        <button type="button" onClick={() => setRefLinks(refLinks.filter((_, i) => i !== idx))} className="shrink-0 h-8 w-8 flex items-center justify-center rounded border border-gray-200 text-muted-foreground hover:text-red-500 hover:border-red-300">
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <Label className="text-xs">이메일</Label>
+                  <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">전화번호</Label>
+                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-8 text-sm" />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">비고</Label>
+                  <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="h-8 text-sm" />
+                </div>
+                {/* 찾은 사람 + 출처 */}
+                <div className="col-span-2 flex items-end gap-4">
+                  <div className="w-[140px] shrink-0 relative">
+                    <Label className="text-xs">찾은 사람</Label>
+                    <Input value={form.assignee} onChange={(e) => setForm({ ...form, assignee: e.target.value })} className="h-8 text-sm" placeholder="이름 입력" />
+                    {form.assignee && !ASSIGNEES.includes(form.assignee) && (
+                      <div className="absolute z-10 mt-0.5 w-full bg-white border rounded shadow-md">
+                        {ASSIGNEES.filter((a) => a.includes(form.assignee)).map((a) => (
+                          <button key={a} type="button" className="w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100" onClick={() => setForm({ ...form, assignee: a })}>{a}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs">출처</Label>
+                    <div className="flex gap-1.5 mt-1">
+                      {SOURCES.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setForm({ ...form, source: s })}
+                          className={`h-8 px-2.5 rounded border text-xs font-medium transition-colors whitespace-nowrap ${
+                            form.source === s
+                              ? "bg-primary text-white border-primary"
+                              : "bg-white text-muted-foreground border-gray-200 hover:border-gray-400"
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 미팅 정보 (선택) */}
+              <div className="border-t pt-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground">미팅 정보 (선택 — 비워두면 미팅예정으로 등록)</p>
+                <div
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${
+                    confirmed ? "bg-blue-50 border-blue-300" : "bg-gray-50 border-gray-200"
+                  }`}
+                  onClick={() => setConfirmed(!confirmed)}
+                >
+                  <input type="checkbox" className="h-4 w-4 rounded accent-blue-600 pointer-events-none" checked={confirmed} readOnly />
+                  <span className={`text-sm font-medium ${confirmed ? "text-blue-800" : "text-gray-500"}`}>미팅 확정</span>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs text-muted-foreground mb-1 block">날짜</label>
+                    <Input type="date" className="h-9 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
+                  </div>
+                  <div className="w-[120px]">
+                    <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
+                    <Input type="time" className="h-9 text-sm" value={time} onChange={(e) => setTime(e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">메모 (선택)</label>
+                  <Textarea className="text-sm" rows={2} value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="미팅 관련 메모..." />
+                </div>
+              </div>
+
+              {/* 버튼 */}
+              <div className="flex gap-2">
+                <Button size="sm" className="h-9 text-sm flex-1" onClick={handleSubmitNew} disabled={saving || !form.name.trim()}>
+                  {saving ? "저장 중..." : date ? "강사 등록 + 미팅 추가" : confirmed ? "강사 등록 (확정·날짜미정)" : "강사 등록 (미팅예정)"}
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
