@@ -161,7 +161,7 @@ async function migrateToInstructor(sb: ReturnType<typeof getSupabase>, channel: 
       status: channel.status,
       notes: channel.memo || "",
       source: "YT채널수집",
-      assignee: "",
+      assignee: "크롤링",
     })
     .select("id")
     .single();
