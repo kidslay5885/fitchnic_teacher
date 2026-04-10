@@ -10,8 +10,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { STATUSES, STATUS_COLORS, ASSIGNEES, SOURCES } from "@/lib/constants";
-import type { Instructor, InstructorStatus } from "@/lib/types";
+import type { Instructor, InstructorStatus, YouTubeChannel } from "@/lib/types";
 import { Search, ChevronUp, ChevronDown, AlertTriangle, Ban, CheckCircle2, Plus, Minus, RotateCcw, X } from "lucide-react";
+
+type SubTab = "instructors" | "youtube-channels";
+const YT_GRID = "84px 1fr 1fr 80px 1.2fr 1.5fr";
+const YT_MIN_W = 700;
 import { toast } from "sonner";
 
 type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email" | "created_at";
@@ -60,6 +64,8 @@ export default function SubmitPage() {
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [editingInstructor, setEditingInstructor] = useState<Instructor | null>(null);
+  const [subTab, setSubTab] = useState<SubTab>("instructors");
+  const [ytChannels, setYtChannels] = useState<YouTubeChannel[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 강사 목록 로드
@@ -77,6 +83,18 @@ export default function SubmitPage() {
   }, []);
 
   useEffect(() => { loadInstructors(); }, [loadInstructors]);
+
+  // YT채널수집 데이터 로드
+  const loadYtChannels = useCallback(async () => {
+    try {
+      const res = await fetch("/api/youtube-channels");
+      if (!res.ok) return;
+      const data = await res.json();
+      setYtChannels(Array.isArray(data) ? data : []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { loadYtChannels(); }, [loadYtChannels]);
 
   // 경량 동기화: 15초마다 변경 여부 확인 후 필요할 때만 리로드
   useEffect(() => {
@@ -148,6 +166,30 @@ export default function SubmitPage() {
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortKey, sortDir]);
+
+  // YT채널수집 필터+정렬
+  const ytFiltered = useMemo(() => {
+    return ytChannels.filter((ch) => {
+      if (search) {
+        const q = search.toLowerCase().replace(/\s/g, "");
+        const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
+        return (
+          strip(ch.channel_name).includes(q) ||
+          strip(ch.email).includes(q) ||
+          strip(ch.keyword).includes(q)
+        );
+      }
+      return true;
+    });
+  }, [ytChannels, search]);
+
+  const ytSorted = useMemo(() => {
+    return [...ytFiltered].sort((a, b) => {
+      const at = new Date(a.created_at || 0).getTime();
+      const bt = new Date(b.created_at || 0).getTime();
+      return bt - at;
+    });
+  }, [ytFiltered]);
 
   const isDefaultSort = sortKey === DEFAULT_SORT_KEY && sortDir === DEFAULT_SORT_DIR;
   const resetSort = useCallback(() => {
@@ -238,6 +280,31 @@ export default function SubmitPage() {
       <div className="flex flex-1 min-h-0 px-6 pb-6 gap-5">
         {/* 왼쪽 — 테이블 */}
         <div className="flex-1 flex flex-col min-w-0">
+          {/* 서브탭 */}
+          <div className="flex border-b mb-0">
+            <button
+              onClick={() => setSubTab("instructors")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                subTab === "instructors"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              강사모집
+            </button>
+            <button
+              onClick={() => setSubTab("youtube-channels")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                subTab === "youtube-channels"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              YT채널수집
+            </button>
+          </div>
+
+          {subTab === "instructors" ? (
           <div ref={scrollRef} className="border rounded flex-1 min-h-0 overflow-auto">
             <div
               className="sticky top-0 z-10 grid items-center bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
@@ -311,12 +378,58 @@ export default function SubmitPage() {
               </div>
             )}
           </div>
+          ) : (
+          /* YT채널수집 테이블 */
+          <div className="border rounded flex-1 min-h-0 overflow-auto">
+            <div
+              className="sticky top-0 z-10 grid items-center bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
+              style={{ gridTemplateColumns: YT_GRID, minWidth: YT_MIN_W }}
+            >
+              <div className="px-2 py-2.5 border-r border-gray-200">상태</div>
+              <div className="px-2 py-2.5 border-r border-gray-200">키워드</div>
+              <div className="px-2 py-2.5 border-r border-gray-200">채널명</div>
+              <div className="px-2 py-2.5 border-r border-gray-200">구독자</div>
+              <div className="px-2 py-2.5 border-r border-gray-200">이메일</div>
+              <div className="px-2 py-2.5">메모</div>
+            </div>
+
+            {ytSorted.length === 0 ? (
+              <div className="text-center py-12 text-sm text-muted-foreground">데이터가 없습니다.</div>
+            ) : (
+              <div>
+                {ytSorted.map((ch, idx) => (
+                  <div
+                    key={ch.id}
+                    className={`grid items-center border-b text-sm ${highlightId === ch.id ? "!bg-yellow-200 ring-2 ring-yellow-400 ring-inset transition-all duration-300" : idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}
+                    style={{ gridTemplateColumns: YT_GRID, minWidth: YT_MIN_W, height: ROW_H }}
+                  >
+                    <div className="px-2 flex items-center border-r border-gray-200/60">
+                      <Badge className="text-xs px-1.5 py-0 whitespace-nowrap">{ch.status}</Badge>
+                    </div>
+                    <div className="px-2 flex items-center border-r border-gray-200/60 overflow-hidden"><span className="truncate">{ch.keyword}</span></div>
+                    <div className="px-2 flex items-center border-r border-gray-200/60 font-medium overflow-hidden">
+                      {ch.channel_url ? (
+                        <a href={ch.channel_url} target="_blank" rel="noopener noreferrer" className="truncate text-blue-600 hover:underline">{ch.channel_name}</a>
+                      ) : (
+                        <span className="truncate">{ch.channel_name}</span>
+                      )}
+                    </div>
+                    <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{ch.subscriber_count}</span></div>
+                    <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{ch.email}</span></div>
+                    <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate">{ch.memo}</span></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
         </div>
 
         {/* 오른쪽 — 강사 추가 폼 */}
         <div className="w-[480px] shrink-0">
           <SubmitForm
             instructors={instructors}
+            ytChannels={ytChannels}
             onAdded={(inst) => setInstructors((prev) => [...prev, inst])}
             onUpdated={(inst) => setInstructors((prev) => prev.map((p) => p.id === inst.id ? inst : p))}
             onScrollTo={scrollToInstructor}
@@ -348,8 +461,9 @@ function SortHeader({ label, col, sk, sd, onSort, center, last }: {
 }
 
 /* ── 강사 추가/수정 폼 ── */
-function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange, editing, onCancelEdit }: {
+function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, onNameChange, editing, onCancelEdit }: {
   instructors: Instructor[];
+  ytChannels: YouTubeChannel[];
   onAdded: (inst: Instructor) => void;
   onUpdated: (inst: Instructor) => void;
   onScrollTo: (id: string) => void;
@@ -457,22 +571,42 @@ function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange,
     if (!editing) onNameChange(form.name.trim());
   }, [form.name, onNameChange, editing]);
 
-  // 실시간 중복/금지/유사 체크
+  // 실시간 중복/금지/유사 체크 (instructors + youtube_channels)
   const nameCheck = useMemo(() => {
     const name = form.name.trim();
     if (!name) return null;
     // 공백 제거 후 비교 (예: "감동 상영관" === "감동상영관")
     const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
     const normalized = normalize(name);
+
+    // instructors 중복 체크
     const duplicates = instructors.filter((i) =>
       normalize(i.name) === normalized && (!editing || i.id !== editing.id)
     );
     if (duplicates.length > 0) {
       const banned = duplicates.some((d) => d.is_banned);
-      if (banned) return { type: "banned" as const, matches: duplicates };
-      return { type: "duplicate" as const, matches: duplicates };
+      if (banned) return { type: "banned" as const, matches: duplicates, source: "instructors" as const };
+      return { type: "duplicate" as const, matches: duplicates, source: "instructors" as const };
     }
-    // 유사도 체크: 편집 거리 2 이하 또는 한쪽이 다른쪽을 포함
+
+    // youtube_channels 중복 체크 (channel_name 기준)
+    const ytDuplicates = ytChannels.filter((ch) =>
+      normalize(ch.channel_name) === normalized
+    );
+    if (ytDuplicates.length > 0) {
+      // YT채널 매칭 정보를 instructor 형태로 변환하여 표시
+      const ytMatches = ytDuplicates.map((ch) => ({
+        id: ch.id,
+        name: ch.channel_name,
+        field: ch.keyword,
+        status: ch.status,
+        is_banned: false,
+        assignee: "",
+      })) as any[];
+      return { type: "duplicate" as const, matches: ytMatches, source: "youtube_channels" as const };
+    }
+
+    // 유사도 체크: instructors
     if (normalized.length >= 2) {
       const similars = instructors.filter((i) => {
         if (editing && i.id === editing.id) return false;
@@ -483,10 +617,31 @@ function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange,
         const threshold = maxLen <= 3 ? 1 : 2;
         return editDistance(n, normalized) <= threshold;
       });
-      if (similars.length > 0) return { type: "similar" as const, matches: similars };
+      if (similars.length > 0) return { type: "similar" as const, matches: similars, source: "instructors" as const };
+
+      // 유사도 체크: youtube_channels
+      const ytSimilars = ytChannels.filter((ch) => {
+        const n = normalize(ch.channel_name);
+        if (n === normalized) return false;
+        if (n.includes(normalized) || normalized.includes(n)) return true;
+        const maxLen = Math.max(n.length, normalized.length);
+        const threshold = maxLen <= 3 ? 1 : 2;
+        return editDistance(n, normalized) <= threshold;
+      });
+      if (ytSimilars.length > 0) {
+        const ytMatches = ytSimilars.map((ch) => ({
+          id: ch.id,
+          name: ch.channel_name,
+          field: ch.keyword,
+          status: ch.status,
+          is_banned: false,
+          assignee: "",
+        })) as any[];
+        return { type: "similar" as const, matches: ytMatches, source: "youtube_channels" as const };
+      }
     }
     return { type: "ok" as const };
-  }, [form.name, instructors, editing]);
+  }, [form.name, instructors, ytChannels, editing]);
 
   // 중복/금지 감지 시 자동 스크롤
   useEffect(() => {
@@ -619,6 +774,7 @@ function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange,
             <div className="mt-1.5 rounded border border-orange-300 bg-orange-50 p-2 space-y-1">
               <div className="flex items-center gap-1 text-xs text-orange-700 font-semibold">
                 <AlertTriangle className="h-3.5 w-3.5" />이미 등록된 이름
+                {nameCheck.source === "youtube_channels" && <span className="text-orange-500 font-normal">(YT채널수집)</span>}
               </div>
               {nameCheck.matches.map((d) => (
                 <div key={d.id} className="text-xs text-orange-600 bg-orange-100 rounded px-2 py-1">
@@ -631,9 +787,10 @@ function SubmitForm({ instructors, onAdded, onUpdated, onScrollTo, onNameChange,
             <div className="mt-1.5 rounded border border-yellow-300 bg-yellow-50 p-2 space-y-1">
               <div className="flex items-center gap-1 text-xs text-yellow-700 font-semibold">
                 <AlertTriangle className="h-3.5 w-3.5" />비슷한 이름이 있습니다
+                {nameCheck.source === "youtube_channels" && <span className="text-yellow-500 font-normal">(YT채널수집)</span>}
               </div>
               {nameCheck.matches.map((d) => (
-                <div key={d.id} className="text-xs text-yellow-600 bg-yellow-100 rounded px-2 py-1 cursor-pointer hover:bg-yellow-200" onClick={() => onScrollTo(d.id)}>
+                <div key={d.id} className="text-xs text-yellow-600 bg-yellow-100 rounded px-2 py-1 cursor-pointer hover:bg-yellow-200" onClick={() => nameCheck.source === "instructors" && onScrollTo(d.id)}>
                   {d.name} {d.field && `| ${d.field}`} | {d.status}
                 </div>
               ))}
