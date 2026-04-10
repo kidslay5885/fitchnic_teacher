@@ -312,7 +312,7 @@ export default function YouTubeChannelsTab() {
                   <div
                     className="px-1 flex justify-center border-r border-gray-200/60 select-none"
                     onClick={(e) => { e.stopPropagation(); handleRowClick(ch.id, e); }}
-                    onMouseDown={(e) => { e.stopPropagation(); if (!e.shiftKey) e.preventDefault(); handleMouseDown(ch.id, e); }}
+                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleMouseDown(ch.id, e); }}
                     onMouseEnter={() => handleMouseEnter(ch.id)}
                   >
                     <Checkbox checked={selectedIds.has(ch.id)} tabIndex={-1} />

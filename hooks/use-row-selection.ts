@@ -21,31 +21,16 @@ export function useRowSelection(sortedIds: string[]) {
     lastClickedIndex.current = sortedIds.indexOf(id);
   }, [selected, sortedIds]);
 
-  // Shift+클릭: 마지막 클릭 위치부터 현재 위치까지 범위 선택
-  const handleClick = useCallback((id: string, e: React.MouseEvent) => {
-    const currentIndex = sortedIds.indexOf(id);
-    if (e.shiftKey && lastClickedIndex.current !== null) {
-      const start = Math.min(lastClickedIndex.current, currentIndex);
-      const end = Math.max(lastClickedIndex.current, currentIndex);
-      const next = new Set(selected);
-      for (let i = start; i <= end; i++) {
-        next.add(sortedIds[i]);
-      }
-      setSelected(next);
-      lastClickedIndex.current = currentIndex;
-    } else {
-      toggleOne(id);
-    }
-  }, [sortedIds, selected, toggleOne]);
+  // 클릭: 단순 토글
+  const handleClick = useCallback((id: string) => {
+    toggleOne(id);
+  }, [toggleOne]);
 
-  // 드래그 선택: mousedown → mouseover → mouseup
+  // 드래그 선택: mousedown → mouseenter → mouseup
   const handleMouseDown = useCallback((id: string, e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    // shift 키면 드래그 시작하지 않음 (onClick에서 범위 선택 처리)
-    if (e.shiftKey) return;
     isDragging.current = true;
-    lastClickedIndex.current = sortedIds.indexOf(id);
-  }, [sortedIds]);
+  }, []);
 
   const handleMouseEnter = useCallback((id: string) => {
     if (!isDragging.current) return;
