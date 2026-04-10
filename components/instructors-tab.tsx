@@ -312,7 +312,7 @@ function InstructorListView() {
                   <div
                     className="px-1 flex justify-center border-r border-gray-200/60 select-none"
                     onClick={(e) => { e.stopPropagation(); handleRowClick(i.id, e); }}
-                    onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleMouseDown(i.id, e); }}
+                    onMouseDown={(e) => { e.stopPropagation(); if (!e.shiftKey) e.preventDefault(); handleMouseDown(i.id, e); }}
                     onMouseEnter={() => handleMouseEnter(i.id)}
                   >
                     <Checkbox checked={selected.has(i.id)} tabIndex={-1} />

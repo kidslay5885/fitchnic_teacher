@@ -40,17 +40,12 @@ export function useRowSelection(sortedIds: string[]) {
 
   // 드래그 선택: mousedown → mouseover → mouseup
   const handleMouseDown = useCallback((id: string, e: React.MouseEvent) => {
-    // 체크박스 영역에서만 드래그 시작
     if (e.button !== 0) return;
+    // shift 키면 드래그 시작하지 않음 (onClick에서 범위 선택 처리)
+    if (e.shiftKey) return;
     isDragging.current = true;
-    const next = new Set(selected);
-    if (!e.shiftKey) {
-      // shift 없으면 새로 시작
-      if (!next.has(id)) next.add(id);
-    }
-    setSelected(next);
     lastClickedIndex.current = sortedIds.indexOf(id);
-  }, [selected, sortedIds]);
+  }, [sortedIds]);
 
   const handleMouseEnter = useCallback((id: string) => {
     if (!isDragging.current) return;
