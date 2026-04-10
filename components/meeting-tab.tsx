@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Save, ExternalLink,
-  MessageSquare, X, Search, Calendar, Clock, Plus, ArrowUpRight,
+  MessageSquare, X, Search, Calendar, Clock, Plus, ArrowUpRight, Trash2,
 } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
@@ -836,6 +836,19 @@ export default function MeetingTab() {
             toast.success("리마인드 날짜 저장 완료");
           } catch { toast.error("저장 실패"); }
         };
+        const handleRemindDelete = async () => {
+          try {
+            const res = await fetch(`/api/instructors/${inst.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ remind_date: null, remind_done: false }),
+            });
+            if (!res.ok) throw new Error("Failed");
+            dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
+            setRemindModal(null);
+            toast.success("리마인드 삭제 완료");
+          } catch { toast.error("삭제 실패"); }
+        };
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onClick={() => setRemindModal(null)}>
             <Card className="w-full max-w-[440px]" onClick={(e) => e.stopPropagation()}>
@@ -902,6 +915,7 @@ export default function MeetingTab() {
 
                 <div className="flex gap-2">
                   <Button size="sm" className="h-9 text-sm flex-1" onClick={handleRemindSave}><Save className="h-3.5 w-3.5 mr-1" />저장</Button>
+                  <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleRemindDelete}><Trash2 className="h-3.5 w-3.5 mr-1" />삭제</Button>
                   <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => setRemindModal(null)}>닫기</Button>
                 </div>
               </CardContent>
