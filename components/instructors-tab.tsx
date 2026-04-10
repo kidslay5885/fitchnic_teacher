@@ -17,18 +17,20 @@ import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
 import BulkActions from "@/components/bulk-actions";
 import YouTubeChannelsTab from "@/components/youtube-channels-tab";
-import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2 } from "lucide-react";
+import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 type SubTab = "instructors" | "youtube-channels";
 
-type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email";
+type SortKey = "name" | "status" | "field" | "assignee" | "source" | "has_lecture_history" | "lecture_platform" | "email" | "created_at";
 type SortDir = "asc" | "desc";
 
+const DEFAULT_SORT_KEY: SortKey = "created_at";
+const DEFAULT_SORT_DIR: SortDir = "desc";
 const ROW_H = 36;
-// 체크 | 상태 | 분야 | 찾은 사람 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처 | 사유
-const GRID = "36px 84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px 1.2fr";
-const MIN_W = 1100;
+// 체크 | 상태 | 분야 | 찾은 사람 | 이름 | 참조 | 강의 | 플랫폼 | 유튜브 | 인스타 | 이메일 | 비고 | 출처 | 등록일 | 사유
+const GRID = "36px 84px 1.2fr 72px 1fr 48px 64px 1fr 48px 48px 1.2fr 1.5fr 80px 76px 1.2fr";
+const MIN_W = 1180;
 
 const ROW_BG: Record<string, string> = {
   미검토: "bg-gray-50",
@@ -84,8 +86,8 @@ function InstructorListView() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
+  const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
@@ -113,12 +115,23 @@ function InstructorListView() {
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
+      if (sortKey === "created_at") {
+        const at = new Date(a.created_at || 0).getTime();
+        const bt = new Date(b.created_at || 0).getTime();
+        return sortDir === "asc" ? at - bt : bt - at;
+      }
       const av = (a[sortKey] || "") as string;
       const bv = (b[sortKey] || "") as string;
       const cmp = av.localeCompare(bv, "ko");
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortKey, sortDir]);
+
+  const isDefaultSort = sortKey === DEFAULT_SORT_KEY && sortDir === DEFAULT_SORT_DIR;
+  const resetSort = useCallback(() => {
+    setSortKey(DEFAULT_SORT_KEY);
+    setSortDir(DEFAULT_SORT_DIR);
+  }, []);
 
   const virtualizer = useVirtualizer({
     count: sorted.length,
@@ -219,6 +232,11 @@ function InstructorListView() {
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">{sorted.length}명</span>
+        {!isDefaultSort && (
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-muted-foreground" onClick={resetSort}>
+            <RotateCcw className="h-3 w-3 mr-1" />정렬 초기화
+          </Button>
+        )}
         <div className="ml-auto flex items-center gap-2">
           {selected.size > 0 && (
             <>
@@ -267,6 +285,7 @@ function InstructorListView() {
           <HeaderCell label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <HeaderCell label="비고" />
           <HeaderCell label="출처" col="source" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <HeaderCell label="등록일" col="created_at" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <HeaderCell label="사유" last />
         </div>
 
@@ -330,6 +349,7 @@ function InstructorListView() {
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.email}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.notes}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.source}</span></div>
+                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.created_at ? new Date(i.created_at).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }) : ""}</span></div>
                   <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate" title={
                     i.status === "컨펌 필요" ? (i.confirm_reason || "") :
                     ["제외", "보류", "거절"].includes(i.status) ? (i.exclude_reason || "") : ""
