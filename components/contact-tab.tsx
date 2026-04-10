@@ -14,18 +14,19 @@ import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import { toast } from "sonner";
-import { Send, Search, X, ChevronUp, ChevronDown } from "lucide-react";
+import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
 const FINAL_STATUSES = ["진행 중", "미팅 완료", "계약 완료", "보류", "거절"] as const;
 type ViewFilter = "all" | "no_preinfo" | "check_needed" | InstructorStatus;
-type SortKey = "name" | "status" | "field" | "assignee" | "final_status";
+type SortKey = "name" | "status" | "field" | "assignee" | "email" | "final_status";
 type SortDir = "asc" | "desc";
 type WaveFilterKey = "none" | "체크필요" | "무응답" | "응답" | "거절";
 
 const ROW_H = 40;
-const GRID = "36px 1.5fr 88px 1fr 76px 1fr 1fr 1fr 88px";
-const MIN_W = 820;
+const GRID = "36px 1.5fr 88px 1fr 76px 1.2fr 1fr 1fr 1fr 88px";
+const MIN_W = 1000;
 
 // 상태별 행 배경색 (연한 틴트)
 const ROW_BG: Record<string, string> = {
@@ -434,6 +435,32 @@ export default function ContactTab() {
             <Input placeholder="이름, 분야, 찾은 사람, 이메일..." className="h-8 text-sm pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <span className="text-sm text-muted-foreground">{filtered.length}명</span>
+          <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => {
+            const rows = filtered.map(i => {
+              const w1 = getWave(i.id, 1);
+              const w2 = getWave(i.id, 2);
+              const w3 = getWave(i.id, 3);
+              const fmt = (w?: OutreachWave) => w ? `${w.sent_date || ""} ${w.result || ""}`.trim() : "";
+              return {
+                "이름": i.name,
+                "상태": i.status,
+                "분야": i.field || "",
+                "찾은 사람": i.assignee || "",
+                "이메일": i.email || "",
+                "1차": fmt(w1),
+                "2차": fmt(w2),
+                "3차": fmt(w3),
+                "최종": i.final_status || "",
+              };
+            });
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "컨택관리");
+            XLSX.writeFile(wb, `컨택관리_${new Date().toISOString().slice(0,10)}.xlsx`);
+            toast.success(`${rows.length}건 엑셀 다운로드`);
+          }}>
+            <Download className="h-3.5 w-3.5 mr-1.5" />엑셀
+          </Button>
         </div>
       </div>
 
@@ -452,6 +479,7 @@ export default function ContactTab() {
           <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <SortHeader label="찾은 사람" col="assignee" sk={sortKey} sd={sortDir} onSort={handleSort} />
+          <SortHeader label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} />
           {[1, 2, 3].map((n) => (
             <WaveHeader
               key={n}
@@ -513,6 +541,8 @@ export default function ContactTab() {
                   <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60" title={i.field || ""}>{i.field || ""}</div>
                   {/* 찾은 사람 */}
                   <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60" title={i.assignee || ""}>{i.assignee || ""}</div>
+                  {/* 이메일 */}
+                  <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60 text-xs" title={i.email || ""}>{i.email || ""}</div>
                   {/* 1차 2차 3차 */}
                   {[1, 2, 3].map((n) => {
                     const w = getWave(i.id, n);
@@ -575,6 +605,18 @@ export default function ContactTab() {
               </Button>
             </>
           )}
+          <div className="h-4 w-px bg-border" />
+          <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => {
+            const emails = Array.from(selectedIds)
+              .map(id => state.instructors.find(i => i.id === id)?.email)
+              .filter(Boolean)
+              .join("\n");
+            if (!emails) { toast.error("이메일이 없습니다"); return; }
+            navigator.clipboard.writeText(emails);
+            toast.success(`${emails.split("\n").length}개 이메일 복사됨`);
+          }}>
+            <Copy className="h-3.5 w-3.5 mr-1.5" />이메일 복사
+          </Button>
           <div className="flex-1" />
           <Button size="sm" variant="ghost" className="h-8 text-sm text-muted-foreground" onClick={() => setSelectedIds(new Set())}>
             선택 해제
