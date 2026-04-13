@@ -14,7 +14,7 @@ import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import InstructorDetail from "@/components/instructor-detail";
 import { toast } from "sonner";
-import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download } from "lucide-react";
+import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -57,6 +57,7 @@ export default function ContactTab() {
   const [bulkResult, setBulkResult] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
   const [waveFilter, setWaveFilter] = useState<{ wave: number; key: WaveFilterKey }>({ wave: 0, key: "none" });
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
 
@@ -462,6 +463,9 @@ export default function ContactTab() {
           }}>
             <Download className="h-3.5 w-3.5 mr-1.5" />엑셀
           </Button>
+          <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => setBulkEditOpen(true)}>
+            <Pencil className="h-3.5 w-3.5 mr-1.5" />일괄 수정
+          </Button>
         </div>
       </div>
 
@@ -662,6 +666,30 @@ export default function ContactTab() {
           y={editingFinal.y}
           onSelect={handleFinalStatusChange}
           onClose={() => setEditingFinal(null)}
+        />
+      )}
+
+      {/* ── 이메일 기반 일괄 수정 모달 ── */}
+      {bulkEditOpen && (
+        <BulkEditByEmailModal
+          instructors={contactInstructors}
+          wavesMap={wavesMap}
+          onApply={async (ids, waveNum, date, result) => {
+            await Promise.all(ids.map(id => {
+              const existing = (wavesMap[id] || []).find(w => w.wave_number === waveNum);
+              return fetch(`/api/instructors/${id}/waves`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  wave_number: waveNum,
+                  sent_date: date || existing?.sent_date || null,
+                  result: result || existing?.result || "",
+                }),
+              });
+            }));
+            await loadAllWaves();
+          }}
+          onClose={() => setBulkEditOpen(false)}
         />
       )}
 
@@ -1193,6 +1221,139 @@ function WaveHeader({ wave, active, onFilter }: {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── 이메일 기반 일괄 수정 모달 ── */
+function BulkEditByEmailModal({ instructors, wavesMap, onApply, onClose }: {
+  instructors: Instructor[];
+  wavesMap: Record<string, OutreachWave[]>;
+  onApply: (ids: string[], waveNum: number, date: string, result: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [emailText, setEmailText] = useState("");
+  const [waveNum, setWaveNum] = useState("1");
+  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [result, setResult] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  // 이메일 파싱 → 매칭
+  const { matched, unmatched } = useMemo(() => {
+    const emails = emailText
+      .split(/[\n,;]+/)
+      .map(e => e.trim().toLowerCase())
+      .filter(Boolean);
+    const unique = [...new Set(emails)];
+    const matched: { email: string; instructor: Instructor }[] = [];
+    const unmatched: string[] = [];
+    for (const email of unique) {
+      const inst = instructors.find(i => i.email?.toLowerCase() === email);
+      if (inst) matched.push({ email, instructor: inst });
+      else unmatched.push(email);
+    }
+    return { matched, unmatched };
+  }, [emailText, instructors]);
+
+  const handleApply = async () => {
+    if (matched.length === 0) { toast.error("매칭된 강사가 없습니다."); return; }
+    if (!date && !result) { toast.error("발송일 또는 결과를 선택하세요."); return; }
+    setSaving(true);
+    try {
+      await onApply(matched.map(m => m.instructor.id), parseInt(waveNum), date, result);
+      toast.success(`${matched.length}명 ${waveNum}차 일괄 수정 완료`);
+      setDone(true);
+    } catch { toast.error("일괄 수정 실패"); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-lg w-[560px] max-h-[85vh] p-6 flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-base font-semibold">이메일로 일괄 수정</p>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* 이메일 입력 */}
+        <div className="mb-4">
+          <label className="text-xs text-muted-foreground mb-1 block">이메일 주소 (줄바꿈, 쉼표, 세미콜론으로 구분)</label>
+          <textarea
+            className="w-full h-32 border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
+            placeholder={"example1@gmail.com\nexample2@naver.com\nexample3@kakao.com"}
+            value={emailText}
+            onChange={e => { setEmailText(e.target.value); setDone(false); }}
+          />
+        </div>
+
+        {/* 매칭 결과 */}
+        {emailText.trim() && (
+          <div className="mb-4 text-sm space-y-1">
+            <p>
+              <span className="font-medium text-green-700">매칭 {matched.length}명</span>
+              {unmatched.length > 0 && (
+                <span className="ml-2 text-red-600">미매칭 {unmatched.length}건</span>
+              )}
+            </p>
+            {matched.length > 0 && (
+              <div className="max-h-28 overflow-y-auto border rounded px-2 py-1.5 bg-gray-50 space-y-0.5">
+                {matched.map(m => (
+                  <div key={m.instructor.id} className="text-xs flex justify-between">
+                    <span className="font-medium">{m.instructor.name}</span>
+                    <span className="text-muted-foreground">{m.email}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {unmatched.length > 0 && (
+              <div className="max-h-20 overflow-y-auto border border-red-200 rounded px-2 py-1.5 bg-red-50 space-y-0.5">
+                {unmatched.map(e => (
+                  <div key={e} className="text-xs text-red-600">{e}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 수정 항목 */}
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">차수</label>
+            <Select value={waveNum} onValueChange={v => { setWaveNum(v); setDone(false); }}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1차</SelectItem>
+                <SelectItem value="2">2차</SelectItem>
+                <SelectItem value="3">3차</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">발송일</label>
+            <Input type="date" className="h-9 text-sm" value={date} onChange={e => { setDate(e.target.value); setDone(false); }} />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">결과</label>
+            <Select value={result || "체크필요"} onValueChange={v => { setResult(v); setDone(false); }}>
+              <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {WAVE_RESULTS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* 버튼 */}
+        <div className="flex gap-2">
+          <Button className="flex-1 h-9 text-sm" onClick={handleApply} disabled={saving || matched.length === 0 || done}>
+            {saving ? "처리 중..." : done ? "완료됨" : `${matched.length}명 일괄 수정`}
+          </Button>
+          <Button variant="outline" className="h-9 text-sm" onClick={onClose}>닫기</Button>
+        </div>
+      </div>
     </div>
   );
 }
