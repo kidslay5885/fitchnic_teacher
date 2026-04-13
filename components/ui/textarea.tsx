@@ -2,13 +2,24 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Textarea({ className, onChange, onCompositionEnd, ...props }: React.ComponentProps<"textarea">) {
+function Textarea({ className, onChange, onCompositionEnd, onBlur, ...props }: React.ComponentProps<"textarea">) {
+  const isComposing = React.useRef(false)
+
   // 한국어 IME 조합 중 포커스를 잃으면 마지막 글자가 사라지는 문제 방지
+  const handleCompositionStart = () => { isComposing.current = true }
   const handleCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>) => {
+    isComposing.current = false
     onCompositionEnd?.(e)
     if (onChange) {
       onChange(e as unknown as React.ChangeEvent<HTMLTextAreaElement>)
     }
+  }
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    if (isComposing.current && onChange) {
+      isComposing.current = false
+      onChange(e as unknown as React.ChangeEvent<HTMLTextAreaElement>)
+    }
+    onBlur?.(e)
   }
 
   return (
@@ -19,7 +30,9 @@ function Textarea({ className, onChange, onCompositionEnd, ...props }: React.Com
         className
       )}
       onChange={onChange}
+      onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
+      onBlur={handleBlur}
       {...props}
     />
   )

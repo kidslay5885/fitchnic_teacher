@@ -3,13 +3,25 @@ import { Input as InputPrimitive } from "@base-ui/react/input"
 
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, onChange, onCompositionEnd, ...props }: React.ComponentProps<"input">) {
+function Input({ className, type, onChange, onCompositionEnd, onBlur, ...props }: React.ComponentProps<"input">) {
+  const isComposing = React.useRef(false)
+
   // 한국어 IME 조합 중 포커스를 잃으면 마지막 글자가 사라지는 문제 방지
+  const handleCompositionStart = () => { isComposing.current = true }
   const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+    isComposing.current = false
     onCompositionEnd?.(e)
     if (onChange) {
       onChange(e as unknown as React.ChangeEvent<HTMLInputElement>)
     }
+  }
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    // 일부 브라우저에서 compositionEnd보다 blur가 먼저 발생할 수 있음
+    if (isComposing.current && onChange) {
+      isComposing.current = false
+      onChange(e as unknown as React.ChangeEvent<HTMLInputElement>)
+    }
+    onBlur?.(e)
   }
 
   return (
@@ -21,7 +33,9 @@ function Input({ className, type, onChange, onCompositionEnd, ...props }: React.
         className
       )}
       onChange={onChange}
+      onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
+      onBlur={handleBlur}
       {...props}
     />
   )
