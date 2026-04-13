@@ -1233,7 +1233,7 @@ function BulkEditByEmailModal({ instructors, wavesMap, onApply, onClose }: {
   onClose: () => void;
 }) {
   const [emailText, setEmailText] = useState("");
-  const [waveNum, setWaveNum] = useState("1");
+  const [waveNum, setWaveNum] = useState("1차");
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [result, setResult] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1261,8 +1261,9 @@ function BulkEditByEmailModal({ instructors, wavesMap, onApply, onClose }: {
     if (!date && !result) { toast.error("발송일 또는 결과를 선택하세요."); return; }
     setSaving(true);
     try {
-      await onApply(matched.map(m => m.instructor.id), parseInt(waveNum), date, result);
-      toast.success(`${matched.length}명 ${waveNum}차 일괄 수정 완료`);
+      const waveNumInt = parseInt(waveNum);
+      await onApply(matched.map(m => m.instructor.id), waveNumInt, date, result);
+      toast.success(`${matched.length}명 ${waveNum} 일괄 수정 완료`);
       setDone(true);
     } catch { toast.error("일괄 수정 실패"); }
     finally { setSaving(false); }
@@ -1325,9 +1326,9 @@ function BulkEditByEmailModal({ instructors, wavesMap, onApply, onClose }: {
             <Select value={waveNum} onValueChange={v => { setWaveNum(v); setDone(false); }}>
               <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">1차</SelectItem>
-                <SelectItem value="2">2차</SelectItem>
-                <SelectItem value="3">3차</SelectItem>
+                <SelectItem value="1차">1차</SelectItem>
+                <SelectItem value="2차">2차</SelectItem>
+                <SelectItem value="3차">3차</SelectItem>
               </SelectContent>
             </Select>
           </div>
