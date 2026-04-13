@@ -22,7 +22,7 @@ const FINAL_STATUSES = ["진행 중", "미팅 완료", "계약 완료", "보류"
 type ViewFilter = "all" | "no_preinfo" | "check_needed" | InstructorStatus;
 type SortKey = "name" | "status" | "field" | "assignee" | "email" | "final_status";
 type SortDir = "asc" | "desc";
-type WaveFilterKey = "none" | "체크필요" | "무응답" | "응답" | "거절";
+type WaveFilterKey = "none" | "미입력" | "체크필요" | "무응답" | "응답" | "거절";
 
 const ROW_H = 40;
 const GRID = "36px 1.5fr 88px 1fr 76px 1.2fr 1fr 1fr 1fr 88px";
@@ -129,9 +129,21 @@ export default function ContactTab() {
       const wn = waveFilter.wave;
       sorted = sorted.filter((i) => {
         const w = (wavesMap[i.id] || []).find((w) => w.wave_number === wn);
+        if (waveFilter.key === "미입력") return !w || (!w.sent_date && !w.result);
         if (!w) return false;
         if (waveFilter.key === "체크필요") return !w.result || w.result === "체크필요";
         return w.result === waveFilter.key;
+      });
+      // 발송날짜 오래된 순 정렬
+      sorted.sort((a, b) => {
+        const wa = (wavesMap[a.id] || []).find((w) => w.wave_number === wn);
+        const wb = (wavesMap[b.id] || []).find((w) => w.wave_number === wn);
+        const da = wa?.sent_date || "";
+        const db = wb?.sent_date || "";
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return da.localeCompare(db);
       });
     }
 
@@ -1199,7 +1211,7 @@ function WaveHeader({ wave, active, onFilter }: {
       </div>
       {open && (
         <div className="absolute top-full left-0 z-20 bg-white border rounded-md shadow-lg py-1 min-w-[100px]">
-          {(["체크필요", "무응답", "응답", "거절"] as WaveFilterKey[]).map((key) => (
+          {(["미입력", "체크필요", "무응답", "응답", "거절"] as WaveFilterKey[]).map((key) => (
             <button
               key={key}
               className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 ${active === key ? "text-primary font-semibold bg-primary/5" : ""}`}
