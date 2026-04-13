@@ -112,8 +112,9 @@ export default function ContactTab() {
     else if (viewFilter === "check_needed") list = list.filter((i) => checkNeededIds.has(i.id));
     else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
     if (search) {
-      const q = search.toLowerCase();
-      list = list.filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q) || i.email?.toLowerCase().includes(q));
+      const q = search.toLowerCase().replace(/\s/g, "");
+      const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
+      list = list.filter((i) => strip(i.name).includes(q) || strip(i.field).includes(q) || strip(i.assignee).includes(q) || strip(i.email).includes(q));
     }
     let sorted = [...list].sort((a, b) => {
       const av = (a[sortKey] || "") as string;
