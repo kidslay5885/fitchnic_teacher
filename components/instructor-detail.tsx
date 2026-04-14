@@ -248,7 +248,21 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2"><Label className="text-xs">강의 플랫폼</Label><Input value={form.lecture_platform} onChange={(e) => setForm({ ...form, lecture_platform: e.target.value })} className="h-8 text-sm" /></div>
+                  <div className="col-span-2">
+                    <Label className="text-xs">강의 플랫폼</Label>
+                    <Input
+                      value={form.lecture_platform}
+                      onChange={(e) => setForm({ ...form, lecture_platform: e.target.value })}
+                      className="h-8 text-sm"
+                      placeholder="플랫폼 이름"
+                    />
+                    <Input
+                      value={form.lecture_platform_url}
+                      onChange={(e) => setForm({ ...form, lecture_platform_url: e.target.value })}
+                      className="h-8 text-sm mt-1.5"
+                      placeholder="주소 (URL)"
+                    />
+                  </div>
                   <div className="col-span-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs">참조 링크</Label>
@@ -310,7 +324,24 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                   <InfoRow label="유튜브" value={instructor.youtube} link />
                   <InfoRow label="전화" value={instructor.phone} />
                   <InfoRow label="강의이력" value={instructor.has_lecture_history} />
-                  <InfoRow label="플랫폼" value={instructor.lecture_platform} />
+                  {instructor.lecture_platform && (
+                    <div className="flex items-start gap-2 py-0.5">
+                      <span className="text-xs text-muted-foreground min-w-[60px] shrink-0 pt-0.5">플랫폼</span>
+                      {instructor.lecture_platform_url ? (
+                        <a
+                          href={instructor.lecture_platform_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline flex items-center gap-1 break-all"
+                        >
+                          {instructor.lecture_platform}
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-sm break-all">{instructor.lecture_platform}</span>
+                      )}
+                    </div>
+                  )}
                   {instructor.ref_link && (() => {
                     const links = instructor.ref_link.split(/\s*,\s*/).filter(Boolean);
                     if (links.length <= 1) return <InfoRow label="참조링크" value={instructor.ref_link} link />;
