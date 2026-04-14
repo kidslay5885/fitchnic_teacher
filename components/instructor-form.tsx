@@ -12,6 +12,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { ASSIGNEES, SOURCES, STATUSES } from "@/lib/constants";
+import { requiresReason } from "@/lib/status-machine";
+import type { InstructorStatus } from "@/lib/types";
 import { toast } from "sonner";
 import { AlertTriangle, Plus, Minus } from "lucide-react";
 
@@ -30,19 +32,37 @@ export default function InstructorForm({ onClose }: Props) {
     instagram: "", youtube: "", phone: "", ref_link: "",
     has_lecture_history: "", lecture_platform: "", lecture_platform_url: "",
     source: "강사모집", notes: "", status: "미검토",
+    status_memo: "",
   });
   const [refLinks, setRefLinks] = useState<string[]>([""]);
   const [saving, setSaving] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null);
 
+  const statusNeedsMemo = requiresReason(form.status as InstructorStatus) || form.status === "컨펌 필요";
+
   const handleSubmit = async (force = false) => {
     if (!form.name.trim()) { toast.error("강사 이름을 입력하세요."); return; }
+    if (requiresReason(form.status as InstructorStatus) && !form.status_memo.trim()) {
+      toast.error(`'${form.status}' 상태는 사유 입력이 필요합니다.`);
+      return;
+    }
     setSaving(true);
     try {
+      const { status_memo, ...rest } = form;
+      const payload: any = {
+        ...rest,
+        ref_link: refLinks.filter((l) => l.trim()).join(" , "),
+        _force: force,
+      };
+      if (requiresReason(form.status as InstructorStatus)) {
+        payload.exclude_reason = status_memo;
+      } else if (form.status === "컨펌 필요") {
+        payload.confirm_reason = status_memo;
+      }
       const res = await fetch("/api/instructors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, ref_link: refLinks.filter((l) => l.trim()).join(" , "), _force: force }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.warning === "duplicate_name" && !force) {
@@ -113,13 +133,28 @@ export default function InstructorForm({ onClose }: Props) {
               {/* 상태 */}
               <div>
                 <Label className="text-xs">상태</Label>
-                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v || "미검토", status_memo: "" })}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* 상태 메모 (컨펌 필요/제외/보류/거절) */}
+              {statusNeedsMemo && (
+                <div className="col-span-2">
+                  <Label className="text-xs">
+                    {requiresReason(form.status as InstructorStatus) ? `${form.status} 사유 *` : "컨펌 필요 메모"}
+                  </Label>
+                  <Input
+                    value={form.status_memo}
+                    onChange={(e) => setForm({ ...form, status_memo: e.target.value })}
+                    className="h-8 text-sm"
+                    placeholder={requiresReason(form.status as InstructorStatus) ? "사유 입력 (필수)" : "메모 입력 (선택)"}
+                  />
+                </div>
+              )}
 
               {/* 강의 여부 */}
               <div className="col-span-2">
