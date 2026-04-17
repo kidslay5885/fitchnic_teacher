@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
+import { normalizeUrl, normalizeRefLinks } from "@/lib/utils";
+
+// URL 계열 필드를 정규화 (프로토콜 누락 시 https:// 자동 추가)
+function normalizeUrlFields<T extends Record<string, any>>(obj: T): T {
+  const next: any = { ...obj };
+  if ("youtube" in next) next.youtube = normalizeUrl(next.youtube);
+  if ("instagram" in next) next.instagram = normalizeUrl(next.instagram);
+  if ("lecture_platform_url" in next) next.lecture_platform_url = normalizeUrl(next.lecture_platform_url);
+  if ("ref_link" in next) next.ref_link = normalizeRefLinks(next.ref_link);
+  return next;
+}
 
 export async function GET() {
   const sb = getSupabase();
@@ -40,7 +51,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const sb = getSupabase();
   const body = await req.json();
-  const { _force, ...insertData } = body;
+  const { _force, ...rawInsert } = body;
+  const insertData = normalizeUrlFields(rawInsert);
 
   // 중복 이름 체크 (공백 제거 후 비교: "감동 상영관" === "감동상영관")
   if (insertData.name && !_force) {

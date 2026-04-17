@@ -2,7 +2,17 @@ import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { requiresReason } from "@/lib/status-machine";
 import { logActivity } from "@/lib/activity-log";
+import { normalizeUrl, normalizeRefLinks } from "@/lib/utils";
 import type { InstructorStatus } from "@/lib/types";
+
+function normalizeUrlFields<T extends Record<string, any>>(obj: T): T {
+  const next: any = { ...obj };
+  if ("youtube" in next) next.youtube = normalizeUrl(next.youtube);
+  if ("instagram" in next) next.instagram = normalizeUrl(next.instagram);
+  if ("lecture_platform_url" in next) next.lecture_platform_url = normalizeUrl(next.lecture_platform_url);
+  if ("ref_link" in next) next.ref_link = normalizeRefLinks(next.ref_link);
+  return next;
+}
 
 export async function GET(
   _req: Request,
@@ -59,7 +69,8 @@ export async function PATCH(
   }
 
   // 내부 필드 제거
-  const { _reason, _changed_by, _expected_updated_at, ...updateData } = body;
+  const { _reason, _changed_by, _expected_updated_at, ...rawUpdate } = body;
+  const updateData = normalizeUrlFields(rawUpdate);
 
   // 충돌 감지: updated_at 비교
   if (_expected_updated_at) {
