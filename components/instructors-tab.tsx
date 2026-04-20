@@ -19,7 +19,7 @@ import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
 import BulkActions from "@/components/bulk-actions";
 import YouTubeChannelsTab from "@/components/youtube-channels-tab";
-import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2, RotateCcw, AlertCircle } from "lucide-react";
+import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 type SubTab = "instructors" | "youtube-channels";
@@ -367,11 +367,11 @@ function InstructorListView() {
                       if (others.length === 0) return null;
                       return (
                         <span
-                          className="shrink-0 inline-flex"
+                          className="shrink-0 inline-flex items-center justify-center h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none"
                           aria-label="이메일 중복"
                           title={`이메일 중복: ${others.map((o) => o.label).join(", ")}`}
                         >
-                          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                          !
                         </span>
                       );
                     })()}

@@ -15,7 +15,7 @@ import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import { toast } from "sonner";
-import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, AlertCircle } from "lucide-react";
+import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -573,11 +573,11 @@ export default function ContactTab() {
                       if (others.length === 0) return null;
                       return (
                         <span
-                          className="shrink-0 inline-flex"
+                          className="shrink-0 inline-flex items-center justify-center h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none"
                           aria-label="이메일 중복"
                           title={`이메일 중복: ${others.map((o) => o.label).join(", ")}`}
                         >
-                          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                          !
                         </span>
                       );
                     })()}
