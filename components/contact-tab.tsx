@@ -57,6 +57,9 @@ export default function ContactTab() {
   const [bulkDate, setBulkDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [bulkResult, setBulkResult] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<InstructorStatus | "">("");
+  const [bulkStatusReason, setBulkStatusReason] = useState("");
+  const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
   const [waveFilter, setWaveFilter] = useState<{ wave: number; key: WaveFilterKey }>({ wave: 0, key: "none" });
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -304,6 +307,30 @@ export default function ContactTab() {
       setSelectedIds(new Set());
     } catch (e: any) { toast.error(e.message); }
     finally { setBulkLoading(false); }
+  };
+
+  /* ── 일괄 상태 변경 ── */
+  const handleBulkStatusApply = async () => {
+    if (selectedIds.size === 0 || !bulkStatus) return;
+    if (requiresReason(bulkStatus) && !bulkStatusReason.trim()) {
+      toast.error("사유를 입력하세요.");
+      return;
+    }
+    setBulkStatusLoading(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await fetch("/api/instructors/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, status: bulkStatus, reason: bulkStatusReason.trim() }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "실패");
+      await Promise.all([loadInstructors(), loadStats()]);
+      toast.success(`${ids.length}명 상태 → ${bulkStatus}`);
+      setBulkStatus("");
+      setBulkStatusReason("");
+    } catch (e: any) { toast.error(e.message); }
+    finally { setBulkStatusLoading(false); }
   };
 
   /* ── 선택 / 드래그 / Shift 범위선택 ── */
@@ -575,7 +602,7 @@ export default function ContactTab() {
                         <span
                           className="shrink-0 inline-flex items-center justify-center h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none"
                           aria-label="이메일 중복"
-                          title={`이메일 중복: ${others.map((o) => o.label).join(", ")}`}
+                          title={`이메일 중복:\n${others.map((o) => `· ${o.label} | ${o.status || "상태없음"}`).join("\n")}`}
                         >
                           !
                         </span>
@@ -636,6 +663,27 @@ export default function ContactTab() {
           </Select>
           <Button size="sm" className="h-8 text-sm" onClick={handleBulkWaveApply} disabled={bulkLoading}>
             {bulkLoading ? "처리 중..." : "일괄 적용"}
+          </Button>
+          <div className="h-4 w-px bg-border" />
+          <Select value={bulkStatus} onValueChange={(v) => setBulkStatus(v as InstructorStatus)}>
+            <SelectTrigger className="w-[140px] h-8 text-sm">
+              <span className="text-muted-foreground">상태:</span>
+              <SelectValue placeholder="선택" />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {bulkStatus && requiresReason(bulkStatus) && (
+            <Input
+              className="w-[160px] h-8 text-sm"
+              placeholder="사유 입력"
+              value={bulkStatusReason}
+              onChange={(e) => setBulkStatusReason(e.target.value)}
+            />
+          )}
+          <Button size="sm" className="h-8 text-sm" onClick={handleBulkStatusApply} disabled={!bulkStatus || bulkStatusLoading}>
+            {bulkStatusLoading ? "처리 중..." : "상태 변경"}
           </Button>
           {readyToSendCount > 0 && (
             <>

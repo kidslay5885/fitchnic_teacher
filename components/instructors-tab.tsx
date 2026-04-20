@@ -369,7 +369,7 @@ function InstructorListView() {
                         <span
                           className="shrink-0 inline-flex items-center justify-center h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none"
                           aria-label="이메일 중복"
-                          title={`이메일 중복: ${others.map((o) => o.label).join(", ")}`}
+                          title={`이메일 중복:\n${others.map((o) => `· ${o.label} | ${o.status || "상태없음"}`).join("\n")}`}
                         >
                           !
                         </span>
