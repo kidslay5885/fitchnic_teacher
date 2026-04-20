@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,29 +60,39 @@ export default function MessagesTab() {
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{channel}</h3>
             </div>
             {templates.map((t) => (
-              <Card key={t.id} className="py-0">
-                <CardHeader className="py-3 px-5">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      {t.name}
-                      {t.variant_label && <Badge variant="outline" className="text-xs px-2 py-0">{t.variant_label}</Badge>}
-                    </CardTitle>
-                    <button className="text-xs text-primary hover:underline" onClick={() => setEditing(t)}>수정</button>
-                  </div>
-                  {t.subject && <p className="text-xs text-muted-foreground">제목: {t.subject}</p>}
-                </CardHeader>
-                <CardContent className="px-5 pb-4">
-                  <pre className="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md max-h-[180px] overflow-y-auto leading-relaxed">{t.body}</pre>
-                </CardContent>
-              </Card>
+              <Fragment key={t.id}>
+                <Card className="py-0">
+                  <CardHeader className="py-3 px-5">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        {t.name}
+                        {t.variant_label && <Badge variant="outline" className="text-xs px-2 py-0">{t.variant_label}</Badge>}
+                      </CardTitle>
+                      <button
+                        className="text-xs text-primary hover:underline"
+                        onClick={() => setEditing(editing?.id === t.id ? null : t)}
+                      >
+                        {editing?.id === t.id ? "닫기" : "수정"}
+                      </button>
+                    </div>
+                    {t.subject && <p className="text-xs text-muted-foreground">제목: {t.subject}</p>}
+                  </CardHeader>
+                  <CardContent className="px-5 pb-4">
+                    <pre className="text-sm whitespace-pre-wrap bg-muted p-3 rounded-md max-h-[180px] overflow-y-auto leading-relaxed">{t.body}</pre>
+                  </CardContent>
+                </Card>
+                {editing?.id === t.id && (
+                  <TemplateEditor template={editing} onSave={handleSave} onClose={() => setEditing(null)} />
+                )}
+              </Fragment>
             ))}
             <Separator />
           </div>
         ))
       )}
 
-      {(editing || showNew) && (
-        <TemplateEditor template={editing} onSave={handleSave} onClose={() => { setEditing(null); setShowNew(false); }} />
+      {showNew && (
+        <TemplateEditor template={null} onSave={handleSave} onClose={() => setShowNew(false)} />
       )}
     </div>
   );
