@@ -709,20 +709,33 @@ export default function ContactTab() {
         <BulkEditByEmailModal
           instructors={contactInstructors}
           wavesMap={wavesMap}
-          onApply={async (ids, waveNum, date, result) => {
-            await Promise.all(ids.map(id => {
-              const existing = (wavesMap[id] || []).find(w => w.wave_number === waveNum);
-              return fetch(`/api/instructors/${id}/waves`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  wave_number: waveNum,
-                  sent_date: date || existing?.sent_date || null,
-                  result: result || existing?.result || "",
-                }),
-              });
-            }));
-            await loadAllWaves();
+          onApply={async (ids, waveNum, date, result, contactAssignee) => {
+            const wavePending = (date || result)
+              ? Promise.all(ids.map(id => {
+                  const existing = (wavesMap[id] || []).find(w => w.wave_number === waveNum);
+                  return fetch(`/api/instructors/${id}/waves`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      wave_number: waveNum,
+                      sent_date: date || existing?.sent_date || null,
+                      result: result || existing?.result || "",
+                    }),
+                  });
+                }))
+              : Promise.resolve();
+            const assigneePending = contactAssignee
+              ? Promise.all(ids.map(async (id) => {
+                  const r = await fetch(`/api/instructors/${id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ contact_assignee: contactAssignee }),
+                  });
+                  if (r.ok) dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await r.json() });
+                }))
+              : Promise.resolve();
+            await Promise.all([wavePending, assigneePending]);
+            if (date || result) await loadAllWaves();
           }}
           onClose={() => setBulkEditOpen(false)}
         />
@@ -1264,13 +1277,14 @@ function WaveHeader({ wave, active, onFilter }: {
 function BulkEditByEmailModal({ instructors, wavesMap, onApply, onClose }: {
   instructors: Instructor[];
   wavesMap: Record<string, OutreachWave[]>;
-  onApply: (ids: string[], waveNum: number, date: string, result: string) => Promise<void>;
+  onApply: (ids: string[], waveNum: number, date: string, result: string, contactAssignee: string) => Promise<void>;
   onClose: () => void;
 }) {
   const [emailText, setEmailText] = useState("");
   const [waveNum, setWaveNum] = useState("1차");
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [result, setResult] = useState("");
+  const [contactAssignee, setContactAssignee] = useState("");
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -1293,11 +1307,11 @@ function BulkEditByEmailModal({ instructors, wavesMap, onApply, onClose }: {
 
   const handleApply = async () => {
     if (matched.length === 0) { toast.error("매칭된 강사가 없습니다."); return; }
-    if (!date && !result) { toast.error("발송일 또는 결과를 선택하세요."); return; }
+    if (!date && !result && !contactAssignee) { toast.error("발송일, 결과, 담당자 중 하나는 선택하세요."); return; }
     setSaving(true);
     try {
       const waveNumInt = parseInt(waveNum);
-      await onApply(matched.map(m => m.instructor.id), waveNumInt, date, result);
+      await onApply(matched.map(m => m.instructor.id), waveNumInt, date, result, contactAssignee);
       toast.success(`${matched.length}명 ${waveNum} 일괄 수정 완료`);
       setDone(true);
     } catch { toast.error("일괄 수정 실패"); }
@@ -1379,6 +1393,27 @@ function BulkEditByEmailModal({ instructors, wavesMap, onApply, onClose }: {
                 {WAVE_RESULTS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+        </div>
+
+        {/* 담당자 */}
+        <div className="mb-5">
+          <label className="text-xs text-muted-foreground mb-1.5 block">담당자</label>
+          <div className="flex gap-2">
+            {(["정승희", "김보성"] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => { setContactAssignee(contactAssignee === a ? "" : a); setDone(false); }}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                  contactAssignee === a
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {a}
+              </button>
+            ))}
           </div>
         </div>
 
