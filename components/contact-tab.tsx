@@ -12,9 +12,10 @@ import {
 import { STATUSES, STATUS_COLORS, WAVE_RESULTS } from "@/lib/constants";
 import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
+import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import { toast } from "sonner";
-import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil } from "lucide-react";
+import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, AlertCircle } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -65,6 +66,11 @@ export default function ContactTab() {
   const contactInstructors = useMemo(() =>
     state.instructors.filter((i) => !i.is_banned && CONTACT_STATUSES.includes(i.status as InstructorStatus)),
   [state.instructors]);
+
+  const emailDupMap = useMemo(
+    () => buildEmailDuplicateMap(state.instructors, state.youtubeChannels),
+    [state.instructors, state.youtubeChannels],
+  );
 
   const loadAllWaves = useCallback(async () => {
     if (contactInstructors.length === 0) return;
@@ -559,7 +565,24 @@ export default function ContactTab() {
                   {/* 찾은 사람 */}
                   <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60" title={i.assignee || ""}>{i.assignee || ""}</div>
                   {/* 이메일 */}
-                  <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60 text-xs" title={i.email || ""}>{i.email || ""}</div>
+                  <div className="px-2 border-r border-gray-200/60 text-xs flex items-center gap-1 overflow-hidden" title={i.email || ""}>
+                    {(() => {
+                      const k = i.email?.trim().toLowerCase();
+                      const owners = k ? emailDupMap.get(k) : undefined;
+                      const others = owners?.filter((o) => o.id !== i.id) ?? [];
+                      if (others.length === 0) return null;
+                      return (
+                        <span
+                          className="shrink-0 inline-flex"
+                          aria-label="이메일 중복"
+                          title={`이메일 중복: ${others.map((o) => o.label).join(", ")}`}
+                        >
+                          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                        </span>
+                      );
+                    })()}
+                    <span className="text-muted-foreground truncate">{i.email || ""}</span>
+                  </div>
                   {/* 1차 2차 3차 */}
                   {[1, 2, 3].map((n) => {
                     const w = getWave(i.id, n);

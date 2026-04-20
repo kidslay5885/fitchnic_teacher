@@ -14,11 +14,12 @@ import {
 import { STATUSES, STATUS_COLORS } from "@/lib/constants";
 import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus } from "@/lib/types";
+import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
 import BulkActions from "@/components/bulk-actions";
 import YouTubeChannelsTab from "@/components/youtube-channels-tab";
-import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2, RotateCcw } from "lucide-react";
+import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2, RotateCcw, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
 type SubTab = "instructors" | "youtube-channels";
@@ -89,6 +90,11 @@ function InstructorListView() {
   const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const emailDupMap = useMemo(
+    () => buildEmailDuplicateMap(state.instructors, state.youtubeChannels),
+    [state.instructors, state.youtubeChannels],
+  );
 
   const filtered = useMemo(() => {
     return state.instructors.filter((i) => {
@@ -353,7 +359,24 @@ function InstructorListView() {
                   <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
                     {igUrl ? <a href={igUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">링크</a> : ""}
                   </div>
-                  <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.email}</span></div>
+                  <div className="px-2 flex items-center gap-1 border-r border-gray-200/60 text-muted-foreground overflow-hidden">
+                    {(() => {
+                      const k = i.email?.trim().toLowerCase();
+                      const owners = k ? emailDupMap.get(k) : undefined;
+                      const others = owners?.filter((o) => o.id !== i.id) ?? [];
+                      if (others.length === 0) return null;
+                      return (
+                        <span
+                          className="shrink-0 inline-flex"
+                          aria-label="이메일 중복"
+                          title={`이메일 중복: ${others.map((o) => o.label).join(", ")}`}
+                        >
+                          <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                        </span>
+                      );
+                    })()}
+                    <span className="truncate">{i.email}</span>
+                  </div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.notes}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.source}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.created_at ? new Date(i.created_at).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }) : ""}</span></div>
