@@ -17,20 +17,17 @@ export default function BannedTab() {
   const { state, dispatch, loadBannedPlatforms } = useOutreach();
   const [search, setSearch] = useState("");
   const [newPlatform, setNewPlatform] = useState("");
-  const [addSearch, setAddSearch] = useState("");
-  const [addReason, setAddReason] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [banName, setBanName] = useState("");
+  const [banEmail, setBanEmail] = useState("");
+  const [banReason, setBanReason] = useState("");
+  const [banPlatform, setBanPlatform] = useState("");
+  const [banSaving, setBanSaving] = useState(false);
 
   useEffect(() => { if (state.bannedPlatforms.length === 0) loadBannedPlatforms(); }, []);
 
   const bannedInstructors = useMemo(() =>
     state.instructors.filter((i) => i.is_banned && (!search || i.name.toLowerCase().includes(search.toLowerCase()))),
   [state.instructors, search]);
-
-  const addCandidates = useMemo(() =>
-    addSearch.trim() ? state.instructors.filter((i) => !i.is_banned && i.name.toLowerCase().includes(addSearch.toLowerCase())).slice(0, 8) : [],
-  [state.instructors, addSearch]);
 
   const handleToggleBan = async (id: string, ban: boolean, reason?: string) => {
     try {
@@ -42,12 +39,63 @@ export default function BannedTab() {
   };
 
   const handleAddBan = async () => {
-    if (!selectedId) return;
-    await handleToggleBan(selectedId, true, addReason.trim());
-    setSelectedId(null);
-    setAddSearch("");
-    setAddReason("");
-    setShowDropdown(false);
+    const name = banName.trim();
+    if (!name) { toast.error("이름을 입력하세요."); return; }
+    setBanSaving(true);
+
+    // 공백·대소문자 무시로 기존 강사 찾기
+    const normalized = name.replace(/\s+/g, "").toLowerCase();
+    const existing = state.instructors.find(
+      (i) => i.name.replace(/\s+/g, "").toLowerCase() === normalized,
+    );
+
+    try {
+      if (existing) {
+        // 기존 강사 → is_banned=true 업데이트 (입력값이 있으면 덮어쓰기)
+        const patch: Record<string, unknown> = {
+          is_banned: true,
+          ban_reason: banReason.trim() || existing.ban_reason || "",
+        };
+        if (banEmail.trim()) patch.email = banEmail.trim();
+        if (banPlatform.trim()) patch.lecture_platform = banPlatform.trim();
+        const res = await fetch(`/api/instructors/${existing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || "업데이트 실패");
+        dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
+        toast.success(`${name} — 기존 강사를 연락금지로 전환`);
+      } else {
+        // 신규 강사로 추가 (is_banned=true, 상태 제외)
+        const res = await fetch("/api/instructors", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            email: banEmail.trim(),
+            lecture_platform: banPlatform.trim(),
+            ban_reason: banReason.trim(),
+            is_banned: true,
+            status: "제외",
+            _force: true,
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || "추가 실패");
+        const data = await res.json();
+        dispatch({ type: "ADD_INSTRUCTOR", instructor: data });
+        toast.success(`${name} — 연락금지 등록 완료`);
+      }
+      setBanName("");
+      setBanEmail("");
+      setBanReason("");
+      setBanPlatform("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "실패";
+      toast.error(msg);
+    } finally {
+      setBanSaving(false);
+    }
   };
 
   const handleAddPlatform = async () => {
@@ -101,37 +149,49 @@ export default function BannedTab() {
             <Plus className="h-4 w-4" /> 강사 연락금지 추가
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-5 pb-4 space-y-3">
-          <div className="flex gap-2 items-end">
-            <div className="relative w-[200px]">
-              <Input
-                placeholder="강사 이름 검색..."
-                className="h-8 text-sm"
-                value={addSearch}
-                onChange={(e) => { setAddSearch(e.target.value); setSelectedId(null); setShowDropdown(true); }}
-                onFocus={() => setShowDropdown(true)}
-                onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-              />
-              {showDropdown && addCandidates.length > 0 && (
-                <div className="absolute z-10 top-9 left-0 w-full bg-popover border rounded-md shadow-md max-h-[200px] overflow-y-auto">
-                  {addCandidates.map((i) => (
-                    <button
-                      key={i.id}
-                      type="button"
-                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 cursor-pointer"
-                      onMouseDown={() => { setSelectedId(i.id); setAddSearch(i.name); setShowDropdown(false); }}
-                    >
-                      {i.name} <span className="text-muted-foreground text-xs ml-1">{i.lecture_platform || ""}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <Input placeholder="사유 (선택)" className="h-8 text-sm max-w-[200px]" value={addReason} onChange={(e) => setAddReason(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddBan()} />
-            <Button size="sm" className="h-8 text-sm" onClick={handleAddBan} disabled={!selectedId}>
-              <Ban className="h-4 w-4 mr-1" />추가
+        <CardContent className="px-5 pb-4 space-y-2">
+          <div className="flex gap-2 items-end flex-wrap">
+            <Input
+              placeholder="이름 *"
+              className="h-8 text-sm w-[160px]"
+              value={banName}
+              onChange={(e) => setBanName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddBan()}
+            />
+            <Input
+              placeholder="이메일 (선택)"
+              className="h-8 text-sm w-[200px]"
+              value={banEmail}
+              onChange={(e) => setBanEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddBan()}
+            />
+            <Input
+              placeholder="플랫폼 (선택)"
+              className="h-8 text-sm w-[140px]"
+              value={banPlatform}
+              onChange={(e) => setBanPlatform(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddBan()}
+            />
+            <Input
+              placeholder="사유 (선택)"
+              className="h-8 text-sm w-[180px]"
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddBan()}
+            />
+            <Button
+              size="sm"
+              className="h-8 text-sm"
+              onClick={handleAddBan}
+              disabled={banSaving || !banName.trim()}
+            >
+              <Ban className="h-4 w-4 mr-1" />
+              {banSaving ? "추가 중..." : "추가"}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            이미 같은 이름의 강사가 있으면 해당 강사를 연락금지로 전환합니다. 등록 후 /submit 에서 동일 이름·이메일로 추가 시도 시 자동 차단됩니다.
+          </p>
         </CardContent>
       </Card>
 
