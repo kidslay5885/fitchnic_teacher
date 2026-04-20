@@ -14,8 +14,9 @@ import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
+import SendEmailModal from "@/components/send-email-modal";
 import { toast } from "sonner";
-import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil } from "lucide-react";
+import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -62,6 +63,7 @@ export default function ContactTab() {
   const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
   const [waveFilters, setWaveFilters] = useState<Record<number, WaveFilterKey>>({});
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
 
@@ -702,6 +704,13 @@ export default function ContactTab() {
             </>
           )}
           <div className="h-4 w-px bg-border" />
+          <Button
+            size="sm"
+            className="h-8 text-sm bg-indigo-600 hover:bg-indigo-700 text-white"
+            onClick={() => setSendEmailOpen(true)}
+          >
+            <Mail className="h-3.5 w-3.5 mr-1.5" />메일 자동 발송
+          </Button>
           <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => {
             const emails = Array.from(selectedIds)
               .map(id => state.instructors.find(i => i.id === id)?.email)
@@ -804,6 +813,19 @@ export default function ContactTab() {
           onClose={() => setDetailId(null)}
         />
       )}
+
+      {/* ── 이메일 자동 발송 모달 ── */}
+      <SendEmailModal
+        open={sendEmailOpen}
+        onClose={() => setSendEmailOpen(false)}
+        selectedIds={selectedIds}
+        instructors={state.instructors}
+        wavesMap={wavesMap}
+        onComplete={async () => {
+          await Promise.all([loadInstructors(), loadAllWaves(), loadStats()]);
+          setSelectedIds(new Set());
+        }}
+      />
     </div>
   );
 }

@@ -116,6 +116,13 @@ function TemplateEditor({ template, onSave, onClose }: { template: MessageTempla
         </div>
         {form.channel === "이메일" && <div><Label className="text-xs">제목</Label><Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} className="h-8 text-sm" /></div>}
         <div><Label className="text-xs">본문</Label><Textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={8} className="text-sm" /></div>
+        {form.channel === "이메일" && (
+          <div className="text-xs text-muted-foreground bg-muted/40 rounded-md p-2 leading-relaxed">
+            <span className="font-semibold">자동 치환 변수</span>: 제목/본문 안의 <code className="bg-background px-1 rounded">&apos;채널이름&apos;</code> → 강사명, <code className="bg-background px-1 rounded">&apos;채널분야&apos;</code> → 분야로 자동 치환됩니다. (컨택관리 · 메일 자동 발송 기준)
+            <br />
+            <span className="font-semibold">변형 이름</span>: 자동 발송에 사용하려면 <code className="bg-background px-1 rounded">1차</code> / <code className="bg-background px-1 rounded">2차</code> / <code className="bg-background px-1 rounded">3차</code> 중 하나를 정확히 입력하세요.
+          </div>
+        )}
         <div className="flex gap-2">
           <Button size="sm" className="h-8 text-sm" onClick={handleSubmit} disabled={saving}><Save className="h-3.5 w-3.5 mr-1" />{saving ? "저장 중..." : "저장"}</Button>
           <Button size="sm" variant="outline" className="h-8 text-sm" onClick={onClose}>취소</Button>
