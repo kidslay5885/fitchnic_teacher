@@ -40,6 +40,33 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // 2차·3차 발송 내역이 생기면 이전 차수의 결과를 자동으로 "무응답" 처리
+  // (단, 이미 "응답"/"거절"로 확정된 경우는 보호 — 비어있거나 "체크필요"만 덮어씀)
+  const currentWave = Number(body.wave_number);
+  const hasSendRecord = Boolean(body.sent_date) || Boolean(body.result);
+  if (hasSendRecord && (currentWave === 2 || currentWave === 3)) {
+    const { data: prevWaves } = await sb
+      .from("outreach_waves")
+      .select("wave_number, result")
+      .eq("instructor_id", id)
+      .lt("wave_number", currentWave);
+
+    const toMark = (prevWaves || []).filter(
+      (w) => !w.result || w.result === "체크필요",
+    );
+    if (toMark.length > 0) {
+      await Promise.all(
+        toMark.map((w) =>
+          sb
+            .from("outreach_waves")
+            .update({ result: "무응답" })
+            .eq("instructor_id", id)
+            .eq("wave_number", w.wave_number),
+        ),
+      );
+    }
+  }
+
   // has_response 플래그 업데이트 (이 강사의 모든 wave 확인)
   const { data: allWaves } = await sb
     .from("outreach_waves")
