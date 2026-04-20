@@ -16,7 +16,7 @@ import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import SendEmailModal from "@/components/send-email-modal";
 import { toast } from "sonner";
-import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail } from "lucide-react";
+import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail, MessageSquare } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -57,6 +57,7 @@ export default function ContactTab() {
   const [bulkWaveNum, setBulkWaveNum] = useState("1");
   const [bulkDate, setBulkDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [bulkResult, setBulkResult] = useState("");
+  const [bulkSendMethod, setBulkSendMethod] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<InstructorStatus | "">("");
   const [bulkStatusReason, setBulkStatusReason] = useState("");
@@ -262,7 +263,10 @@ export default function ContactTab() {
   /* ── 일괄 발송 기록 ── */
   const handleBulkWaveApply = async () => {
     if (selectedIds.size === 0) return;
-    if (!bulkDate && !bulkResult) { toast.error("발송일 또는 결과를 선택하세요."); return; }
+    if (!bulkDate && !bulkResult && !bulkSendMethod) {
+      toast.error("발송일·발송 방식·결과 중 하나는 선택하세요.");
+      return;
+    }
     setBulkLoading(true);
     try {
       const ids = Array.from(selectedIds);
@@ -276,6 +280,7 @@ export default function ContactTab() {
             wave_number: waveNum,
             sent_date: bulkDate || existing?.sent_date || null,
             result: bulkResult || existing?.result || "",
+            send_method: bulkSendMethod || existing?.send_method || "",
           }),
         });
       }));
@@ -431,8 +436,18 @@ export default function ContactTab() {
     return "";
   };
 
+  // 1차 발송 방식이 DM인 강사는 2·3차 입력 잠금
+  const isDMLocked = (instructorId: string) => {
+    const w1 = (wavesMap[instructorId] || []).find((w) => w.wave_number === 1);
+    return w1?.send_method === "DM";
+  };
+
   const handleCellClick = (e: React.MouseEvent, instructorId: string, wave: number) => {
     e.stopPropagation();
+    if (wave >= 2 && isDMLocked(instructorId)) {
+      toast.info("1차 DM 발송 강사는 2·3차 입력이 불가합니다.");
+      return;
+    }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setEditingWave({ instructorId, wave, x: rect.left, y: rect.bottom + 4 });
   };
@@ -624,13 +639,27 @@ export default function ContactTab() {
                   {[1, 2, 3].map((n) => {
                     const w = getWave(i.id, n);
                     const { text, overdue } = formatWave(w);
+                    const locked = n >= 2 && isDMLocked(i.id);
                     return (
                       <div
                         key={n}
-                        className={`px-2 flex items-center justify-center cursor-pointer hover:brightness-95 transition-colors border-r border-gray-200/60 ${waveColor(w)}`}
+                        className={`px-2 flex items-center justify-center transition-colors border-r border-gray-200/60 ${
+                          locked
+                            ? "bg-purple-50 text-purple-700 cursor-not-allowed"
+                            : `cursor-pointer hover:brightness-95 ${waveColor(w)}`
+                        }`}
                         onClick={(e) => handleCellClick(e, i.id, n)}
+                        title={locked ? "1차 DM 발송 — 2·3차 발송 없음" : undefined}
                       >
-                        <span className={`text-sm whitespace-nowrap ${overdue ? "text-red-600 font-semibold" : ""}`}>{text}</span>
+                        {locked ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium">
+                            <MessageSquare className="h-3 w-3" /> DM 발송
+                          </span>
+                        ) : (
+                          <span className={`text-sm whitespace-nowrap ${overdue ? "text-red-600 font-semibold" : ""}`}>
+                            {text}
+                          </span>
+                        )}
                       </div>
                     );
                   })}
@@ -665,6 +694,14 @@ export default function ContactTab() {
             </SelectContent>
           </Select>
           <Input type="date" className="w-[148px] h-8 text-sm" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
+          <Select value={bulkSendMethod} onValueChange={setBulkSendMethod}>
+            <SelectTrigger className="w-[104px] h-8 text-sm">
+              <SelectValue placeholder="발송 방식" />
+            </SelectTrigger>
+            <SelectContent>
+              {SEND_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Select value={bulkResult || "무응답"} onValueChange={setBulkResult}>
             <SelectTrigger className="w-[96px] h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>

@@ -55,6 +55,18 @@ export async function POST(req: Request) {
     .eq("wave_number", waveNumber);
   const alreadySent = new Set((existingWaves ?? []).map((w) => w.instructor_id));
 
+  // 3-1. 1차 발송 방식이 DM인 강사는 2·3차 자동 발송 스킵 대상
+  let dmLocked = new Set<string>();
+  if (waveNumber >= 2) {
+    const { data: firstWaves } = await sb
+      .from("outreach_waves")
+      .select("instructor_id, send_method")
+      .in("instructor_id", instructorIds)
+      .eq("wave_number", 1)
+      .eq("send_method", "DM");
+    dmLocked = new Set((firstWaves ?? []).map((w) => w.instructor_id));
+  }
+
   const sent: { id: string; name: string }[] = [];
   const skipped: { id: string; name: string; reason: string }[] = [];
   const failed: { id: string; name: string; error: string }[] = [];
@@ -70,6 +82,10 @@ export async function POST(req: Request) {
     }
     if (alreadySent.has(inst.id)) {
       skipped.push({ id: inst.id, name: inst.name, reason: `이미 ${waveNumber}차 발송됨` });
+      continue;
+    }
+    if (dmLocked.has(inst.id)) {
+      skipped.push({ id: inst.id, name: inst.name, reason: "1차 DM 발송 — 이메일 발송 불가" });
       continue;
     }
 

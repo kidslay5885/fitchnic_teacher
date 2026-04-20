@@ -66,19 +66,26 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     const toSend: Instructor[] = [];
     const noEmail: Instructor[] = [];
     const alreadySent: Instructor[] = [];
+    const dmLocked: Instructor[] = [];
     for (const inst of selectedInstructors) {
       if (!inst.email || !inst.email.trim()) {
         noEmail.push(inst);
         continue;
       }
-      const has = (wavesMap[inst.id] || []).some((w) => w.wave_number === wave);
+      const waves = wavesMap[inst.id] || [];
+      const firstWave = waves.find((w) => w.wave_number === 1);
+      if (wave >= 2 && firstWave?.send_method === "DM") {
+        dmLocked.push(inst);
+        continue;
+      }
+      const has = waves.some((w) => w.wave_number === wave);
       if (has) {
         alreadySent.push(inst);
         continue;
       }
       toSend.push(inst);
     }
-    return { toSend, noEmail, alreadySent };
+    return { toSend, noEmail, alreadySent, dmLocked };
   }, [selectedInstructors, wavesMap, wave]);
 
   // 미리보기 (발송 가능 첫 강사 기준)
@@ -184,10 +191,18 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
                   <span className="font-semibold text-gray-600">{categorized.alreadySent.length}명</span>
                 </div>
               )}
+              {categorized.dmLocked.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-purple-700 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" /> 1차 DM 발송 (스킵)
+                  </span>
+                  <span className="font-semibold text-purple-700">{categorized.dmLocked.length}명</span>
+                </div>
+              )}
             </div>
 
             {/* 스킵 대상 상세 */}
-            {(categorized.noEmail.length > 0 || categorized.alreadySent.length > 0) && (
+            {(categorized.noEmail.length > 0 || categorized.alreadySent.length > 0 || categorized.dmLocked.length > 0) && (
               <details className="text-xs">
                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                   스킵 대상 보기
@@ -198,6 +213,9 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
                   ))}
                   {categorized.alreadySent.map((i) => (
                     <div key={i.id} className="text-gray-600">· {i.name} — 이미 {wave}차 발송됨</div>
+                  ))}
+                  {categorized.dmLocked.map((i) => (
+                    <div key={i.id} className="text-purple-700">· {i.name} — 1차 DM 발송</div>
                   ))}
                 </div>
               </details>
