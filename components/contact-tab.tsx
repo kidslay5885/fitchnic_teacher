@@ -182,7 +182,7 @@ export default function ContactTab() {
   });
 
   /* ── 개별 발송 저장 ── */
-  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => {
+  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { sent_date: string; result: string; send_method: string; response_method: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => {
     try {
       const { pre_info, meeting_type, contact_assignee, has_own_lecture, lecture_appeal, sns_over_10k, meeting_type_override, ...waveData } = data;
       // 발송 기록 저장
@@ -928,6 +928,7 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
 }
 
 /* ── 발송 편집 팝오버 ── */
+const SEND_METHODS = ["이메일", "DM"] as const;
 const RESPONSE_METHODS = ["전화", "문자", "이메일", "카톡", "DM", "기타"] as const;
 
 // 평가 항목 기반 미팅 방식 자동 산출
@@ -960,12 +961,13 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   lectureAppeal: string;
   snsOver10k: string;
   meetingTypeOverride: boolean;
-  onSave: (data: { sent_date: string; result: string; response_method: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => Promise<void>;
+  onSave: (data: { sent_date: string; result: string; send_method: string; response_method: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
   const [date, setDate] = useState(wave?.sent_date || "");
   const [result, setResult] = useState(wave?.result || "");
+  const [sendMethod, setSendMethod] = useState(wave?.send_method || "");
   const [responseMethod, setResponseMethod] = useState(wave?.response_method || "");
   const [preInfo, setPreInfo] = useState(initialPreInfo);
   const [meetingType, setMeetingType] = useState(initialMeetingType);
@@ -1009,7 +1011,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await onSave({ sent_date: date, result: result || "체크필요", response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee, has_own_lecture: hasOwnLecture, lecture_appeal: lectureAppeal, sns_over_10k: snsOver10k, meeting_type_override: isOverride });
+      await onSave({ sent_date: date, result: result || "체크필요", send_method: sendMethod, response_method: responseMethod, pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee, has_own_lecture: hasOwnLecture, lecture_appeal: lectureAppeal, sns_over_10k: snsOver10k, meeting_type_override: isOverride });
     } finally { setSaving(false); }
   };
 
@@ -1039,6 +1041,25 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
                     {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">발송 방식</label>
+              <div className="flex flex-wrap gap-2">
+                {SEND_METHODS.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setSendMethod(sendMethod === m ? "" : m)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                      sendMethod === m
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-white text-muted-foreground border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
               </div>
             </div>
 

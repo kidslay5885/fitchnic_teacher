@@ -90,6 +90,7 @@ export interface OutreachWave {
   wave_number: number;
   sent_date: string;
   result: WaveResult;
+  send_method: string;
   response_method: string;
   notes: string;
 }

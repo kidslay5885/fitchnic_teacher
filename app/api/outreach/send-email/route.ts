@@ -90,6 +90,7 @@ export async function POST(req: Request) {
             wave_number: waveNumber,
             sent_date: today,
             result: "",
+            send_method: "이메일",
           },
           { onConflict: "instructor_id,wave_number" },
         );
