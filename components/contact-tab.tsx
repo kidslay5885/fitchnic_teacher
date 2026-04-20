@@ -60,7 +60,7 @@ export default function ContactTab() {
   const [bulkStatus, setBulkStatus] = useState<InstructorStatus | "">("");
   const [bulkStatusReason, setBulkStatusReason] = useState("");
   const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
-  const [waveFilter, setWaveFilter] = useState<{ wave: number; key: WaveFilterKey }>({ wave: 0, key: "none" });
+  const [waveFilters, setWaveFilters] = useState<Record<number, WaveFilterKey>>({});
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
@@ -133,20 +133,25 @@ export default function ContactTab() {
       return sortDir === "asc" ? cmp : -cmp;
     });
 
-    // 웨이브 상태 필터
-    if (waveFilter.key !== "none" && waveFilter.wave > 0) {
-      const wn = waveFilter.wave;
-      sorted = sorted.filter((i) => {
-        const w = (wavesMap[i.id] || []).find((w) => w.wave_number === wn);
-        if (waveFilter.key === "미입력") return !w || (!w.sent_date && !w.result);
-        if (!w) return false;
-        if (waveFilter.key === "체크필요") return !w.result || w.result === "체크필요";
-        return w.result === waveFilter.key;
-      });
-      // 발송날짜 오래된 순 정렬
+    // 웨이브 상태 필터 (차수별 AND)
+    const activeWaves = (Object.entries(waveFilters) as [string, WaveFilterKey][])
+      .filter(([, k]) => k && k !== "none")
+      .map(([w, k]) => [Number(w), k] as [number, WaveFilterKey]);
+    if (activeWaves.length > 0) {
+      sorted = sorted.filter((i) =>
+        activeWaves.every(([wn, key]) => {
+          const w = (wavesMap[i.id] || []).find((w) => w.wave_number === wn);
+          if (key === "미입력") return !w || (!w.sent_date && !w.result);
+          if (!w) return false;
+          if (key === "체크필요") return !w.result || w.result === "체크필요";
+          return w.result === key;
+        }),
+      );
+      // 정렬: 활성 차수 중 가장 낮은 차수의 발송일 오름차순
+      const primaryWave = Math.min(...activeWaves.map(([w]) => w));
       sorted.sort((a, b) => {
-        const wa = (wavesMap[a.id] || []).find((w) => w.wave_number === wn);
-        const wb = (wavesMap[b.id] || []).find((w) => w.wave_number === wn);
+        const wa = (wavesMap[a.id] || []).find((w) => w.wave_number === primaryWave);
+        const wb = (wavesMap[b.id] || []).find((w) => w.wave_number === primaryWave);
         const da = wa?.sent_date || "";
         const db = wb?.sent_date || "";
         if (!da && !db) return 0;
@@ -157,7 +162,7 @@ export default function ContactTab() {
     }
 
     return sorted;
-  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveFilter, wavesMap, checkNeededIds]);
+  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -534,10 +539,13 @@ export default function ContactTab() {
             <WaveHeader
               key={n}
               wave={n}
-              active={waveFilter.wave === n ? waveFilter.key : "none"}
-              onFilter={(key) => setWaveFilter(prev =>
-                prev.wave === n && prev.key === key ? { wave: 0, key: "none" } : { wave: n, key }
-              )}
+              active={waveFilters[n] || "none"}
+              onFilter={(key) => setWaveFilters(prev => {
+                const next = { ...prev };
+                if (key === "none" || prev[n] === key) delete next[n];
+                else next[n] = key;
+                return next;
+              })}
             />
           ))}
           <SortHeader label="최종" col="final_status" sk={sortKey} sd={sortDir} onSort={handleSort} last />
