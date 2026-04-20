@@ -682,6 +682,43 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
       return { type: "duplicate" as const, matches: ytMatches, source: "youtube_channels" as const };
     }
 
+    // 유사도 체크 (5자 이상)
+    if (email.length >= 5) {
+      const similars = instructors.filter((i) => {
+        if (editing && i.id === editing.id) return false;
+        if (!i.email) return false;
+        const e = i.email.trim().toLowerCase();
+        if (e === email) return false;
+        if (e.includes(email) || email.includes(e)) return true;
+        const maxLen = Math.max(e.length, email.length);
+        const threshold = maxLen <= 5 ? 1 : 2;
+        return editDistance(e, email) <= threshold;
+      });
+      if (similars.length > 0) return { type: "similar" as const, matches: similars, source: "instructors" as const };
+
+      const ytSimilars = ytChannels.filter((ch) => {
+        if (!ch.email) return false;
+        const e = ch.email.trim().toLowerCase();
+        if (e === email) return false;
+        if (e.includes(email) || email.includes(e)) return true;
+        const maxLen = Math.max(e.length, email.length);
+        const threshold = maxLen <= 5 ? 1 : 2;
+        return editDistance(e, email) <= threshold;
+      });
+      if (ytSimilars.length > 0) {
+        const ytMatches = ytSimilars.map((ch) => ({
+          id: ch.id,
+          name: ch.channel_name,
+          field: ch.keyword,
+          status: ch.status,
+          is_banned: false,
+          assignee: "",
+          email: ch.email,
+        })) as any[];
+        return { type: "similar" as const, matches: ytMatches, source: "youtube_channels" as const };
+      }
+    }
+
     return { type: "ok" as const };
   }, [form.email, instructors, ytChannels, editing]);
 
@@ -962,6 +999,19 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
               {emailCheck.matches.map((d) => (
                 <div key={d.id} className="text-xs text-orange-600 bg-orange-100 rounded px-2 py-1 cursor-pointer hover:bg-orange-200" onClick={() => emailCheck.source === "instructors" && onScrollTo(d.id)}>
                   {d.name} {d.field && `| ${d.field}`} | {d.status}
+                </div>
+              ))}
+            </div>
+          )}
+          {emailCheck?.type === "similar" && (
+            <div className="mt-1.5 rounded border border-yellow-300 bg-yellow-50 p-2 space-y-1">
+              <div className="flex items-center gap-1 text-xs text-yellow-700 font-semibold">
+                <AlertTriangle className="h-3.5 w-3.5" />비슷한 이메일이 있습니다
+                {emailCheck.source === "youtube_channels" && <span className="text-yellow-500 font-normal">(YT채널수집)</span>}
+              </div>
+              {emailCheck.matches.map((d) => (
+                <div key={d.id} className="text-xs text-yellow-600 bg-yellow-100 rounded px-2 py-1 cursor-pointer hover:bg-yellow-200" onClick={() => emailCheck.source === "instructors" && onScrollTo(d.id)}>
+                  {d.email} | {d.name || "이름없음"} | {d.status}
                 </div>
               ))}
             </div>
