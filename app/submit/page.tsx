@@ -650,6 +650,48 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
     }
   }, [nameCheck, onScrollTo]);
 
+  // 이메일 중복/금지 체크 (정확 일치, instructors + youtube_channels)
+  const emailCheck = useMemo(() => {
+    const email = form.email.trim().toLowerCase();
+    if (!email) return null;
+
+    // instructors 중복 체크
+    const duplicates = instructors.filter((i) =>
+      i.email && i.email.trim().toLowerCase() === email && (!editing || i.id !== editing.id)
+    );
+    if (duplicates.length > 0) {
+      const banned = duplicates.some((d) => d.is_banned);
+      if (banned) return { type: "banned" as const, matches: duplicates, source: "instructors" as const };
+      return { type: "duplicate" as const, matches: duplicates, source: "instructors" as const };
+    }
+
+    // youtube_channels 중복 체크
+    const ytDuplicates = ytChannels.filter((ch) =>
+      ch.email && ch.email.trim().toLowerCase() === email
+    );
+    if (ytDuplicates.length > 0) {
+      const ytMatches = ytDuplicates.map((ch) => ({
+        id: ch.id,
+        name: ch.channel_name,
+        field: ch.keyword,
+        status: ch.status,
+        is_banned: false,
+        assignee: "",
+        email: ch.email,
+      })) as any[];
+      return { type: "duplicate" as const, matches: ytMatches, source: "youtube_channels" as const };
+    }
+
+    return { type: "ok" as const };
+  }, [form.email, instructors, ytChannels, editing]);
+
+  // 이메일 중복/금지 감지 시 자동 스크롤
+  useEffect(() => {
+    if (emailCheck && emailCheck.type !== "ok" && emailCheck.matches.length > 0) {
+      onScrollTo(emailCheck.matches[0].id);
+    }
+  }, [emailCheck, onScrollTo]);
+
   const resetForm = () => {
     setForm(emptyForm);
     setRefLinks([""]);
@@ -660,8 +702,8 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
 
   const handleSubmit = async (force = false) => {
     if (!form.name.trim()) { toast.error("강사 이름을 입력하세요."); return; }
-    if (!editing && nameCheck?.type === "banned") { toast.error("연락 금지 대상입니다. 추가할 수 없습니다."); return; }
-    if (!editing && nameCheck?.type === "duplicate" && !force) return;
+    if (!editing && (nameCheck?.type === "banned" || emailCheck?.type === "banned")) { toast.error("연락 금지 대상입니다. 추가할 수 없습니다."); return; }
+    if (!editing && (nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") && !force) return;
     setSaving(true);
     try {
       const payload = { ...form, ref_link: refLinks.filter((l) => l.trim()).join(" , ") };
@@ -890,10 +932,40 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
           ))}
         </div>
 
-        {/* 이메일 */}
+        {/* 이메일 + 실시간 중복 체크 */}
         <div>
           <Label className="text-xs">이메일</Label>
           <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-8 text-sm" />
+          {emailCheck?.type === "ok" && form.email.trim() && (
+            <div className="flex items-center gap-1 mt-1 text-xs text-green-600">
+              <CheckCircle2 className="h-3.5 w-3.5" />등록 가능
+            </div>
+          )}
+          {emailCheck?.type === "banned" && (
+            <div className="mt-1.5 rounded border border-red-300 bg-red-50 p-2 space-y-1">
+              <div className="flex items-center gap-1 text-xs text-red-700 font-semibold">
+                <Ban className="h-3.5 w-3.5" />연락 금지 대상
+              </div>
+              {emailCheck.matches.map((d) => (
+                <div key={d.id} className="text-xs text-red-600 bg-red-100 rounded px-2 py-1">
+                  {d.name} {d.field && `| ${d.field}`} | {d.status}
+                </div>
+              ))}
+            </div>
+          )}
+          {emailCheck?.type === "duplicate" && (
+            <div className="mt-1.5 rounded border border-orange-300 bg-orange-50 p-2 space-y-1">
+              <div className="flex items-center gap-1 text-xs text-orange-700 font-semibold">
+                <AlertTriangle className="h-3.5 w-3.5" />이미 등록된 이메일
+                {emailCheck.source === "youtube_channels" && <span className="text-orange-500 font-normal">(YT채널수집)</span>}
+              </div>
+              {emailCheck.matches.map((d) => (
+                <div key={d.id} className="text-xs text-orange-600 bg-orange-100 rounded px-2 py-1 cursor-pointer hover:bg-orange-200" onClick={() => emailCheck.source === "instructors" && onScrollTo(d.id)}>
+                  {d.name} {d.field && `| ${d.field}`} | {d.status}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 메모 */}
@@ -915,7 +987,7 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
               취소
             </Button>
           </>
-        ) : nameCheck?.type === "duplicate" ? (
+        ) : (nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") ? (
           <Button className="w-full h-9 text-sm" onClick={() => handleSubmit(true)} disabled={saving}>
             {saving ? "저장 중..." : "그래도 추가"}
           </Button>
@@ -923,7 +995,7 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
           <Button
             className="w-full h-9 text-sm"
             onClick={() => handleSubmit(false)}
-            disabled={saving || nameCheck?.type === "banned"}
+            disabled={saving || nameCheck?.type === "banned" || emailCheck?.type === "banned"}
           >
             {saving ? "저장 중..." : "추가"}
           </Button>
