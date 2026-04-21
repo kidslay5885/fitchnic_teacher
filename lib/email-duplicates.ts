@@ -20,6 +20,8 @@ export function buildEmailDuplicateMap(
     push(i.email, { id: i.id, label: i.name || "이름없음", status: i.status || "" });
   }
   for (const ch of ytChannels) {
+    // instructors로 이관되어 연결된 YT채널은 동일 인물이므로 중복 계산에서 제외
+    if (ch.instructor_id) continue;
     push(ch.email, { id: ch.id, label: `${ch.channel_name || "채널명없음"} (YT)`, status: ch.status || "" });
   }
 
