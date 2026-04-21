@@ -36,11 +36,17 @@ function toHtml(plain: string) {
   return esc.replace(/\r?\n/g, "<br>");
 }
 
-function buildRawMessage(from: string, to: string, subject: string, body: string) {
+// "홍길동 대표님" <email> 형식의 To 헤더 생성. 이름이 없으면 이메일만.
+function formatRecipient(email: string, name?: string) {
+  if (!name || !name.trim()) return email;
+  return `${encodeHeader(name)} <${email}>`;
+}
+
+function buildRawMessage(from: string, to: string, subject: string, body: string, toName?: string) {
   const boundary = `fitchnic_${Math.random().toString(36).slice(2)}`;
   const lines = [
     `From: ${from}`,
-    `To: ${to}`,
+    `To: ${formatRecipient(to, toName)}`,
     `Subject: ${encodeHeader(subject)}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
@@ -68,14 +74,15 @@ export interface SendEmailParams {
   to: string;
   subject: string;
   body: string;
+  toName?: string;
 }
 
-export async function sendEmail({ to, subject, body }: SendEmailParams) {
+export async function sendEmail({ to, subject, body, toName }: SendEmailParams) {
   const sender = process.env.GMAIL_SENDER;
   if (!sender) throw new Error("GMAIL_SENDER 환경변수 미설정");
   const auth = getClient();
   const gmail = google.gmail({ version: "v1", auth });
-  const raw = buildRawMessage(sender, to, subject, body);
+  const raw = buildRawMessage(sender, to, subject, body, toName);
   const res = await gmail.users.messages.send({
     userId: "me",
     requestBody: { raw },
