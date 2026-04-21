@@ -16,7 +16,7 @@ import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import SendEmailModal from "@/components/send-email-modal";
 import { toast } from "sonner";
-import { Send, Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail, MessageSquare } from "lucide-react";
+import { Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail, MessageSquare } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -291,36 +291,6 @@ export default function ContactTab() {
     finally { setBulkLoading(false); }
   };
 
-  /* ── 일괄 발송 시작 ── */
-  const handleBulkStartOutreach = async () => {
-    const targets = Array.from(selectedIds).filter(id => {
-      const inst = state.instructors.find(i => i.id === id);
-      return inst?.status === "발송 예정";
-    });
-    if (targets.length === 0) return;
-    setBulkLoading(true);
-    try {
-      const res = await fetch("/api/instructors/bulk", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: targets, status: "진행 중", reason: "발송 시작" }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const today = new Date().toISOString().split("T")[0];
-      await Promise.all(targets.map(id =>
-        fetch(`/api/instructors/${id}/waves`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ wave_number: 1, sent_date: today, result: "" }),
-        })
-      ));
-      await Promise.all([loadInstructors(), loadAllWaves(), loadStats()]);
-      toast.success(`${targets.length}명 발송 시작`);
-      setSelectedIds(new Set());
-    } catch (e: any) { toast.error(e.message); }
-    finally { setBulkLoading(false); }
-  };
-
   /* ── 일괄 상태 변경 ── */
   const handleBulkStatusApply = async () => {
     if (selectedIds.size === 0 || !bulkStatus) return;
@@ -463,10 +433,6 @@ export default function ContactTab() {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setEditingFinal({ instructor, x: rect.left, y: rect.bottom + 4 });
   };
-
-  const readyToSendCount = useMemo(() =>
-    Array.from(selectedIds).filter(id => state.instructors.find(i => i.id === id)?.status === "발송 예정").length,
-  [selectedIds, state.instructors]);
 
   const detailInstructor = detailId ? state.instructors.find(i => i.id === detailId) : null;
 
@@ -732,14 +698,6 @@ export default function ContactTab() {
           <Button size="sm" className="h-8 text-sm" onClick={handleBulkStatusApply} disabled={!bulkStatus || bulkStatusLoading}>
             {bulkStatusLoading ? "처리 중..." : "상태 변경"}
           </Button>
-          {readyToSendCount > 0 && (
-            <>
-              <div className="h-4 w-px bg-border" />
-              <Button size="sm" className="h-8 text-sm bg-green-600 hover:bg-green-700 text-white" onClick={handleBulkStartOutreach} disabled={bulkLoading}>
-                <Send className="h-3.5 w-3.5 mr-1.5" />발송 시작 ({readyToSendCount}명)
-              </Button>
-            </>
-          )}
           <div className="h-4 w-px bg-border" />
           <Button
             size="sm"
