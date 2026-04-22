@@ -94,8 +94,8 @@ export async function POST(req: Request) {
     const body = renderTemplate(template.body || "", { name: inst.name, field: inst.field });
 
     try {
-      // Gmail API 발송 — 수신자에게 "강사명 대표님"으로 표시
-      const toName = inst.name?.trim() ? `${inst.name.trim()} 대표님` : undefined;
+      // Gmail API 발송 — 수신자에게 "강사명님"으로 표시
+      const toName = inst.name?.trim() ? `${inst.name.trim()}님` : undefined;
       await sendEmail({ to: inst.email.trim(), subject, body, toName });
 
       // outreach_waves 기록

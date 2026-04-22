@@ -36,8 +36,10 @@ function toHtml(plain: string) {
   return esc.replace(/\r?\n/g, "<br>");
 }
 
-// "홍길동 대표님" <email> 형식의 To 헤더 생성. 이름이 없으면 이메일만.
-function formatRecipient(email: string, name?: string) {
+const SENDER_NAME = "(주)핏크닉 대표 정승요";
+
+// "표시명" <email> 형식의 주소 헤더. 이름이 없으면 이메일만.
+function formatAddress(email: string, name?: string) {
   if (!name || !name.trim()) return email;
   return `${encodeHeader(name)} <${email}>`;
 }
@@ -45,8 +47,8 @@ function formatRecipient(email: string, name?: string) {
 function buildRawMessage(from: string, to: string, subject: string, body: string, toName?: string) {
   const boundary = `fitchnic_${Math.random().toString(36).slice(2)}`;
   const lines = [
-    `From: ${from}`,
-    `To: ${formatRecipient(to, toName)}`,
+    `From: ${formatAddress(from, SENDER_NAME)}`,
+    `To: ${formatAddress(to, toName)}`,
     `Subject: ${encodeHeader(subject)}`,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
