@@ -53,17 +53,40 @@ async function getInstructorEmails(sb: ReturnType<typeof getSupabase>, emails: s
   return existing;
 }
 
+// 이름 정규화: 공백 제거 + 소문자
+function normalizeName(name: string): string {
+  return name.trim().replace(/\s+/g, "").toLowerCase();
+}
+
+// 연락금지(is_banned=true) 강사의 정규화된 이름 Set을 반환한다.
+async function getBannedInstructorNames(sb: ReturnType<typeof getSupabase>): Promise<Set<string>> {
+  const names = new Set<string>();
+  const { data } = await sb
+    .from("instructors")
+    .select("name")
+    .eq("is_banned", true);
+  if (data) {
+    for (const row of data) {
+      if (row.name) names.add(normalizeName(row.name));
+    }
+  }
+  return names;
+}
+
 export async function POST(req: Request) {
   const sb = getSupabase();
   const body = await req.json();
 
   // 일괄 등록
   if (Array.isArray(body)) {
-    const results = { created: 0, skipped: 0, duplicateInstructors: 0, errors: [] as string[] };
+    const results = { created: 0, skipped: 0, duplicateInstructors: 0, bannedExcluded: 0, errors: [] as string[] };
 
-    // instructors 테이블 교차 중복 체크
+    // instructors 교차 중복 + 연락금지 강사 이름 조회 (병렬)
     const emails = body.map((item: any) => item.email).filter(Boolean);
-    const instructorEmails = await getInstructorEmails(sb, emails);
+    const [instructorEmails, bannedNames] = await Promise.all([
+      getInstructorEmails(sb, emails),
+      getBannedInstructorNames(sb),
+    ]);
 
     for (const item of body) {
       if (!item.email || !item.channel_name) {
@@ -78,6 +101,10 @@ export async function POST(req: Request) {
         continue;
       }
 
+      // 채널명이 연락금지 강사와 일치하면 상태를 "제외"로 강제
+      const isBanned = bannedNames.has(normalizeName(item.channel_name));
+      const status = isBanned ? "제외" : (item.status || "미검토");
+
       const { error } = await sb
         .from("youtube_channels")
         .upsert(
@@ -88,7 +115,7 @@ export async function POST(req: Request) {
             subscriber_count: item.subscriber_count || "",
             channel_url: item.channel_url || "",
             email: item.email,
-            status: item.status || "미검토",
+            status,
             memo: item.memo || "",
           },
           { onConflict: "email" }
@@ -99,6 +126,7 @@ export async function POST(req: Request) {
         results.skipped++;
       } else {
         results.created++;
+        if (isBanned) results.bannedExcluded++;
       }
     }
 
@@ -124,6 +152,11 @@ export async function POST(req: Request) {
     );
   }
 
+  // 채널명이 연락금지 강사와 일치하면 상태를 "제외"로 강제
+  const bannedNames = await getBannedInstructorNames(sb);
+  const isBanned = bannedNames.has(normalizeName(body.channel_name));
+  const status = isBanned ? "제외" : (body.status || "미검토");
+
   const { data, error } = await sb
     .from("youtube_channels")
     .upsert(
@@ -134,7 +167,7 @@ export async function POST(req: Request) {
         subscriber_count: body.subscriber_count || "",
         channel_url: body.channel_url || "",
         email: body.email,
-        status: body.status || "미검토",
+        status,
         memo: body.memo || "",
       },
       { onConflict: "email" }
@@ -143,7 +176,7 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+  return NextResponse.json({ ...data, bannedExcluded: isBanned }, { status: 201 });
 }
 
 // 이관이 필요한 상태 (미검토 이후 단계)
