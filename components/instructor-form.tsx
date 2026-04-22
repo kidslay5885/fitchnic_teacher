@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -15,7 +15,7 @@ import { ASSIGNEES, SOURCES, STATUSES } from "@/lib/constants";
 import { requiresReason } from "@/lib/status-machine";
 import type { InstructorStatus } from "@/lib/types";
 import { toast } from "sonner";
-import { AlertTriangle, Plus, Minus } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, Plus, Minus } from "lucide-react";
 
 interface Props {
   onClose: () => void;
@@ -25,8 +25,32 @@ interface DuplicateInfo {
   id: string; name: string; field: string; assignee: string; status: string;
 }
 
+// 편집 거리 (Levenshtein) - 유사도 체크용
+function editDistance(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+  return dp[m][n];
+}
+
 export default function InstructorForm({ onClose }: Props) {
-  const { dispatch, loadStats } = useOutreach();
+  const { state, dispatch, loadStats, loadYoutubeChannels } = useOutreach();
+  const instructors = state.instructors;
+  const ytChannels = state.youtubeChannels;
+
+  // YT채널 목록이 없으면 로드
+  useEffect(() => {
+    if (!ytChannels || ytChannels.length === 0) {
+      loadYoutubeChannels();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [form, setForm] = useState({
     name: "", field: "", assignee: "", email: "",
     instagram: "", youtube: "", phone: "", ref_link: "",
@@ -40,17 +64,153 @@ export default function InstructorForm({ onClose }: Props) {
 
   const statusNeedsMemo = requiresReason(form.status as InstructorStatus) || form.status === "컨펌 필요";
 
+  // 실시간 강사명 중복/금지/유사 체크 (instructors + youtube_channels)
+  const nameCheck = useMemo(() => {
+    const name = form.name.trim();
+    if (!name) return null;
+    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const normalized = normalize(name);
+
+    const duplicates = instructors.filter((i) => normalize(i.name) === normalized);
+    if (duplicates.length > 0) {
+      const banned = duplicates.some((d) => d.is_banned);
+      if (banned) return { type: "banned" as const, matches: duplicates, source: "instructors" as const };
+      return { type: "duplicate" as const, matches: duplicates, source: "instructors" as const };
+    }
+
+    const ytDuplicates = ytChannels.filter((ch) => normalize(ch.channel_name) === normalized);
+    if (ytDuplicates.length > 0) {
+      const ytMatches = ytDuplicates.map((ch) => ({
+        id: ch.id,
+        name: ch.channel_name,
+        field: ch.keyword,
+        status: ch.status,
+        is_banned: false,
+        assignee: "",
+      })) as any[];
+      return { type: "duplicate" as const, matches: ytMatches, source: "youtube_channels" as const };
+    }
+
+    if (normalized.length >= 2) {
+      const similars = instructors.filter((i) => {
+        const n = normalize(i.name);
+        if (n === normalized) return false;
+        if (n.includes(normalized) || normalized.includes(n)) return true;
+        const maxLen = Math.max(n.length, normalized.length);
+        const threshold = maxLen <= 3 ? 1 : 2;
+        return editDistance(n, normalized) <= threshold;
+      });
+      if (similars.length > 0) return { type: "similar" as const, matches: similars, source: "instructors" as const };
+
+      const ytSimilars = ytChannels.filter((ch) => {
+        const n = normalize(ch.channel_name);
+        if (n === normalized) return false;
+        if (n.includes(normalized) || normalized.includes(n)) return true;
+        const maxLen = Math.max(n.length, normalized.length);
+        const threshold = maxLen <= 3 ? 1 : 2;
+        return editDistance(n, normalized) <= threshold;
+      });
+      if (ytSimilars.length > 0) {
+        const ytMatches = ytSimilars.map((ch) => ({
+          id: ch.id,
+          name: ch.channel_name,
+          field: ch.keyword,
+          status: ch.status,
+          is_banned: false,
+          assignee: "",
+        })) as any[];
+        return { type: "similar" as const, matches: ytMatches, source: "youtube_channels" as const };
+      }
+    }
+    return { type: "ok" as const };
+  }, [form.name, instructors, ytChannels]);
+
+  // 실시간 이메일 중복/금지 체크 (정확 일치, instructors + youtube_channels)
+  const emailCheck = useMemo(() => {
+    const email = form.email.trim().toLowerCase();
+    if (!email) return null;
+
+    const duplicates = instructors.filter((i) =>
+      i.email && i.email.trim().toLowerCase() === email
+    );
+    if (duplicates.length > 0) {
+      const banned = duplicates.some((d) => d.is_banned);
+      if (banned) return { type: "banned" as const, matches: duplicates, source: "instructors" as const };
+      return { type: "duplicate" as const, matches: duplicates, source: "instructors" as const };
+    }
+
+    const ytDuplicates = ytChannels.filter((ch) =>
+      ch.email && ch.email.trim().toLowerCase() === email
+    );
+    if (ytDuplicates.length > 0) {
+      const ytMatches = ytDuplicates.map((ch) => ({
+        id: ch.id,
+        name: ch.channel_name,
+        field: ch.keyword,
+        status: ch.status,
+        is_banned: false,
+        assignee: "",
+        email: ch.email,
+      })) as any[];
+      return { type: "duplicate" as const, matches: ytMatches, source: "youtube_channels" as const };
+    }
+
+    if (email.length >= 5) {
+      const similars = instructors.filter((i) => {
+        if (!i.email) return false;
+        const e = i.email.trim().toLowerCase();
+        if (e === email) return false;
+        if (e.includes(email) || email.includes(e)) return true;
+        const maxLen = Math.max(e.length, email.length);
+        const threshold = maxLen <= 5 ? 1 : 2;
+        return editDistance(e, email) <= threshold;
+      });
+      if (similars.length > 0) return { type: "similar" as const, matches: similars, source: "instructors" as const };
+
+      const ytSimilars = ytChannels.filter((ch) => {
+        if (!ch.email) return false;
+        const e = ch.email.trim().toLowerCase();
+        if (e === email) return false;
+        if (e.includes(email) || email.includes(e)) return true;
+        const maxLen = Math.max(e.length, email.length);
+        const threshold = maxLen <= 5 ? 1 : 2;
+        return editDistance(e, email) <= threshold;
+      });
+      if (ytSimilars.length > 0) {
+        const ytMatches = ytSimilars.map((ch) => ({
+          id: ch.id,
+          name: ch.channel_name,
+          field: ch.keyword,
+          status: ch.status,
+          is_banned: false,
+          assignee: "",
+          email: ch.email,
+        })) as any[];
+        return { type: "similar" as const, matches: ytMatches, source: "youtube_channels" as const };
+      }
+    }
+
+    return { type: "ok" as const };
+  }, [form.email, instructors, ytChannels]);
+
   const handleSubmit = async (force = false) => {
     if (!form.name.trim()) { toast.error("강사 이름을 입력하세요."); return; }
     if (requiresReason(form.status as InstructorStatus) && !form.status_memo.trim()) {
       toast.error(`'${form.status}' 상태는 사유 입력이 필요합니다.`);
       return;
     }
+    if (nameCheck?.type === "banned" || emailCheck?.type === "banned") {
+      toast.error("연락 금지 대상입니다. 추가할 수 없습니다.");
+      return;
+    }
+    if ((nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") && !force) return;
     setSaving(true);
     try {
       const { status_memo, ...rest } = form;
       const payload: any = {
         ...rest,
+        name: form.name.trimEnd(),
+        field: form.field.trimEnd(),
         ref_link: refLinks.filter((l) => l.trim()).join(" , "),
         _force: force,
       };
@@ -118,10 +278,53 @@ export default function InstructorForm({ onClose }: Props) {
         {!duplicates && (
           <>
             <div className="grid grid-cols-2 gap-x-3 gap-y-3">
-              {/* 이름 */}
+              {/* 이름 + 실시간 중복 체크 */}
               <div className="col-span-2">
                 <Label className="text-xs">이름 *</Label>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="h-8 text-sm" />
+                {nameCheck?.type === "ok" && form.name.trim() && (
+                  <div className="flex items-center gap-1 mt-1 text-xs text-green-600">
+                    <CheckCircle2 className="h-3.5 w-3.5" />등록 가능
+                  </div>
+                )}
+                {nameCheck?.type === "banned" && (
+                  <div className="mt-1.5 rounded border border-red-300 bg-red-50 p-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-red-700 font-semibold">
+                      <Ban className="h-3.5 w-3.5" />연락 금지 대상
+                    </div>
+                    {nameCheck.matches.map((d) => (
+                      <div key={d.id} className="text-xs text-red-600 bg-red-100 rounded px-2 py-1">
+                        {d.name} {d.field && `| ${d.field}`} | {d.status}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {nameCheck?.type === "duplicate" && (
+                  <div className="mt-1.5 rounded border border-orange-300 bg-orange-50 p-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-orange-700 font-semibold">
+                      <AlertTriangle className="h-3.5 w-3.5" />이미 등록된 이름
+                      {nameCheck.source === "youtube_channels" && <span className="text-orange-500 font-normal">(YT채널수집)</span>}
+                    </div>
+                    {nameCheck.matches.map((d) => (
+                      <div key={d.id} className="text-xs text-orange-600 bg-orange-100 rounded px-2 py-1">
+                        {d.name} {d.field && `| ${d.field}`} | {d.status}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {nameCheck?.type === "similar" && (
+                  <div className="mt-1.5 rounded border border-yellow-300 bg-yellow-50 p-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-yellow-700 font-semibold">
+                      <AlertTriangle className="h-3.5 w-3.5" />비슷한 이름이 있습니다
+                      {nameCheck.source === "youtube_channels" && <span className="text-yellow-500 font-normal">(YT채널수집)</span>}
+                    </div>
+                    {nameCheck.matches.map((d) => (
+                      <div key={d.id} className="text-xs text-yellow-600 bg-yellow-100 rounded px-2 py-1">
+                        {d.name} {d.field && `| ${d.field}`} | {d.status}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 분야 */}
@@ -243,14 +446,57 @@ export default function InstructorForm({ onClose }: Props) {
                 ))}
               </div>
 
-              {/* 이메일 */}
-              <div>
+              {/* 이메일 + 실시간 중복 체크 */}
+              <div className="col-span-2">
                 <Label className="text-xs">이메일</Label>
                 <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="h-8 text-sm" />
+                {emailCheck?.type === "ok" && form.email.trim() && (
+                  <div className="flex items-center gap-1 mt-1 text-xs text-green-600">
+                    <CheckCircle2 className="h-3.5 w-3.5" />등록 가능
+                  </div>
+                )}
+                {emailCheck?.type === "banned" && (
+                  <div className="mt-1.5 rounded border border-red-300 bg-red-50 p-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-red-700 font-semibold">
+                      <Ban className="h-3.5 w-3.5" />연락 금지 대상
+                    </div>
+                    {emailCheck.matches.map((d) => (
+                      <div key={d.id} className="text-xs text-red-600 bg-red-100 rounded px-2 py-1">
+                        {d.name} {d.field && `| ${d.field}`} | {d.status}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {emailCheck?.type === "duplicate" && (
+                  <div className="mt-1.5 rounded border border-orange-300 bg-orange-50 p-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-orange-700 font-semibold">
+                      <AlertTriangle className="h-3.5 w-3.5" />이미 등록된 이메일
+                      {emailCheck.source === "youtube_channels" && <span className="text-orange-500 font-normal">(YT채널수집)</span>}
+                    </div>
+                    {emailCheck.matches.map((d) => (
+                      <div key={d.id} className="text-xs text-orange-600 bg-orange-100 rounded px-2 py-1">
+                        {d.name} {d.field && `| ${d.field}`} | {d.status}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {emailCheck?.type === "similar" && (
+                  <div className="mt-1.5 rounded border border-yellow-300 bg-yellow-50 p-2 space-y-1">
+                    <div className="flex items-center gap-1 text-xs text-yellow-700 font-semibold">
+                      <AlertTriangle className="h-3.5 w-3.5" />비슷한 이메일이 있습니다
+                      {emailCheck.source === "youtube_channels" && <span className="text-yellow-500 font-normal">(YT채널수집)</span>}
+                    </div>
+                    {emailCheck.matches.map((d) => (
+                      <div key={d.id} className="text-xs text-yellow-600 bg-yellow-100 rounded px-2 py-1">
+                        {d.email} | {d.name || "이름없음"} | {d.status}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 전화번호 */}
-              <div>
+              <div className="col-span-2">
                 <Label className="text-xs">전화번호</Label>
                 <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="h-8 text-sm" />
               </div>
@@ -310,9 +556,20 @@ export default function InstructorForm({ onClose }: Props) {
 
             <div className="flex justify-end gap-2 mt-1">
               <Button variant="outline" size="sm" className="h-8 text-sm" onClick={onClose}>취소</Button>
-              <Button size="sm" className="h-8 text-sm" onClick={() => handleSubmit(false)} disabled={saving}>
-                {saving ? "저장 중..." : "추가"}
-              </Button>
+              {(nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") ? (
+                <Button size="sm" className="h-8 text-sm" onClick={() => handleSubmit(true)} disabled={saving}>
+                  {saving ? "저장 중..." : "그래도 추가"}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  className="h-8 text-sm"
+                  onClick={() => handleSubmit(false)}
+                  disabled={saving || nameCheck?.type === "banned" || emailCheck?.type === "banned"}
+                >
+                  {saving ? "저장 중..." : "추가"}
+                </Button>
+              )}
             </div>
           </>
         )}

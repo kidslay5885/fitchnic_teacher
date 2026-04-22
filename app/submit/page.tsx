@@ -743,7 +743,12 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
     if (!editing && (nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") && !force) return;
     setSaving(true);
     try {
-      const payload = { ...form, ref_link: refLinks.filter((l) => l.trim()).join(" , ") };
+      const payload = {
+        ...form,
+        name: form.name.trimEnd(),
+        field: form.field.trimEnd(),
+        ref_link: refLinks.filter((l) => l.trim()).join(" , "),
+      };
       if (editing) {
         // 수정 모드
         const res = await fetch(`/api/instructors/${editing.id}`, {
