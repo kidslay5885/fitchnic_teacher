@@ -16,7 +16,7 @@ import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import SendEmailModal from "@/components/send-email-modal";
 import { toast } from "sonner";
-import { Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail, MessageSquare } from "lucide-react";
+import { Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -28,8 +28,8 @@ type SortDir = "asc" | "desc";
 type WaveFilterKey = "none" | "미입력" | "체크필요" | "무응답" | "응답" | "거절";
 
 const ROW_H = 40;
-const GRID = "36px 1.4fr 84px 1fr 1.3fr 96px 72px 0.7fr 72px 0.7fr 72px 0.7fr";
-const MIN_W = 1128;
+const GRID = "36px 1.4fr 84px 64px 1fr 1.3fr 96px 72px 0.7fr 72px 0.7fr 72px 0.7fr";
+const MIN_W = 1192;
 
 // 상태별 행 배경색 (연한 틴트)
 const ROW_BG: Record<string, string> = {
@@ -394,14 +394,24 @@ export default function ContactTab() {
     return w.result || (w.sent_date ? "체크필요" : "-");
   };
 
-  const waveColor = (w: OutreachWave | undefined) => {
-    if (!w?.result && w?.sent_date) return "text-gray-600 bg-gray-100";
-    if (!w?.result) return "";
-    if (w.result === "응답") return "text-green-800 bg-green-100";
-    if (w.result === "거절") return "text-red-700 bg-red-100";
-    if (w.result === "체크필요") return "text-amber-800 bg-amber-100";
-    if (w.result === "무응답") return "text-gray-600 bg-gray-100";
-    return "";
+  // 응답여부 pill 색 (배경+글자). null이면 pill 없이 텍스트만 표시
+  const waveBadgeClass = (w: OutreachWave | undefined): string | null => {
+    if (!w?.result) return null;
+    if (w.result === "응답") return "bg-green-100 text-green-800";
+    if (w.result === "거절") return "bg-red-100 text-red-700";
+    if (w.result === "체크필요") return "bg-amber-100 text-amber-800";
+    return null; // 무응답 등은 텍스트만
+  };
+
+  // 진행 도트 색 (차수별 발송/결과 상태)
+  const waveDotColor = (w: OutreachWave | undefined) => {
+    if (!w || (!w.sent_date && !w.result)) return "bg-gray-200";
+    if (w.result === "응답") return "bg-green-500";
+    if (w.result === "거절") return "bg-red-400";
+    if (w.result === "체크필요") return "bg-amber-400";
+    if (w.result === "무응답") return "bg-gray-400";
+    if (w.sent_date) return "bg-amber-400";
+    return "bg-gray-200";
   };
 
   // 발송 수단이 DM이면 2·3차 입력 잠금
@@ -537,29 +547,42 @@ export default function ContactTab() {
 
       {/* ── 테이블 ── */}
       <div ref={scrollRef} className="border rounded flex-1 min-h-0 overflow-auto">
-        {/* 헤더 */}
+        {/* 헤더 (2단 구조: 상단 그룹 / 하단 발송일·응답여부) */}
         <div
-          className="sticky top-0 z-10 grid items-center bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
+          className="sticky top-0 z-10 grid items-stretch bg-[#f8f9fa] border-b text-xs font-semibold text-muted-foreground select-none"
           style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
         >
-          <div className="px-1 flex justify-center cursor-pointer border-r border-gray-200" onClick={toggleSelectAll}>
+          <div className="row-span-2 px-1 flex justify-center items-center cursor-pointer border-r border-gray-200" onClick={toggleSelectAll}>
             <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
               checked={selectedIds.size === filtered.length && filtered.length > 0} readOnly />
           </div>
-          <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <SortHeader label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <SendMethodHeader active={sendMethodFilter} onFilter={setSendMethodFilter} />
+          <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
+          <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
+          <div className="row-span-2 px-2 py-2.5 flex items-center justify-center border-r border-gray-200">진행</div>
+          <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
+          <SortHeader label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
+          <SendMethodHeader active={sendMethodFilter} onFilter={setSendMethodFilter} extraClass="row-span-2 border-r-2 border-r-gray-300" />
+          {/* 상단: 1차/2차/3차 그룹 헤더 */}
+          {[1, 2, 3].map((n) => (
+            <div
+              key={`group-${n}`}
+              className={`col-span-2 px-2 py-1 text-center border-b border-gray-200 ${n < 3 ? "border-r-2 border-r-gray-300" : ""}`}
+            >
+              {n}차
+            </div>
+          ))}
+          {/* 하단: 발송일 / 응답여부 */}
           {[1, 2, 3].map((n) => {
             const dateCol = `wave${n}_date` as SortKey;
+            const isLastGroup = n === 3;
             return (
-              <div key={`wave-${n}`} className="contents">
-                                <SortHeader label={`${n}차 발송일`} col={dateCol} sk={sortKey} sd={sortDir} onSort={handleSort} center />
+              <div key={`sub-${n}`} className="contents">
+                <SortHeader label="발송일" col={dateCol} sk={sortKey} sd={sortDir} onSort={handleSort} center />
                 <WaveHeader
                   wave={n}
-                  label={`${n}차 응답여부`}
+                  label="응답여부"
                   active={waveFilters[n] || "none"}
+                  extraClass={!isLastGroup ? "border-r-2 border-r-gray-300" : ""}
                   onFilter={(key) => setWaveFilters(prev => {
                     const next = { ...prev };
                     if (key === "none" || prev[n] === key) delete next[n];
@@ -580,7 +603,7 @@ export default function ContactTab() {
             {virtualizer.getVirtualItems().map((vRow) => {
               const i = filtered[vRow.index];
               const isSelected = selectedIds.has(i.id);
-              const rowBg = isSelected ? "bg-blue-100/70" : ROW_BG[i.status] || (vRow.index % 2 === 0 ? "bg-white" : "bg-[#fafafa]");
+              const rowBg = isSelected ? "bg-blue-100/70" : (vRow.index % 2 === 0 ? "bg-white" : "bg-slate-100");
               return (
                 <div
                   key={i.id}
@@ -616,6 +639,16 @@ export default function ContactTab() {
                       {i.status}
                     </Badge>
                   </div>
+                  {/* 진행 (차수별 도트) */}
+                  <div className="px-2 flex items-center justify-center gap-1.5 border-r border-gray-200/60">
+                    {[1, 2, 3].map((n) => (
+                      <span
+                        key={n}
+                        className={`h-3 w-3 rounded-full ${waveDotColor(getWave(i.id, n))}`}
+                        title={`${n}차: ${getWave(i.id, n)?.result || (getWave(i.id, n)?.sent_date ? "체크필요" : "미발송")}`}
+                      />
+                    ))}
+                  </div>
                   {/* 분야 */}
                   <div className="px-2 text-muted-foreground truncate border-r border-gray-200/60" title={i.field || ""}>{i.field || ""}</div>
                   {/* 이메일 */}
@@ -639,13 +672,19 @@ export default function ContactTab() {
                   </div>
                   {/* 발송 수단 */}
                   <div
-                    className="px-2 flex items-center justify-center cursor-pointer hover:brightness-95 border-r border-gray-200/60"
+                    className="self-stretch px-2 flex items-center justify-center cursor-pointer hover:bg-gray-100/60 border-r-2 border-r-gray-300"
                     onClick={(e) => handleSendMethodClick(e, i)}
                     title={i.send_method || "미선택"}
                   >
-                    <span className={`text-xs whitespace-nowrap ${i.send_method ? "font-medium" : "text-muted-foreground"}`}>
-                      {i.send_method || "-"}
-                    </span>
+                    {i.send_method ? (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        i.send_method === "DM" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"
+                      }`}>
+                        {i.send_method}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-300">-</span>
+                    )}
                   </div>
                   {/* 1/2/3차 발송일 + 응답여부 */}
                   {[1, 2, 3].map((n) => {
@@ -660,14 +699,12 @@ export default function ContactTab() {
                                                 {/* 발송일 (인라인 date picker, DM 잠금 시 비활성) */}
                         {locked ? (
                           <div
-                            className="self-stretch px-1 flex items-center justify-center border-r border-gray-200/60 bg-purple-50 text-purple-700 cursor-not-allowed"
+                            className="self-stretch border-r border-gray-200/60 bg-gray-200 cursor-not-allowed"
                             title="발송 수단 DM — 2·3차 발송 없음"
-                          >
-                            <span className="text-xs">-</span>
-                          </div>
+                          />
                         ) : (
                           <div
-                            className={`relative self-stretch px-1 flex items-center justify-center border-r border-gray-200/60 cursor-pointer hover:brightness-95 transition-colors ${waveColor(w)}`}
+                            className="relative self-stretch px-1 flex items-center justify-center border-r border-gray-200/60 cursor-pointer hover:bg-gray-100/60"
                             onClick={(e) => {
                               e.stopPropagation();
                               const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement | null;
@@ -686,31 +723,37 @@ export default function ContactTab() {
                               onChange={(e) => handleWaveDateChange(i.id, n, e.target.value)}
                               aria-label={`${n}차 발송일`}
                             />
-                            <span className={`text-sm whitespace-nowrap ${w?.sent_date ? "" : "text-muted-foreground"}`}>
+                            <span className={`text-sm whitespace-nowrap ${w?.sent_date ? "text-foreground font-medium" : "text-gray-300"}`}>
                               {dateDisplay}
                             </span>
                           </div>
                         )}
                         {/* 응답여부 (모달 트리거, DM 잠금 시 비활성) */}
-                        {locked ? (
-                          <div
-                            className="self-stretch px-2 flex items-center justify-center border-r border-gray-200/60 bg-purple-50 text-purple-700 cursor-not-allowed"
-                            title="발송 수단 DM — 2·3차 발송 없음"
-                          >
-                            <span className="inline-flex items-center gap-1 text-xs font-medium">
-                              <MessageSquare className="h-3 w-3" /> DM 발송
-                            </span>
-                          </div>
-                        ) : (
-                          <div
-                            className={`self-stretch px-2 flex items-center justify-center transition-colors border-r border-gray-200/60 cursor-pointer hover:brightness-95 ${waveColor(w)}`}
-                            onClick={(e) => handleCellClick(e, i, n)}
-                          >
-                            <span className="text-sm whitespace-nowrap">
-                              {responseText}
-                            </span>
-                          </div>
-                        )}
+                        {(() => {
+                          const borderClass = n < 3 ? "border-r-2 border-r-gray-300" : "border-r border-gray-200/60";
+                          const badge = waveBadgeClass(w);
+                          return locked ? (
+                            <div
+                              className={`self-stretch bg-gray-200 cursor-not-allowed ${borderClass}`}
+                              title="발송 수단 DM — 2·3차 발송 없음"
+                            />
+                          ) : (
+                            <div
+                              className={`self-stretch px-2 flex items-center justify-center cursor-pointer hover:bg-gray-100/60 ${borderClass}`}
+                              onClick={(e) => handleCellClick(e, i, n)}
+                            >
+                              {badge ? (
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badge}`}>
+                                  {responseText}
+                                </span>
+                              ) : (
+                                <span className={`text-sm whitespace-nowrap ${responseText === "-" ? "text-gray-300" : "text-muted-foreground"}`}>
+                                  {responseText}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
@@ -1387,14 +1430,14 @@ function SendMethodPopover({ instructor, x, y, onSelect, onClose }: {
 }
 
 /* ── 정렬 헤더 셀 ── */
-function SortHeader({ label, col, sk, sd, onSort, last, center }: {
+function SortHeader({ label, col, sk, sd, onSort, last, center, extraClass }: {
   label: string; col: SortKey; sk: SortKey; sd: SortDir;
-  onSort: (k: SortKey) => void; last?: boolean; center?: boolean;
+  onSort: (k: SortKey) => void; last?: boolean; center?: boolean; extraClass?: string;
 }) {
   const active = sk === col;
   return (
     <div
-      className={`px-2 py-2.5 whitespace-nowrap flex items-center cursor-pointer hover:bg-gray-200/50 ${center ? "justify-center" : ""} ${!last ? "border-r border-gray-200" : ""} ${active ? "text-primary font-bold" : ""}`}
+      className={`px-2 py-2.5 whitespace-nowrap flex items-center cursor-pointer hover:bg-gray-200/50 ${center ? "justify-center" : ""} ${!last ? "border-r border-gray-200" : ""} ${active ? "text-primary font-bold" : ""} ${extraClass || ""}`}
       onClick={() => onSort(col)}
     >
       {label}
@@ -1404,9 +1447,10 @@ function SortHeader({ label, col, sk, sd, onSort, last, center }: {
 }
 
 /* ── 발송 수단 헤더 (DM/이메일 필터) ── */
-function SendMethodHeader({ active, onFilter }: {
+function SendMethodHeader({ active, onFilter, extraClass }: {
   active: SendMethodFilter;
   onFilter: (v: SendMethodFilter) => void;
+  extraClass?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1421,9 +1465,9 @@ function SendMethodHeader({ active, onFilter }: {
   }, [open]);
 
   return (
-    <div className="relative border-r border-gray-200" ref={ref}>
+    <div className={`relative border-r border-gray-200 ${extraClass || ""}`} ref={ref}>
       <div
-        className={`px-2 py-2.5 text-center cursor-pointer hover:bg-gray-200/50 flex items-center justify-center gap-1 ${active ? "text-primary font-bold" : ""}`}
+        className={`h-full px-2 py-2.5 text-center cursor-pointer hover:bg-gray-200/50 flex items-center justify-center gap-1 ${active ? "text-primary font-bold" : ""}`}
         onClick={() => setOpen(!open)}
       >
         발송 수단
@@ -1458,11 +1502,12 @@ function SendMethodHeader({ active, onFilter }: {
 }
 
 /* ── 웨이브 헤더 (상태 필터) ── */
-function WaveHeader({ wave, active, onFilter, label }: {
+function WaveHeader({ wave, active, onFilter, label, extraClass }: {
   wave: number;
   active: WaveFilterKey;
   onFilter: (key: WaveFilterKey) => void;
   label?: string;
+  extraClass?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1477,9 +1522,9 @@ function WaveHeader({ wave, active, onFilter, label }: {
   }, [open]);
 
   return (
-    <div className="relative border-r border-gray-200" ref={ref}>
+    <div className={`relative border-r border-gray-200 ${extraClass || ""}`} ref={ref}>
       <div
-        className={`px-2 py-2.5 text-center cursor-pointer hover:bg-gray-200/50 flex items-center justify-center gap-1 ${active !== "none" ? "text-primary font-bold" : ""}`}
+        className={`h-full px-2 py-2.5 text-center cursor-pointer hover:bg-gray-200/50 flex items-center justify-center gap-1 ${active !== "none" ? "text-primary font-bold" : ""}`}
         onClick={() => setOpen(!open)}
       >
         {label ?? `${wave}차`}
