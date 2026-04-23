@@ -16,7 +16,7 @@ import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import SendEmailModal from "@/components/send-email-modal";
 import { toast } from "sonner";
-import { Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail } from "lucide-react";
+import { Search, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Pencil, Mail, Calendar as CalendarIcon } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -65,6 +65,8 @@ export default function ContactTab() {
   const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
   const [waveFilters, setWaveFilters] = useState<Record<number, WaveFilterKey>>({});
   const [sendMethodFilter, setSendMethodFilter] = useState<SendMethodFilter>("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -134,6 +136,9 @@ export default function ContactTab() {
     if (sendMethodFilter) {
       list = list.filter((i) => i.send_method === sendMethodFilter);
     }
+    if (dateFilter) {
+      list = list.filter((i) => (wavesMap[i.id] || []).some((w) => w.sent_date === dateFilter));
+    }
     const waveDateMatch = /^wave([123])_date$/.exec(sortKey);
     let sorted = [...list].sort((a, b) => {
       let cmp = 0;
@@ -185,7 +190,16 @@ export default function ContactTab() {
     }
 
     return sorted;
-  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds, sendMethodFilter]);
+  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds, sendMethodFilter, dateFilter]);
+
+  // 발송일이 있는 날짜 집합 (달력에 점 표시용)
+  const datesWithWave = useMemo(() => {
+    const set = new Set<string>();
+    for (const waves of Object.values(wavesMap)) {
+      for (const w of waves) if (w.sent_date) set.add(w.sent_date);
+    }
+    return set;
+  }, [wavesMap]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -542,6 +556,28 @@ export default function ContactTab() {
           <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => setBulkEditOpen(true)}>
             <Pencil className="h-3.5 w-3.5 mr-1.5" />일괄 수정
           </Button>
+          {/* 날짜 필터 */}
+          <div className="relative">
+            <Button
+              size="sm"
+              variant="outline"
+              className={`h-8 text-sm ${dateFilter ? "text-primary border-primary" : ""}`}
+              onClick={() => setDateFilterOpen((v) => !v)}
+            >
+              <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
+              {dateFilter
+                ? (() => { const p = dateFilter.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; })()
+                : "날짜"}
+            </Button>
+            {dateFilterOpen && (
+              <DateFilterPopover
+                selected={dateFilter}
+                onSelect={(d) => { setDateFilter(d); if (d) setDateFilterOpen(false); }}
+                onClose={() => setDateFilterOpen(false)}
+                datesWithData={datesWithWave}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -1364,6 +1400,128 @@ function FinalStatusPopover({ instructor, x, y, onSelect, onClose }: {
           {s}
         </button>
       ))}
+    </div>
+  );
+}
+
+/* ── 날짜 필터 팝오버 (발송일 기반) ── */
+function fmtDateYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function DateFilterPopover({ selected, onSelect, onClose, datesWithData }: {
+  selected: string;
+  onSelect: (date: string) => void;
+  onClose: () => void;
+  datesWithData: Set<string>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const initial = selected ? new Date(selected) : new Date();
+  const [viewYear, setViewYear] = useState(initial.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initial.getMonth());
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: { date: string; inMonth: boolean; day: number }[] = [];
+  for (let i = startWeekday - 1; i >= 0; i--) {
+    const d = new Date(viewYear, viewMonth, -i);
+    cells.push({ date: fmtDateYmd(d), inMonth: false, day: d.getDate() });
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    const d = new Date(viewYear, viewMonth, i);
+    cells.push({ date: fmtDateYmd(d), inMonth: true, day: i });
+  }
+  while (cells.length < 42) {
+    const last = new Date(cells[cells.length - 1].date);
+    last.setDate(last.getDate() + 1);
+    cells.push({ date: fmtDateYmd(last), inMonth: false, day: last.getDate() });
+  }
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewYear(viewYear - 1); setViewMonth(11); }
+    else setViewMonth(viewMonth - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewYear(viewYear + 1); setViewMonth(0); }
+    else setViewMonth(viewMonth + 1);
+  };
+
+  const today = fmtDateYmd(new Date());
+
+  return (
+    <div
+      ref={ref}
+      className="absolute top-full right-0 mt-1 z-50 bg-white border rounded-lg shadow-lg p-3 w-72"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded">
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <span className="text-sm font-semibold">{viewYear}년 {viewMonth + 1}월</span>
+        <button onClick={nextMonth} className="p-1 hover:bg-gray-100 rounded">
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] mb-1 text-muted-foreground">
+        {["일","월","화","수","목","금","토"].map(d => <div key={d}>{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((c, idx) => {
+          const hasData = datesWithData.has(c.date);
+          const isSelected = selected === c.date;
+          const isToday = today === c.date;
+          return (
+            <button
+              key={idx}
+              onClick={() => onSelect(isSelected ? "" : c.date)}
+              disabled={!c.inMonth && !hasData}
+              className={`relative aspect-square rounded text-xs flex items-center justify-center transition ${
+                isSelected
+                  ? "bg-primary text-primary-foreground font-semibold"
+                  : !c.inMonth
+                  ? "text-gray-300 hover:bg-gray-50"
+                  : hasData
+                  ? "bg-blue-50 text-blue-700 font-medium hover:bg-blue-100"
+                  : isToday
+                  ? "ring-1 ring-primary/40 hover:bg-gray-100"
+                  : "hover:bg-gray-100"
+              }`}
+            >
+              {c.day}
+              {hasData && !isSelected && (
+                <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-blue-500" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">
+          {selected
+            ? `${selected} 선택됨`
+            : `발송일 ${datesWithData.size}개`}
+        </span>
+        {selected && (
+          <button
+            onClick={() => { onSelect(""); onClose(); }}
+            className="text-primary hover:underline"
+          >
+            해제
+          </button>
+        )}
+      </div>
     </div>
   );
 }
