@@ -11,10 +11,10 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "ids and status required" }, { status: 400 });
   }
 
-  // 현재 상태 조회
+  // 현재 상태 + 출처 조회 (YT채널수집 역동기화용)
   const { data: currents } = await sb
     .from("instructors")
-    .select("id, status")
+    .select("id, status, source")
     .in("id", ids);
 
   // 상태 이력 일괄 삽입
@@ -40,6 +40,18 @@ export async function PATCH(req: Request) {
     .in("id", ids);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // YT채널수집 역동기화: 원본 youtube_channels도 같이 업데이트
+  const ytIds = (currents ?? []).filter((c) => c.source === "YT채널수집").map((c) => c.id);
+  if (ytIds.length > 0) {
+    if (status === "미검토") {
+      // 미검토로 되돌림 → youtube_channels 연결 해제 + instructor 삭제
+      await sb.from("youtube_channels").update({ status: "미검토", instructor_id: null }).in("instructor_id", ytIds);
+      await sb.from("instructors").delete().in("id", ytIds);
+    } else {
+      await sb.from("youtube_channels").update({ status }).in("instructor_id", ytIds);
+    }
+  }
 
   // 강사 이름 조회해서 활동 로그 기록
   const { data: names } = await sb.from("instructors").select("id, name").in("id", ids);
