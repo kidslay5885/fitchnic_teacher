@@ -369,29 +369,9 @@ export default function ContactTab() {
   const cnt = (s: string) => contactInstructors.filter((i) => i.status === s).length;
   const getWave = (id: string, n: number) => (wavesMap[id] || []).find((w) => w.wave_number === n);
 
-  // D-day 계산 (발송일 + 7일 기준)
-  const getDday = (sentDate: string | undefined) => {
-    if (!sentDate) return null;
-    const sent = new Date(sentDate);
-    const target = new Date(sent.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    target.setHours(0, 0, 0, 0);
-    return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  };
-
   const formatWave = (w: OutreachWave | undefined) => {
-    if (!w || (!w.sent_date && !w.result)) return { text: "-", overdue: false };
-    const r = w.result || (w.sent_date ? "체크필요" : "");
-    let dDay = "";
-    let overdue = false;
-    if (w.sent_date && (!w.result || w.result === "체크필요")) {
-      const diff = getDday(w.sent_date)!;
-      dDay = diff > 0 ? `D-${diff}` : diff === 0 ? "D-Day" : `D+${Math.abs(diff)}`;
-      overdue = diff <= 0;
-    }
-    const parts = [r, dDay].filter(Boolean);
-    return { text: parts.join(" · ") || "-", overdue };
+    if (!w || (!w.sent_date && !w.result)) return "-";
+    return w.result || (w.sent_date ? "체크필요" : "-");
   };
 
   const waveColor = (w: OutreachWave | undefined) => {
@@ -641,7 +621,7 @@ export default function ContactTab() {
                   {/* 1/2/3차 발송일 + 응답여부 */}
                   {[1, 2, 3].map((n) => {
                     const w = getWave(i.id, n);
-                    const { text: responseText, overdue } = formatWave(w);
+                    const responseText = formatWave(w);
                     const dateDisplay = w?.sent_date
                       ? (() => { const p = w.sent_date.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; })()
                       : "-";
@@ -657,7 +637,7 @@ export default function ContactTab() {
                             onChange={(e) => handleWaveDateChange(i.id, n, e.target.value)}
                             aria-label={`${n}차 발송일`}
                           />
-                          <span className={`text-sm whitespace-nowrap ${overdue ? "text-red-600 font-semibold" : w?.sent_date ? "" : "text-muted-foreground"}`}>
+                          <span className={`text-sm whitespace-nowrap ${w?.sent_date ? "" : "text-muted-foreground"}`}>
                             {dateDisplay}
                           </span>
                         </div>
@@ -666,7 +646,7 @@ export default function ContactTab() {
                           className={`px-2 flex items-center justify-center transition-colors border-r border-gray-200/60 cursor-pointer hover:brightness-95 ${waveColor(w)}`}
                           onClick={(e) => handleCellClick(e, i.id, n)}
                         >
-                          <span className={`text-sm whitespace-nowrap ${overdue ? "text-red-600 font-semibold" : ""}`}>
+                          <span className="text-sm whitespace-nowrap">
                             {responseText}
                           </span>
                         </div>
