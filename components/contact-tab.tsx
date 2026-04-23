@@ -16,7 +16,7 @@ import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import SendEmailModal from "@/components/send-email-modal";
 import { toast } from "sonner";
-import { Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail } from "lucide-react";
+import { Search, X, ChevronUp, ChevronDown, Copy, Download, Pencil, Mail, MessageSquare } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
@@ -27,8 +27,8 @@ type SortDir = "asc" | "desc";
 type WaveFilterKey = "none" | "미입력" | "체크필요" | "무응답" | "응답" | "거절";
 
 const ROW_H = 40;
-const GRID = "36px 1.4fr 84px 1fr 1.3fr 96px 72px 1fr 6px 72px 1fr 6px 72px 1fr";
-const MIN_W = 1212;
+const GRID = "36px 1.4fr 84px 1fr 1.3fr 96px 72px 0.7fr 6px 72px 0.7fr 6px 72px 0.7fr";
+const MIN_W = 1140;
 
 // 상태별 행 배경색 (연한 틴트)
 const ROW_BG: Record<string, string> = {
@@ -384,10 +384,17 @@ export default function ContactTab() {
     return "";
   };
 
-  const handleCellClick = (e: React.MouseEvent, instructorId: string, wave: number) => {
+  // 발송 수단이 DM이면 2·3차 입력 잠금
+  const isDMLocked = (inst: Instructor, wave: number) => wave >= 2 && inst.send_method === "DM";
+
+  const handleCellClick = (e: React.MouseEvent, instructor: Instructor, wave: number) => {
     e.stopPropagation();
+    if (isDMLocked(instructor, wave)) {
+      toast.info("발송 수단이 DM인 강사는 2·3차 발송이 없습니다.");
+      return;
+    }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setEditingWave({ instructorId, wave, x: rect.left, y: rect.bottom + 4 });
+    setEditingWave({ instructorId: instructor.id, wave, x: rect.left, y: rect.bottom + 4 });
   };
 
   const handleStatusClick = (e: React.MouseEvent, instructor: Instructor) => {
@@ -625,31 +632,64 @@ export default function ContactTab() {
                     const dateDisplay = w?.sent_date
                       ? (() => { const p = w.sent_date.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; })()
                       : "-";
+                    const locked = isDMLocked(i, n);
                     return (
                       <div key={n} className="contents">
                         {n > 1 && <div className="bg-white self-stretch" />}
-                        {/* 발송일 (인라인 date picker) */}
-                        <div className="relative px-1 flex items-center justify-center border-r border-gray-200/60 cursor-pointer hover:bg-gray-100/60">
-                          <input
-                            type="date"
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            value={w?.sent_date || ""}
-                            onChange={(e) => handleWaveDateChange(i.id, n, e.target.value)}
-                            aria-label={`${n}차 발송일`}
-                          />
-                          <span className={`text-sm whitespace-nowrap ${w?.sent_date ? "" : "text-muted-foreground"}`}>
-                            {dateDisplay}
-                          </span>
-                        </div>
-                        {/* 응답여부 (기존 모달 트리거) */}
-                        <div
-                          className={`px-2 flex items-center justify-center transition-colors border-r border-gray-200/60 cursor-pointer hover:brightness-95 ${waveColor(w)}`}
-                          onClick={(e) => handleCellClick(e, i.id, n)}
-                        >
-                          <span className="text-sm whitespace-nowrap">
-                            {responseText}
-                          </span>
-                        </div>
+                        {/* 발송일 (인라인 date picker, DM 잠금 시 비활성) */}
+                        {locked ? (
+                          <div
+                            className="px-1 flex items-center justify-center border-r border-gray-200/60 bg-purple-50 text-purple-700 cursor-not-allowed"
+                            title="발송 수단 DM — 2·3차 발송 없음"
+                          >
+                            <span className="text-xs">-</span>
+                          </div>
+                        ) : (
+                          <div
+                            className="relative px-1 flex items-center justify-center border-r border-gray-200/60 cursor-pointer hover:bg-gray-100/60"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement | null;
+                              if (!input) return;
+                              if (typeof input.showPicker === "function") {
+                                try { input.showPicker(); return; } catch {}
+                              }
+                              input.focus();
+                              input.click();
+                            }}
+                          >
+                            <input
+                              type="date"
+                              className="sr-only"
+                              value={w?.sent_date || ""}
+                              onChange={(e) => handleWaveDateChange(i.id, n, e.target.value)}
+                              aria-label={`${n}차 발송일`}
+                            />
+                            <span className={`text-sm whitespace-nowrap ${w?.sent_date ? "" : "text-muted-foreground"}`}>
+                              {dateDisplay}
+                            </span>
+                          </div>
+                        )}
+                        {/* 응답여부 (모달 트리거, DM 잠금 시 비활성) */}
+                        {locked ? (
+                          <div
+                            className="px-2 flex items-center justify-center border-r border-gray-200/60 bg-purple-50 text-purple-700 cursor-not-allowed"
+                            title="발송 수단 DM — 2·3차 발송 없음"
+                          >
+                            <span className="inline-flex items-center gap-1 text-xs font-medium">
+                              <MessageSquare className="h-3 w-3" /> DM 발송
+                            </span>
+                          </div>
+                        ) : (
+                          <div
+                            className={`px-2 flex items-center justify-center transition-colors border-r border-gray-200/60 cursor-pointer hover:brightness-95 ${waveColor(w)}`}
+                            onClick={(e) => handleCellClick(e, i, n)}
+                          >
+                            <span className="text-sm whitespace-nowrap">
+                              {responseText}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
