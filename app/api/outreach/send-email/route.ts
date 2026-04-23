@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   // 2. 강사 조회
   const { data: instructors, error: iErr } = await sb
     .from("instructors")
-    .select("id, name, field, email, status, assignee")
+    .select("id, name, field, email, status, assignee, send_method")
     .in("id", instructorIds);
   if (iErr) return NextResponse.json({ error: iErr.message }, { status: 500 });
 
@@ -55,17 +55,10 @@ export async function POST(req: Request) {
     .eq("wave_number", waveNumber);
   const alreadySent = new Set((existingWaves ?? []).map((w) => w.instructor_id));
 
-  // 3-1. 1차 발송 방식이 DM인 강사는 2·3차 자동 발송 스킵 대상
-  let dmLocked = new Set<string>();
-  if (waveNumber >= 2) {
-    const { data: firstWaves } = await sb
-      .from("outreach_waves")
-      .select("instructor_id, send_method")
-      .in("instructor_id", instructorIds)
-      .eq("wave_number", 1)
-      .eq("send_method", "DM");
-    dmLocked = new Set((firstWaves ?? []).map((w) => w.instructor_id));
-  }
+  // 3-1. 발송 수단이 DM인 강사는 이메일 자동 발송 스킵 대상
+  const dmLocked = new Set(
+    (instructors ?? []).filter((i) => i.send_method === "DM").map((i) => i.id),
+  );
 
   const sent: { id: string; name: string }[] = [];
   const skipped: { id: string; name: string; reason: string }[] = [];
@@ -85,7 +78,7 @@ export async function POST(req: Request) {
       continue;
     }
     if (dmLocked.has(inst.id)) {
-      skipped.push({ id: inst.id, name: inst.name, reason: "1차 DM 발송 — 이메일 발송 불가" });
+      skipped.push({ id: inst.id, name: inst.name, reason: "발송 수단 DM — 이메일 발송 불가" });
       continue;
     }
 
@@ -98,7 +91,7 @@ export async function POST(req: Request) {
       const toName = inst.name?.trim() ? `${inst.name.trim()}님` : undefined;
       await sendEmail({ to: inst.email.trim(), subject, body, toName });
 
-      // outreach_waves 기록
+      // outreach_waves 기록 (차수별 send_method는 더 이상 사용하지 않음)
       await sb
         .from("outreach_waves")
         .upsert(
@@ -107,7 +100,6 @@ export async function POST(req: Request) {
             wave_number: waveNumber,
             sent_date: today,
             result: "체크필요",
-            send_method: "이메일",
           },
           { onConflict: "instructor_id,wave_number" },
         );
@@ -137,11 +129,12 @@ export async function POST(req: Request) {
         }
       }
 
-      // instructors 업데이트 (email_sent, 상태 전이)
+      // instructors 업데이트 (email_sent, 발송 수단, 상태 전이)
       const updates: Record<string, unknown> = {
         email_sent: true,
         updated_at: new Date().toISOString(),
       };
+      if (!inst.send_method) updates.send_method = "이메일";
       const shouldTransitionToInProgress = inst.status === "발송 예정";
       if (shouldTransitionToInProgress) {
         updates.status = "진행 중";

@@ -48,6 +48,7 @@ export interface Instructor {
   confirm_reason: string;
   contact_assignee: string;
   outreach_channel: OutreachChannel;
+  send_method: string;
   dm_sent: boolean;
   email_sent: boolean;
   final_status: string;

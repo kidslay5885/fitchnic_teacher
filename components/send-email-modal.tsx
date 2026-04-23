@@ -72,12 +72,11 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
         noEmail.push(inst);
         continue;
       }
-      const waves = wavesMap[inst.id] || [];
-      const firstWave = waves.find((w) => w.wave_number === 1);
-      if (wave >= 2 && firstWave?.send_method === "DM") {
+      if (inst.send_method === "DM") {
         dmLocked.push(inst);
         continue;
       }
+      const waves = wavesMap[inst.id] || [];
       const has = waves.some((w) => w.wave_number === wave);
       if (has) {
         alreadySent.push(inst);
@@ -194,7 +193,7 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
               {categorized.dmLocked.length > 0 && (
                 <div className="flex items-center justify-between">
                   <span className="text-purple-700 flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5" /> 1차 DM 발송 (스킵)
+                    <AlertTriangle className="h-3.5 w-3.5" /> 발송 수단 DM (스킵)
                   </span>
                   <span className="font-semibold text-purple-700">{categorized.dmLocked.length}명</span>
                 </div>
@@ -215,7 +214,7 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
                     <div key={i.id} className="text-gray-600">· {i.name} — 이미 {wave}차 발송됨</div>
                   ))}
                   {categorized.dmLocked.map((i) => (
-                    <div key={i.id} className="text-purple-700">· {i.name} — 1차 DM 발송</div>
+                    <div key={i.id} className="text-purple-700">· {i.name} — 발송 수단 DM</div>
                   ))}
                 </div>
               </details>
