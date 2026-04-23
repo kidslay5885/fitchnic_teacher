@@ -22,13 +22,14 @@ import * as XLSX from "xlsx";
 const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
 const FINAL_STATUSES = ["진행 중", "미팅 완료", "계약 완료", "보류", "거절"] as const;
 type ViewFilter = "all" | "no_preinfo" | "check_needed" | InstructorStatus;
-type SortKey = "name" | "status" | "field" | "email";
+type SortKey = "name" | "status" | "field" | "email" | "wave1_date" | "wave2_date" | "wave3_date";
+type SendMethodFilter = "" | "DM" | "이메일";
 type SortDir = "asc" | "desc";
 type WaveFilterKey = "none" | "미입력" | "체크필요" | "무응답" | "응답" | "거절";
 
 const ROW_H = 40;
-const GRID = "36px 1.4fr 84px 1fr 1.3fr 96px 72px 0.7fr 6px 72px 0.7fr 6px 72px 0.7fr";
-const MIN_W = 1140;
+const GRID = "36px 1.4fr 84px 1fr 1.3fr 96px 72px 0.7fr 72px 0.7fr 72px 0.7fr";
+const MIN_W = 1128;
 
 // 상태별 행 배경색 (연한 틴트)
 const ROW_BG: Record<string, string> = {
@@ -63,6 +64,7 @@ export default function ContactTab() {
   const [bulkStatusReason, setBulkStatusReason] = useState("");
   const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
   const [waveFilters, setWaveFilters] = useState<Record<number, WaveFilterKey>>({});
+  const [sendMethodFilter, setSendMethodFilter] = useState<SendMethodFilter>("");
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -129,10 +131,26 @@ export default function ContactTab() {
       const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
       list = list.filter((i) => strip(i.name).includes(q) || strip(i.field).includes(q) || strip(i.email).includes(q));
     }
+    if (sendMethodFilter) {
+      list = list.filter((i) => i.send_method === sendMethodFilter);
+    }
+    const waveDateMatch = /^wave([123])_date$/.exec(sortKey);
     let sorted = [...list].sort((a, b) => {
-      const av = (a[sortKey] || "") as string;
-      const bv = (b[sortKey] || "") as string;
-      const cmp = av.localeCompare(bv, "ko");
+      let cmp = 0;
+      if (waveDateMatch) {
+        const wn = Number(waveDateMatch[1]);
+        const da = (wavesMap[a.id] || []).find((w) => w.wave_number === wn)?.sent_date || "";
+        const db = (wavesMap[b.id] || []).find((w) => w.wave_number === wn)?.sent_date || "";
+        // 빈 값은 항상 뒤로
+        if (!da && !db) cmp = 0;
+        else if (!da) return 1;
+        else if (!db) return -1;
+        else cmp = da.localeCompare(db);
+      } else {
+        const av = (a[sortKey as keyof Instructor] || "") as string;
+        const bv = (b[sortKey as keyof Instructor] || "") as string;
+        cmp = av.localeCompare(bv, "ko");
+      }
       return sortDir === "asc" ? cmp : -cmp;
     });
 
@@ -150,22 +168,24 @@ export default function ContactTab() {
           return w.result === key;
         }),
       );
-      // 정렬: 활성 차수 중 가장 낮은 차수의 발송일 오름차순
-      const primaryWave = Math.min(...activeWaves.map(([w]) => w));
-      sorted.sort((a, b) => {
-        const wa = (wavesMap[a.id] || []).find((w) => w.wave_number === primaryWave);
-        const wb = (wavesMap[b.id] || []).find((w) => w.wave_number === primaryWave);
-        const da = wa?.sent_date || "";
-        const db = wb?.sent_date || "";
-        if (!da && !db) return 0;
-        if (!da) return 1;
-        if (!db) return -1;
-        return da.localeCompare(db);
-      });
+      // 명시적 발송일 정렬이 없을 때만 활성 차수 기준 자동 정렬
+      if (!waveDateMatch) {
+        const primaryWave = Math.min(...activeWaves.map(([w]) => w));
+        sorted.sort((a, b) => {
+          const wa = (wavesMap[a.id] || []).find((w) => w.wave_number === primaryWave);
+          const wb = (wavesMap[b.id] || []).find((w) => w.wave_number === primaryWave);
+          const da = wa?.sent_date || "";
+          const db = wb?.sent_date || "";
+          if (!da && !db) return 0;
+          if (!da) return 1;
+          if (!db) return -1;
+          return da.localeCompare(db);
+        });
+      }
     }
 
     return sorted;
-  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds]);
+  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds, sendMethodFilter]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -375,12 +395,12 @@ export default function ContactTab() {
   };
 
   const waveColor = (w: OutreachWave | undefined) => {
-    if (!w?.result && w?.sent_date) return "text-gray-500 bg-gray-50";
+    if (!w?.result && w?.sent_date) return "text-gray-600 bg-gray-100";
     if (!w?.result) return "";
-    if (w.result === "응답") return "text-green-700 bg-green-50";
-    if (w.result === "거절") return "text-red-600 bg-red-50";
-    if (w.result === "체크필요") return "text-amber-700 bg-amber-50";
-    if (w.result === "무응답") return "text-gray-500 bg-gray-50";
+    if (w.result === "응답") return "text-green-800 bg-green-100";
+    if (w.result === "거절") return "text-red-700 bg-red-100";
+    if (w.result === "체크필요") return "text-amber-800 bg-amber-100";
+    if (w.result === "무응답") return "text-gray-600 bg-gray-100";
     return "";
   };
 
@@ -530,24 +550,26 @@ export default function ContactTab() {
           <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <SortHeader label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} />
-          <div className="px-2 py-2.5 text-center border-r border-gray-200">발송 수단</div>
-          {[1, 2, 3].map((n) => (
-            <div key={`wave-${n}`} className="contents">
-              {n > 1 && <div className="bg-white self-stretch" />}
-              <div className="px-2 py-2.5 text-center border-r border-gray-200">{n}차 발송일</div>
-              <WaveHeader
-                wave={n}
-                label={`${n}차 응답여부`}
-                active={waveFilters[n] || "none"}
-                onFilter={(key) => setWaveFilters(prev => {
-                  const next = { ...prev };
-                  if (key === "none" || prev[n] === key) delete next[n];
-                  else next[n] = key;
-                  return next;
-                })}
-              />
-            </div>
-          ))}
+          <SendMethodHeader active={sendMethodFilter} onFilter={setSendMethodFilter} />
+          {[1, 2, 3].map((n) => {
+            const dateCol = `wave${n}_date` as SortKey;
+            return (
+              <div key={`wave-${n}`} className="contents">
+                                <SortHeader label={`${n}차 발송일`} col={dateCol} sk={sortKey} sd={sortDir} onSort={handleSort} center />
+                <WaveHeader
+                  wave={n}
+                  label={`${n}차 응답여부`}
+                  active={waveFilters[n] || "none"}
+                  onFilter={(key) => setWaveFilters(prev => {
+                    const next = { ...prev };
+                    if (key === "none" || prev[n] === key) delete next[n];
+                    else next[n] = key;
+                    return next;
+                  })}
+                />
+              </div>
+            );
+          })}
         </div>
 
         {/* 본문 */}
@@ -635,18 +657,17 @@ export default function ContactTab() {
                     const locked = isDMLocked(i, n);
                     return (
                       <div key={n} className="contents">
-                        {n > 1 && <div className="bg-white self-stretch" />}
-                        {/* 발송일 (인라인 date picker, DM 잠금 시 비활성) */}
+                                                {/* 발송일 (인라인 date picker, DM 잠금 시 비활성) */}
                         {locked ? (
                           <div
-                            className="px-1 flex items-center justify-center border-r border-gray-200/60 bg-purple-50 text-purple-700 cursor-not-allowed"
+                            className="self-stretch px-1 flex items-center justify-center border-r border-gray-200/60 bg-purple-50 text-purple-700 cursor-not-allowed"
                             title="발송 수단 DM — 2·3차 발송 없음"
                           >
                             <span className="text-xs">-</span>
                           </div>
                         ) : (
                           <div
-                            className="relative px-1 flex items-center justify-center border-r border-gray-200/60 cursor-pointer hover:bg-gray-100/60"
+                            className={`relative self-stretch px-1 flex items-center justify-center border-r border-gray-200/60 cursor-pointer hover:brightness-95 transition-colors ${waveColor(w)}`}
                             onClick={(e) => {
                               e.stopPropagation();
                               const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement | null;
@@ -673,7 +694,7 @@ export default function ContactTab() {
                         {/* 응답여부 (모달 트리거, DM 잠금 시 비활성) */}
                         {locked ? (
                           <div
-                            className="px-2 flex items-center justify-center border-r border-gray-200/60 bg-purple-50 text-purple-700 cursor-not-allowed"
+                            className="self-stretch px-2 flex items-center justify-center border-r border-gray-200/60 bg-purple-50 text-purple-700 cursor-not-allowed"
                             title="발송 수단 DM — 2·3차 발송 없음"
                           >
                             <span className="inline-flex items-center gap-1 text-xs font-medium">
@@ -682,7 +703,7 @@ export default function ContactTab() {
                           </div>
                         ) : (
                           <div
-                            className={`px-2 flex items-center justify-center transition-colors border-r border-gray-200/60 cursor-pointer hover:brightness-95 ${waveColor(w)}`}
+                            className={`self-stretch px-2 flex items-center justify-center transition-colors border-r border-gray-200/60 cursor-pointer hover:brightness-95 ${waveColor(w)}`}
                             onClick={(e) => handleCellClick(e, i, n)}
                           >
                             <span className="text-sm whitespace-nowrap">
@@ -1366,18 +1387,72 @@ function SendMethodPopover({ instructor, x, y, onSelect, onClose }: {
 }
 
 /* ── 정렬 헤더 셀 ── */
-function SortHeader({ label, col, sk, sd, onSort, last }: {
+function SortHeader({ label, col, sk, sd, onSort, last, center }: {
   label: string; col: SortKey; sk: SortKey; sd: SortDir;
-  onSort: (k: SortKey) => void; last?: boolean;
+  onSort: (k: SortKey) => void; last?: boolean; center?: boolean;
 }) {
   const active = sk === col;
   return (
     <div
-      className={`px-2 py-2.5 whitespace-nowrap flex items-center cursor-pointer hover:bg-gray-200/50 ${!last ? "border-r border-gray-200" : ""}`}
+      className={`px-2 py-2.5 whitespace-nowrap flex items-center cursor-pointer hover:bg-gray-200/50 ${center ? "justify-center" : ""} ${!last ? "border-r border-gray-200" : ""} ${active ? "text-primary font-bold" : ""}`}
       onClick={() => onSort(col)}
     >
       {label}
       {active && (sd === "asc" ? <ChevronUp className="h-3.5 w-3.5 ml-0.5" /> : <ChevronDown className="h-3.5 w-3.5 ml-0.5" />)}
+    </div>
+  );
+}
+
+/* ── 발송 수단 헤더 (DM/이메일 필터) ── */
+function SendMethodHeader({ active, onFilter }: {
+  active: SendMethodFilter;
+  onFilter: (v: SendMethodFilter) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="relative border-r border-gray-200" ref={ref}>
+      <div
+        className={`px-2 py-2.5 text-center cursor-pointer hover:bg-gray-200/50 flex items-center justify-center gap-1 ${active ? "text-primary font-bold" : ""}`}
+        onClick={() => setOpen(!open)}
+      >
+        발송 수단
+        {active && <ChevronDown className="h-3 w-3" />}
+      </div>
+      {open && (
+        <div className="absolute top-full left-0 z-20 bg-white border rounded-md shadow-lg py-1 min-w-[100px]">
+          {(["DM", "이메일"] as const).map((m) => (
+            <button
+              key={m}
+              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 ${active === m ? "text-primary font-semibold bg-primary/5" : ""}`}
+              onClick={() => { onFilter(active === m ? "" : m); setOpen(false); }}
+            >
+              {m}
+            </button>
+          ))}
+          {active && (
+            <>
+              <div className="border-t my-1" />
+              <button
+                className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-gray-100"
+                onClick={() => { onFilter(""); setOpen(false); }}
+              >
+                필터 해제
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

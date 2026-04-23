@@ -29,6 +29,24 @@ export async function POST(
   // 빈 문자열은 null로 변환
   if (body.sent_date === "") body.sent_date = null;
 
+  // 발송일이 있는데 결과가 비어있으면 "체크필요"로 자동 설정
+  if (body.sent_date) {
+    if (body.result === "" || body.result === null) {
+      body.result = "체크필요";
+    } else if (body.result === undefined) {
+      // body에 result 키 자체가 없으면 기존 row의 result 확인
+      const { data: existing } = await sb
+        .from("outreach_waves")
+        .select("result")
+        .eq("instructor_id", id)
+        .eq("wave_number", body.wave_number)
+        .maybeSingle();
+      if (!existing?.result) {
+        body.result = "체크필요";
+      }
+    }
+  }
+
   const { data, error } = await sb
     .from("outreach_waves")
     .upsert(
