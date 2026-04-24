@@ -58,7 +58,7 @@ export default function ContactTab() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkWaveNum, setBulkWaveNum] = useState("1");
   const [bulkDate, setBulkDate] = useState(() => new Date().toISOString().split("T")[0]);
-  const [bulkResult, setBulkResult] = useState("");
+  const [bulkResult, setBulkResult] = useState("무응답");
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkStatus, setBulkStatus] = useState<InstructorStatus | "">("");
   const [bulkStatusReason, setBulkStatusReason] = useState("");
@@ -305,20 +305,24 @@ export default function ContactTab() {
     try {
       const ids = Array.from(selectedIds);
       const waveNum = parseInt(bulkWaveNum);
-      await Promise.all(ids.map(id => {
-        const existing = (wavesMap[id] || []).find(w => w.wave_number === waveNum);
-        return fetch(`/api/instructors/${id}/waves`, {
+      const results = await Promise.all(ids.map(id =>
+        fetch(`/api/instructors/${id}/waves`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             wave_number: waveNum,
-            sent_date: bulkDate || existing?.sent_date || null,
-            result: bulkResult || existing?.result || "",
+            sent_date: bulkDate || null,
+            result: bulkResult || "",
           }),
-        });
-      }));
+        })
+      ));
+      const failed = results.filter(r => !r.ok).length;
       await loadAllWaves();
-      toast.success(`${ids.length}명 ${bulkWaveNum}차 일괄 업데이트`);
+      if (failed > 0) {
+        toast.error(`${failed}건 업데이트 실패 (${ids.length - failed}건만 반영됨)`);
+      } else {
+        toast.success(`${ids.length}명 ${bulkWaveNum}차 일괄 업데이트`);
+      }
       setSelectedIds(new Set());
     } catch { toast.error("일괄 업데이트 실패"); }
     finally { setBulkLoading(false); }
@@ -814,7 +818,7 @@ export default function ContactTab() {
             </SelectContent>
           </Select>
           <Input type="date" className="w-[148px] h-8 text-sm" value={bulkDate} onChange={e => setBulkDate(e.target.value)} />
-          <Select value={bulkResult || "무응답"} onValueChange={setBulkResult}>
+          <Select value={bulkResult} onValueChange={setBulkResult}>
             <SelectTrigger className="w-[96px] h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               {WAVE_RESULTS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
