@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -35,6 +36,11 @@ export default function RootLayout({
           {children}
           <Toaster position="bottom-right" richColors />
         </TooltipProvider>
+        <Script
+          src="/contact-widget.js"
+          strategy="lazyOnload"
+          data-site-name="핏크닉 아웃리치 웹"
+        />
       </body>
     </html>
   );
