@@ -44,7 +44,8 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
   }, [instructor.id]);
 
   useEffect(() => { loadDetails(); }, [loadDetails]);
-  useEffect(() => { setForm(instructor); }, [instructor]);
+  // 편집 중에는 외부 동기화(15초 폴링)가 폼을 덮어쓰지 않도록 보호
+  useEffect(() => { if (!editing) setForm(instructor); }, [instructor, editing]);
 
   const handleSave = async () => {
     try {
