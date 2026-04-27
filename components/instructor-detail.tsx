@@ -387,6 +387,17 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                 <div className="flex items-center gap-2">
                   <Send className="h-4 w-4" />
                   <p className="text-sm font-semibold">발송 타임라인</p>
+                  {instructor.send_method ? (
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                      instructor.send_method === "DM" ? "bg-purple-100 text-purple-700" :
+                      instructor.send_method === "이메일" ? "bg-blue-100 text-blue-700" :
+                      "bg-amber-100 text-amber-700"
+                    }`}>
+                      {instructor.send_method}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">발송 수단 미선택</span>
+                  )}
                 </div>
                 <button
                   className="text-xs text-primary hover:underline flex items-center gap-1"
