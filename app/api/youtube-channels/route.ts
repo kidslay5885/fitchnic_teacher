@@ -182,8 +182,20 @@ export async function POST(req: Request) {
 // 이관이 필요한 상태 (미검토 이후 단계)
 const MIGRATE_STATUSES = ["컨펌 필요", "발송 예정", "진행 중", "계약 완료", "제외", "보류", "거절"];
 
-// YT채널 → instructors 이관 (최초 1회)
+// YT채널 → instructors 이관 (이미 있으면 재사용)
 async function migrateToInstructor(sb: ReturnType<typeof getSupabase>, channel: any): Promise<string | null> {
+  // 동일 이메일의 YT채널수집 instructor가 이미 있으면 재사용 + 상태 동기화
+  const { data: existing } = await sb
+    .from("instructors")
+    .select("id")
+    .eq("email", channel.email)
+    .eq("source", "YT채널수집")
+    .maybeSingle();
+  if (existing?.id) {
+    await sb.from("instructors").update({ status: channel.status }).eq("id", existing.id);
+    return existing.id;
+  }
+
   const { data, error } = await sb
     .from("instructors")
     .insert({
@@ -200,6 +212,19 @@ async function migrateToInstructor(sb: ReturnType<typeof getSupabase>, channel: 
     .single();
 
   if (error) {
+    // unique 인덱스 충돌(23505): 동시 호출 다른 쪽이 먼저 INSERT한 경우 → 다시 조회해서 재사용
+    if ((error as any).code === "23505") {
+      const { data: race } = await sb
+        .from("instructors")
+        .select("id")
+        .eq("email", channel.email)
+        .eq("source", "YT채널수집")
+        .maybeSingle();
+      if (race?.id) {
+        await sb.from("instructors").update({ status: channel.status }).eq("id", race.id);
+        return race.id;
+      }
+    }
     console.error("이관 실패:", error.message);
     return null;
   }
