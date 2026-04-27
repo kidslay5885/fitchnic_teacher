@@ -47,7 +47,7 @@ export default function ContactTab() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortKey, setSortKey] = useState<SortKey | null>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
   const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
@@ -141,7 +141,7 @@ export default function ContactTab() {
     if (dateFilter) {
       list = list.filter((i) => (wavesMap[i.id] || []).some((w) => w.sent_date === dateFilter));
     }
-    const waveDateMatch = /^wave([123])_date$/.exec(sortKey);
+    const waveDateMatch = sortKey ? /^wave([123])_date$/.exec(sortKey) : null;
     let sorted = [...list].sort((a, b) => {
       let cmp = 0;
       if (waveDateMatch) {
@@ -153,7 +153,7 @@ export default function ContactTab() {
         else if (!da) return 1;
         else if (!db) return -1;
         else cmp = da.localeCompare(db);
-      } else {
+      } else if (sortKey) {
         const av = (a[sortKey as keyof Instructor] || "") as string;
         const bv = (b[sortKey as keyof Instructor] || "") as string;
         cmp = av.localeCompare(bv, "ko");
@@ -408,9 +408,12 @@ export default function ContactTab() {
     });
   };
 
+  // 3-스텝 사이클: 오름차순 → 내림차순 → 정렬 해제
   const handleSort = useCallback((key: SortKey) => {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
+    if (sortKey === key) {
+      if (sortDir === "asc") setSortDir("desc");
+      else { setSortKey(null); setSortDir("asc"); }
+    } else { setSortKey(key); setSortDir("asc"); }
   }, [sortKey, sortDir]);
 
   /* ── 헬퍼 ── */
@@ -1646,7 +1649,7 @@ function SendMethodPopover({ instructor, x, y, onSelect, onClose }: {
 
 /* ── 정렬 헤더 셀 ── */
 function SortHeader({ label, col, sk, sd, onSort, last, center, extraClass }: {
-  label: string; col: SortKey; sk: SortKey; sd: SortDir;
+  label: string; col: SortKey; sk: SortKey | null; sd: SortDir;
   onSort: (k: SortKey) => void; last?: boolean; center?: boolean; extraClass?: string;
 }) {
   const active = sk === col;

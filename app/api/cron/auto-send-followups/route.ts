@@ -22,8 +22,11 @@ type Summary = {
 };
 
 // Cron: 매일 KST 10:06 (UTC 01:06)
-// 이전 차수 발송 7일 경과 & result="체크필요"인 강사에게 다음 차수 자동 발송
-// 대상: 발송 수단 != "DM" & 이메일 존재 & 아직 해당 차수 발송 기록 없음
+// 자동 발송 조건:
+//  - 직전 차수 result='체크필요' & sent_date ≤ 7일 전
+//  - 강사 status='진행 중', send_method='이메일', email 존재, is_banned=false
+//  - 현재 차수 발송 기록 없음
+//  - 3차의 경우, 1차 기록이 존재하면 1차 result='무응답'이어야 함
 export async function GET(req: Request) {
   const auth = req.headers.get("authorization");
   if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -81,10 +84,23 @@ export async function GET(req: Request) {
     const pendingIds = candidateIds.filter((id) => !alreadySent.has(id));
     if (pendingIds.length === 0) continue;
 
+    // 3차의 경우 1차 result 조회 (존재 시 '무응답'이어야 자동 발송 대상)
+    let earlierResults: Map<string, string | null> | null = null;
+    if (waveNumber === 3) {
+      const { data: earlierWaves } = await sb
+        .from("outreach_waves")
+        .select("instructor_id, result")
+        .in("instructor_id", pendingIds)
+        .eq("wave_number", 1);
+      earlierResults = new Map(
+        (earlierWaves ?? []).map((w) => [w.instructor_id, w.result]),
+      );
+    }
+
     // 강사 조회
     const { data: instructors } = await sb
       .from("instructors")
-      .select("id, name, field, email, status, assignee, send_method, is_banned")
+      .select("id, name, field, email, status, send_method, is_banned")
       .in("id", pendingIds);
     if (!instructors) continue;
 
@@ -93,14 +109,24 @@ export async function GET(req: Request) {
         summary[key].skipped.push({ id: inst.id, name: inst.name, reason: "연락 금지" });
         continue;
       }
+      if (inst.status !== "진행 중") {
+        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: `상태 ${inst.status ?? "(없음)"}` });
+        continue;
+      }
       if (!inst.email?.trim()) {
         summary[key].skipped.push({ id: inst.id, name: inst.name, reason: "이메일 없음" });
         continue;
       }
-      // 발송 수단이 "이메일"이 아니면 이메일 자동 발송 스킵 (DM, 기타 임의 값 모두)
-      if (inst.send_method && inst.send_method !== "이메일") {
-        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: `발송 수단 ${inst.send_method}` });
+      if (inst.send_method !== "이메일") {
+        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: `발송 수단 ${inst.send_method ?? "(없음)"}` });
         continue;
+      }
+      if (earlierResults) {
+        const prevResult = earlierResults.get(inst.id);
+        if (prevResult !== undefined && prevResult !== "무응답") {
+          summary[key].skipped.push({ id: inst.id, name: inst.name, reason: `1차 응답 ${prevResult ?? "(없음)"}` });
+          continue;
+        }
       }
 
       const subject = renderTemplate(template.subject || "", { name: inst.name, field: inst.field });
@@ -131,24 +157,10 @@ export async function GET(req: Request) {
           .eq("wave_number", prevWave)
           .eq("result", "체크필요");
 
-        // 상태 전이 (발송 예정 → 진행 중) & email_sent
-        const updates: Record<string, unknown> = {
-          email_sent: true,
-          updated_at: new Date().toISOString(),
-        };
-        const shouldTransition = inst.status === "발송 예정";
-        if (shouldTransition) updates.status = "진행 중";
-        await sb.from("instructors").update(updates).eq("id", inst.id);
-
-        if (shouldTransition) {
-          await sb.from("status_history").insert({
-            instructor_id: inst.id,
-            from_status: inst.status,
-            to_status: "진행 중",
-            changed_by: "system:cron",
-            reason: `${waveNumber}차 자동 이메일 발송(크론)`,
-          });
-        }
+        await sb
+          .from("instructors")
+          .update({ email_sent: true, updated_at: new Date().toISOString() })
+          .eq("id", inst.id);
 
         await logActivity({
           actionType: "이메일발송",
