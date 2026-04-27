@@ -47,7 +47,7 @@ export default function ContactTab() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey | null>("name");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
   const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
