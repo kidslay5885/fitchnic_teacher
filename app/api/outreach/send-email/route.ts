@@ -55,9 +55,11 @@ export async function POST(req: Request) {
     .eq("wave_number", waveNumber);
   const alreadySent = new Set((existingWaves ?? []).map((w) => w.instructor_id));
 
-  // 3-1. 발송 수단이 DM인 강사는 이메일 자동 발송 스킵 대상
-  const dmLocked = new Set(
-    (instructors ?? []).filter((i) => i.send_method === "DM").map((i) => i.id),
+  // 3-1. 발송 수단이 "이메일"이 아닌 강사는 이메일 발송 스킵 (DM, 기타 임의 값 모두)
+  const methodLocked = new Map<string, string>(
+    (instructors ?? [])
+      .filter((i) => !!i.send_method && i.send_method !== "이메일")
+      .map((i) => [i.id, i.send_method as string]),
   );
 
   const sent: { id: string; name: string }[] = [];
@@ -77,8 +79,9 @@ export async function POST(req: Request) {
       skipped.push({ id: inst.id, name: inst.name, reason: `이미 ${waveNumber}차 발송됨` });
       continue;
     }
-    if (dmLocked.has(inst.id)) {
-      skipped.push({ id: inst.id, name: inst.name, reason: "발송 수단 DM — 이메일 발송 불가" });
+    const lockedMethod = methodLocked.get(inst.id);
+    if (lockedMethod) {
+      skipped.push({ id: inst.id, name: inst.name, reason: `발송 수단 ${lockedMethod} — 이메일 발송 불가` });
       continue;
     }
 

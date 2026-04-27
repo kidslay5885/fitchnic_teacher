@@ -66,14 +66,15 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     const toSend: Instructor[] = [];
     const noEmail: Instructor[] = [];
     const alreadySent: Instructor[] = [];
-    const dmLocked: Instructor[] = [];
+    const methodLocked: Instructor[] = [];
     for (const inst of selectedInstructors) {
       if (!inst.email || !inst.email.trim()) {
         noEmail.push(inst);
         continue;
       }
-      if (inst.send_method === "DM") {
-        dmLocked.push(inst);
+      // 발송 수단이 "이메일"이 아니면 발송 스킵 (DM, 기타 임의 값 모두)
+      if (inst.send_method && inst.send_method !== "이메일") {
+        methodLocked.push(inst);
         continue;
       }
       const waves = wavesMap[inst.id] || [];
@@ -84,7 +85,7 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
       }
       toSend.push(inst);
     }
-    return { toSend, noEmail, alreadySent, dmLocked };
+    return { toSend, noEmail, alreadySent, methodLocked };
   }, [selectedInstructors, wavesMap, wave]);
 
   // 미리보기 (발송 가능 첫 강사 기준)
@@ -190,18 +191,18 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
                   <span className="font-semibold text-gray-600">{categorized.alreadySent.length}명</span>
                 </div>
               )}
-              {categorized.dmLocked.length > 0 && (
+              {categorized.methodLocked.length > 0 && (
                 <div className="flex items-center justify-between">
                   <span className="text-purple-700 flex items-center gap-1">
-                    <AlertTriangle className="h-3.5 w-3.5" /> 발송 수단 DM (스킵)
+                    <AlertTriangle className="h-3.5 w-3.5" /> 발송 수단 이메일 아님 (스킵)
                   </span>
-                  <span className="font-semibold text-purple-700">{categorized.dmLocked.length}명</span>
+                  <span className="font-semibold text-purple-700">{categorized.methodLocked.length}명</span>
                 </div>
               )}
             </div>
 
             {/* 스킵 대상 상세 */}
-            {(categorized.noEmail.length > 0 || categorized.alreadySent.length > 0 || categorized.dmLocked.length > 0) && (
+            {(categorized.noEmail.length > 0 || categorized.alreadySent.length > 0 || categorized.methodLocked.length > 0) && (
               <details className="text-xs">
                 <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                   스킵 대상 보기
@@ -213,8 +214,8 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
                   {categorized.alreadySent.map((i) => (
                     <div key={i.id} className="text-gray-600">· {i.name} — 이미 {wave}차 발송됨</div>
                   ))}
-                  {categorized.dmLocked.map((i) => (
-                    <div key={i.id} className="text-purple-700">· {i.name} — 발송 수단 DM</div>
+                  {categorized.methodLocked.map((i) => (
+                    <div key={i.id} className="text-purple-700">· {i.name} — 발송 수단 {i.send_method}</div>
                   ))}
                 </div>
               </details>

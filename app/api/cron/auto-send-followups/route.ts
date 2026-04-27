@@ -97,8 +97,9 @@ export async function GET(req: Request) {
         summary[key].skipped.push({ id: inst.id, name: inst.name, reason: "이메일 없음" });
         continue;
       }
-      if (inst.send_method === "DM") {
-        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: "발송 수단 DM" });
+      // 발송 수단이 "이메일"이 아니면 이메일 자동 발송 스킵 (DM, 기타 임의 값 모두)
+      if (inst.send_method && inst.send_method !== "이메일") {
+        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: `발송 수단 ${inst.send_method}` });
         continue;
       }
 
