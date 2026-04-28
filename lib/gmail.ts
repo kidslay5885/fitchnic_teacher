@@ -1,25 +1,54 @@
 import { google } from "googleapis";
+import { getSupabase } from "@/lib/supabase";
 
 // Gmail API 발송 헬퍼
-// .env.local 에 GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, GMAIL_SENDER 필요
+// .env.local 에 GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_SENDER 필요
+// refresh_token 은 Supabase app_secrets 테이블의 'gmail_refresh_token' 키에 저장.
+// 만료/폐기 시 웹에서 /api/gmail-oauth/start 로 재인증하면 자동 갱신됨.
 
-let cachedClient: ReturnType<typeof createOAuth2Client> | null = null;
+const REFRESH_TOKEN_KEY = "gmail_refresh_token";
 
-function createOAuth2Client() {
+// (refresh_token 값 → OAuth 클라이언트) 캐시.
+// 같은 토큰이면 재사용, 토큰이 바뀌면 새로 만든다.
+let cached: { token: string; client: ReturnType<typeof buildOAuth2Client> } | null = null;
+
+function buildOAuth2Client(refreshToken: string) {
   const clientId = process.env.GMAIL_CLIENT_ID;
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
-  if (!clientId || !clientSecret || !refreshToken) {
-    throw new Error("Gmail API 환경변수 미설정 (GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN)");
+  if (!clientId || !clientSecret) {
+    throw new Error("Gmail API 환경변수 미설정 (GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET)");
   }
   const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
   oauth2.setCredentials({ refresh_token: refreshToken });
   return oauth2;
 }
 
-function getClient() {
-  if (!cachedClient) cachedClient = createOAuth2Client();
-  return cachedClient;
+async function loadRefreshToken(): Promise<string> {
+  // 1) DB에서 우선 조회
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("app_secrets")
+    .select("value")
+    .eq("key", REFRESH_TOKEN_KEY)
+    .maybeSingle();
+  if (error) throw new Error(`refresh_token 조회 실패: ${error.message}`);
+  if (data?.value) return data.value;
+
+  // 2) DB에 없으면 환경변수 fallback (기존 운영 호환)
+  const envToken = process.env.GMAIL_REFRESH_TOKEN;
+  if (envToken) return envToken;
+
+  throw new Error(
+    "GMAIL_REFRESH_TOKEN 미설정 — 웹에서 Gmail 재인증을 진행하세요 (/api/gmail-oauth/start)",
+  );
+}
+
+async function getClient() {
+  const token = await loadRefreshToken();
+  if (!cached || cached.token !== token) {
+    cached = { token, client: buildOAuth2Client(token) };
+  }
+  return cached.client;
 }
 
 // RFC 2047 MIME 헤더 인코딩 (한글 제목 지원)
@@ -82,7 +111,7 @@ export interface SendEmailParams {
 export async function sendEmail({ to, subject, body, toName }: SendEmailParams) {
   const sender = process.env.GMAIL_SENDER;
   if (!sender) throw new Error("GMAIL_SENDER 환경변수 미설정");
-  const auth = getClient();
+  const auth = await getClient();
   const gmail = google.gmail({ version: "v1", auth });
   const raw = buildRawMessage(sender, to, subject, body, toName);
   const res = await gmail.users.messages.send({
@@ -97,4 +126,20 @@ export function renderTemplate(template: string, vars: { name: string; field: st
   return template
     .replaceAll("'채널이름'", vars.name || "")
     .replaceAll("'채널분야'", vars.field || "");
+}
+
+// OAuth 콜백에서 새 refresh_token 을 DB에 저장하고 인메모리 캐시도 즉시 무효화
+export async function saveGmailRefreshToken(refreshToken: string) {
+  if (!refreshToken || !refreshToken.trim()) {
+    throw new Error("refresh_token 값이 비어 있습니다");
+  }
+  const sb = getSupabase();
+  const { error } = await sb
+    .from("app_secrets")
+    .upsert(
+      { key: REFRESH_TOKEN_KEY, value: refreshToken, updated_at: new Date().toISOString() },
+      { onConflict: "key" },
+    );
+  if (error) throw new Error(`refresh_token 저장 실패: ${error.message}`);
+  cached = null; // 다음 발송 시 새 토큰으로 클라이언트 재생성
 }

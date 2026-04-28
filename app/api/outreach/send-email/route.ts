@@ -189,7 +189,7 @@ export async function POST(req: Request) {
       level: "error",
       description:
         abortedReason.kind === "token_expired"
-          ? "OAuth refresh_token이 만료 또는 폐기되었습니다. `node scripts/gmail-auth.mjs` 를 다시 실행해 토큰을 재발급하세요."
+          ? "OAuth refresh_token이 만료 또는 폐기되었습니다. 발송 모달의 [Gmail 재인증] 버튼을 눌러 새로 갱신하세요."
           : abortedReason.kind === "quota"
           ? "Gmail 일일 발송 한도를 초과했습니다. 24시간 후 자동 복구됩니다."
           : "Gmail API 인증/권한 문제로 발송이 중단되었습니다.",

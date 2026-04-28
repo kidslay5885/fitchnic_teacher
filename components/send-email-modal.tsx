@@ -268,6 +268,11 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
 }
 
 function ResultView({ result, onClose }: { result: SendResult; onClose: () => void }) {
+  const handleReauth = () => {
+    // 새 창에서 OAuth flow 진행 — 콜백이 자동 닫힘
+    window.open("/api/gmail-oauth/start", "gmail-oauth", "width=520,height=640");
+  };
+
   return (
     <div className="space-y-4">
       {result.aborted && (
@@ -277,11 +282,18 @@ function ResultView({ result, onClose }: { result: SendResult; onClose: () => vo
           </div>
           <div className="mt-1.5 text-xs text-red-700">
             {result.aborted.kind === "token_expired"
-              ? "OAuth 토큰이 만료/폐기되었습니다. 터미널에서 node scripts/gmail-auth.mjs 를 다시 실행해 토큰을 재발급해주세요."
+              ? "OAuth 토큰이 만료/폐기되었습니다. 아래 [Gmail 재인증] 버튼을 눌러 새 창에서 대표님 계정으로 로그인하면 자동으로 갱신됩니다."
               : result.aborted.kind === "quota"
               ? "Gmail 일일 발송 한도를 초과했습니다. 24시간 후 자동 복구됩니다. Discord 채널에 알림이 전송되었습니다."
               : "Gmail API 인증 문제로 발송이 중단되었습니다. Discord 채널의 상세 메시지를 확인하세요."}
           </div>
+          {result.aborted.kind === "token_expired" && (
+            <div className="mt-2.5">
+              <Button size="sm" onClick={handleReauth} className="gap-1.5">
+                <Mail className="h-3.5 w-3.5" /> Gmail 재인증
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
