@@ -197,7 +197,7 @@ export async function GET(req: Request) {
       const body = renderTemplate(template.body || "", { name: inst.name, field: inst.field });
 
       try {
-        const toName = inst.name?.trim() ? `${inst.name.trim()}님` : undefined;
+        const toName = inst.name?.trim() ? `${inst.name.trim()} 대표님` : undefined;
         await sendEmail({ to: inst.email.trim(), subject, body, toName });
 
         // 현재 차수 기록
