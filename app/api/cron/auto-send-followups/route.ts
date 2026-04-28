@@ -21,12 +21,63 @@ type Summary = {
   aborted?: string;
 };
 
+// 한국 공휴일(빨간날) 판별 — 한국천문연구원 특일정보 API
+// API 장애 시엔 평일로 간주하고 Discord에 경고 알림
+async function isHolidayKST(date: Date): Promise<boolean> {
+  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const year = kst.getUTCFullYear();
+  const month = String(kst.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(kst.getUTCDate()).padStart(2, "0");
+  const target = `${year}${month}${day}`;
+  const apiKey = process.env.HOLIDAY_API_KEY;
+
+  if (!apiKey) {
+    await sendDiscordAlert({
+      title: "휴일 API 키 미설정",
+      level: "warn",
+      description: "HOLIDAY_API_KEY 환경변수가 없어 휴일 판별을 건너뛰고 평일로 간주합니다.",
+    });
+    return false;
+  }
+
+  try {
+    const url =
+      `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo` +
+      `?solYear=${year}&solMonth=${month}` +
+      `&ServiceKey=${encodeURIComponent(apiKey)}` +
+      `&_type=json&numOfRows=50`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const code = json?.response?.header?.resultCode;
+    if (code && code !== "00") {
+      throw new Error(`API resultCode ${code}: ${json?.response?.header?.resultMsg ?? ""}`);
+    }
+    const items = json?.response?.body?.items?.item ?? [];
+    const list = Array.isArray(items) ? items : [items];
+    return list.some(
+      (it: { locdate?: number | string; isHoliday?: string }) =>
+        String(it.locdate) === target && it.isHoliday === "Y",
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await sendDiscordAlert({
+      title: "휴일 API 호출 실패",
+      level: "warn",
+      description: `${msg.slice(0, 800)}\n→ 평일로 간주하고 자동 발송 진행`,
+      fields: [{ name: "대상일자", value: target, inline: true }],
+    });
+    return false;
+  }
+}
+
 // Cron: 매일 KST 10:06 (UTC 01:06)
 // 자동 발송 조건:
 //  - 직전 차수 result='체크필요' & sent_date ≤ 7일 전
 //  - 강사 status='진행 중', send_method='이메일', email 존재, is_banned=false
 //  - 현재 차수 발송 기록 없음
 //  - 3차의 경우, 1차 기록이 존재하면 1차 result='무응답'이어야 함
+//  - 한국 공휴일(빨간날)에는 발송 스킵 (다음 평일에 자동 회수됨)
 export async function GET(req: Request) {
   const auth = req.headers.get("authorization");
   if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -35,6 +86,19 @@ export async function GET(req: Request) {
 
   const sb = getSupabase();
   const now = new Date();
+
+  if (await isHolidayKST(now)) {
+    await logActivity({
+      actionType: "크론자동발송",
+      targetType: "instructor",
+      targetId: "cron",
+      targetName: "자동 이메일 발송",
+      detail: "빨간날 스킵",
+      performedBy: "system:cron",
+    });
+    return NextResponse.json({ skipped: "holiday", scheduled_at: now.toISOString() });
+  }
+
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const cutoff = sevenDaysAgo.toISOString().split("T")[0];
   const todayStr = now.toISOString().split("T")[0];
