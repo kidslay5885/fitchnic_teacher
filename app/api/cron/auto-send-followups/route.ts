@@ -168,27 +168,39 @@ export async function GET(req: Request) {
       .in("id", pendingIds);
     if (!instructors) continue;
 
+    const recordSkip = async (inst: { id: string; name: string }, reason: string) => {
+      summary[key].skipped.push({ id: inst.id, name: inst.name, reason });
+      await logActivity({
+        actionType: "이메일발송스킵",
+        targetType: "instructor",
+        targetId: inst.id,
+        targetName: inst.name,
+        detail: `${waveNumber}차 자동발송 스킵 → ${reason}`,
+        performedBy: "system:cron",
+      });
+    };
+
     for (const inst of instructors) {
       if (inst.is_banned) {
-        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: "연락 금지" });
+        await recordSkip(inst, "연락 금지");
         continue;
       }
       if (inst.status !== "진행 중") {
-        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: `상태 ${inst.status ?? "(없음)"}` });
+        await recordSkip(inst, `상태 ${inst.status ?? "(없음)"}`);
         continue;
       }
       if (!inst.email?.trim()) {
-        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: "이메일 없음" });
+        await recordSkip(inst, "이메일 없음");
         continue;
       }
       if (inst.send_method !== "이메일") {
-        summary[key].skipped.push({ id: inst.id, name: inst.name, reason: `발송 수단 ${inst.send_method ?? "(없음)"}` });
+        await recordSkip(inst, `발송 수단 ${inst.send_method ?? "(없음)"}`);
         continue;
       }
       if (earlierResults) {
         const prevResult = earlierResults.get(inst.id);
         if (prevResult !== undefined && prevResult !== "무응답") {
-          summary[key].skipped.push({ id: inst.id, name: inst.name, reason: `1차 응답 ${prevResult ?? "(없음)"}` });
+          await recordSkip(inst, `1차 응답 ${prevResult ?? "(없음)"}`);
           continue;
         }
       }
@@ -239,6 +251,15 @@ export async function GET(req: Request) {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         summary[key].failed.push({ id: inst.id, name: inst.name, error: msg });
+
+        await logActivity({
+          actionType: "이메일발송실패",
+          targetType: "instructor",
+          targetId: inst.id,
+          targetName: inst.name,
+          detail: `${waveNumber}차 자동발송 실패 → ${msg.slice(0, 500)}`,
+          performedBy: "system:cron",
+        });
 
         const classified = classifyGmailError(msg);
         if (classified.kind === "token_expired" || classified.kind === "quota" || classified.kind === "auth") {
