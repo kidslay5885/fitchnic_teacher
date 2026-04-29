@@ -1,209 +1,225 @@
 "use client";
 
-import { useMemo } from "react";
-import { useOutreach } from "@/hooks/use-outreach-store";
-import { Badge } from "@/components/ui/badge";
-import { STATUSES, STATUS_COLORS } from "@/lib/constants";
-import type { InstructorStatus } from "@/lib/types";
-import {
-  Users, Send, MessageSquare, Calendar, CheckCircle,
-  ArrowRight, FileText, Clock, UserCheck,
-} from "lucide-react";
+import { useEffect, useState } from "react";
 
-const SECTION_TITLE = "text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3";
-const CARD = "bg-white border rounded-xl";
+const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
+
+interface PeriodStat {
+  sent: number;
+  lastSamePeriodSent: number;
+}
+
+interface Overview {
+  firstSentDate: string | null;
+  wavesSent: Record<number, number>;
+  totalSent: number;
+  responsesReceived: number;
+  thisWeek: PeriodStat;
+  thisMonth: PeriodStat;
+  toSend: { total: number; planned: number; inProgress: number };
+  pending: {
+    searchPage: { total: number; regular: number; youtube: number };
+    applications: number;
+  };
+  meetings: { upcoming: number; undated: number };
+  contracts: {
+    total: number;
+    sentInstructors: number;
+    metInstructors: number;
+    fromSendRate: number | null;
+    fromMeetingRate: number | null;
+  };
+}
+
+function formatToday(d: Date) {
+  return `${d.getMonth() + 1}/${d.getDate()} (${DOW_KO[d.getDay()]})`;
+}
+
+// 월요일 시작 기준, 해당 월에서 몇 주차인지
+function getMonthWeek(d: Date) {
+  const day = d.getDate();
+  const firstOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  const firstDow = firstOfMonth.getDay();
+  const offset = firstDow === 0 ? 6 : firstDow - 1;
+  return Math.ceil((day + offset) / 7);
+}
+
+function formatStartDate(iso: string) {
+  const [y, m, day] = iso.split("-");
+  return `${y}/${parseInt(m, 10)}/${parseInt(day, 10)}`;
+}
+
+function formatStartShort(iso: string) {
+  const [, m, day] = iso.split("-");
+  return `${parseInt(m, 10)}/${parseInt(day, 10)}`;
+}
+
+function ChangeIndicator({ thisVal, lastVal }: { thisVal: number; lastVal: number }) {
+  const diff = thisVal - lastVal;
+  if (lastVal === 0) {
+    return <span className="text-sm text-muted-foreground">-</span>;
+  }
+  if (diff === 0) {
+    return <span className="text-sm text-muted-foreground">변동 없음</span>;
+  }
+  const pct = Math.round((diff / lastVal) * 100);
+  const isUp = diff > 0;
+  return (
+    <span className={`text-sm font-medium ${isUp ? "text-emerald-600" : "text-red-500"}`}>
+      {isUp ? "▲" : "▼"}
+      {Math.abs(diff)} ({isUp ? "+" : ""}
+      {pct}%)
+    </span>
+  );
+}
 
 export default function DashboardTab() {
-  const { state, dispatch } = useOutreach();
-  const stats = state.stats;
+  const [data, setData] = useState<Overview | null>(null);
 
-  const actionItems = useMemo(() => {
-    const items: { label: string; count: number; icon: any; iconColor: string; iconBg: string; tab: string }[] = [];
-    const c = (s: string) => state.instructors.filter((i) => i.status === s).length;
+  useEffect(() => {
+    fetch("/api/dashboard/overview")
+      .then((r) => r.json())
+      .then((d) => setData(d))
+      .catch(() => {});
+  }, []);
 
-    if (c("미검토") > 0)
-      items.push({ label: "미검토", count: c("미검토"), icon: UserCheck, iconColor: "text-gray-500", iconBg: "bg-gray-100", tab: "instructors" });
-    if (c("발송 예정") > 0)
-      items.push({ label: "발송 예정", count: c("발송 예정"), icon: Send, iconColor: "text-blue-500", iconBg: "bg-blue-100", tab: "contact" });
-    const prog = state.instructors.filter((i) => i.status === "진행 중" && !i.final_status).length;
-    if (prog > 0)
-      items.push({ label: "응답 대기", count: prog, icon: Clock, iconColor: "text-indigo-500", iconBg: "bg-indigo-100", tab: "contact" });
-    const meet = state.instructors.filter((i) => i.meeting_date).length;
-    if (meet > 0)
-      items.push({ label: "미팅 예정", count: meet, icon: Calendar, iconColor: "text-purple-500", iconBg: "bg-purple-100", tab: "meeting" });
-    if (stats && stats.pendingApplications > 0)
-      items.push({ label: "지원서 미검토", count: stats.pendingApplications, icon: FileText, iconColor: "text-orange-500", iconBg: "bg-orange-100", tab: "applications" });
-
-    return items;
-  }, [state.instructors, stats]);
-
-  if (!stats) {
-    return <div className="text-center py-12 text-sm text-muted-foreground">통계 로딩 중...</div>;
-  }
-
-  const total = stats.total || 1;
-
-  const funnel = [
-    { label: "발송", value: stats.funnel.sent, icon: Send, color: "text-blue-500", bar: "bg-blue-500" },
-    { label: "응답", value: stats.funnel.responded, icon: MessageSquare, color: "text-amber-500", bar: "bg-amber-500" },
-    { label: "미팅", value: stats.funnel.meeting, icon: Calendar, color: "text-purple-500", bar: "bg-purple-500" },
-    { label: "계약", value: stats.funnel.contracted, icon: CheckCircle, color: "text-green-500", bar: "bg-green-500" },
-  ];
-  const rate = (a: number, b: number) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "-");
-
-  const summaryCards = [
-    { label: "전체 강사", value: stats.total, icon: Users, color: "text-gray-500", accent: "border-t-gray-300" },
-    { label: "진행 중", value: stats.byStatus["진행 중"] || 0, icon: Clock, color: "text-indigo-500", accent: "border-t-indigo-400" },
-    { label: "계약 완료", value: stats.byStatus["계약 완료"] || 0, icon: CheckCircle, color: "text-green-500", accent: "border-t-green-400" },
-    { label: "제외", value: stats.byStatus["제외"] || 0, icon: Users, color: "text-red-400", accent: "border-t-red-400" },
-  ];
-
-  const sectionWaveConfig = [
-    { key: "발송 예정" as const, dot: "bg-blue-400", count: stats.byStatus["발송 예정"] || 0 },
-    { key: "진행 중" as const, dot: "bg-indigo-400", count: stats.byStatus["진행 중"] || 0 },
-    { key: "제외/보류/거절" as const, dot: "bg-rose-400", count: (stats.byStatus["제외"] || 0) + (stats.byStatus["보류"] || 0) + (stats.byStatus["거절"] || 0) },
-    { key: "계약 완료" as const, dot: "bg-green-400", count: stats.byStatus["계약 완료"] || 0 },
-  ];
+  const today = new Date();
 
   return (
     <div className="space-y-6 max-w-5xl">
+      {/* 헤더 */}
+      <h1 className="text-2xl font-bold">강사 모집 현황</h1>
 
-      {/* 액션 필요 */}
-      {actionItems.length > 0 && (
-        <section>
-          <h3 className={SECTION_TITLE}>액션 필요</h3>
-          <div className="grid grid-cols-4 gap-3">
-            {actionItems.map((a) => (
-              <button
-                key={a.label}
-                onClick={() => dispatch({ type: "SET_TAB", tab: a.tab as any })}
-                className={`${CARD} p-4 flex items-center gap-3 text-left hover:shadow-md transition-all hover:-translate-y-0.5`}
-              >
-                <div className={`${a.iconBg} p-2.5 rounded-lg shrink-0`}>
-                  <a.icon className={`h-4 w-4 ${a.iconColor}`} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold leading-none">{a.count}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{a.label}</p>
-                </div>
-              </button>
-            ))}
+      {/* 상단 메타 띠 */}
+      <div className="flex items-center gap-x-5 gap-y-2 flex-wrap rounded-lg border bg-white px-4 py-2.5 text-sm">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-gray-900 font-medium">
+          오늘 {formatToday(today)} · {today.getMonth() + 1}월 {getMonthWeek(today)}주차
+        </span>
+
+        {data?.firstSentDate && (
+          <span className="text-muted-foreground">
+            발송 시작 <span className="text-foreground font-medium">{formatStartDate(data.firstSentDate)}</span>
+          </span>
+        )}
+
+        {data && (
+          <span className="text-muted-foreground">
+            누적 발송{" "}
+            <span className="text-foreground font-medium">{data.totalSent.toLocaleString()}건</span>
+            <span className="ml-1 text-xs">
+              (1차 {data.wavesSent[1] || 0}·2차 {data.wavesSent[2] || 0}·3차 {data.wavesSent[3] || 0})
+            </span>
+          </span>
+        )}
+
+        {data && (
+          <span className="text-muted-foreground">
+            누적 응답 <span className="text-foreground font-medium">{data.responsesReceived.toLocaleString()}건</span>
+          </span>
+        )}
+      </div>
+
+      {/* 활동량: 이번 주 / 이번 달 / 누적 */}
+      {data && (
+        <section className="grid grid-cols-3 gap-3">
+          {/* 이번 주 발송 */}
+          <div className="bg-white border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-2">이번 주 발송</p>
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <p className="text-3xl font-bold leading-none">{data.thisWeek.sent.toLocaleString()}</p>
+              <ChangeIndicator
+                thisVal={data.thisWeek.sent}
+                lastVal={data.thisWeek.lastSamePeriodSent}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              같은 시점 지난주 {data.thisWeek.lastSamePeriodSent}건
+            </p>
+          </div>
+
+          {/* 이번 달 발송 */}
+          <div className="bg-white border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-2">이번 달 발송</p>
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <p className="text-3xl font-bold leading-none">{data.thisMonth.sent.toLocaleString()}</p>
+              <ChangeIndicator
+                thisVal={data.thisMonth.sent}
+                lastVal={data.thisMonth.lastSamePeriodSent}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              같은 시점 지난달 {data.thisMonth.lastSamePeriodSent}건
+            </p>
+          </div>
+
+          {/* 누적 발송 */}
+          <div className="bg-white border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-2">누적 발송</p>
+            <p className="text-3xl font-bold leading-none mb-1.5">{data.totalSent.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">
+              {data.firstSentDate
+                ? `${formatStartShort(data.firstSentDate)} 시작`
+                : "발송 기록 없음"}
+            </p>
           </div>
         </section>
       )}
 
-      {/* 전체 요약 */}
-      <section>
-        <h3 className={SECTION_TITLE}>전체 요약</h3>
-        <div className="grid grid-cols-4 gap-3">
-          {summaryCards.map((c) => (
-            <div key={c.label} className={`${CARD} border-t-4 ${c.accent} p-5`}>
-              <div className="flex items-start justify-between">
-                <p className="text-xs text-muted-foreground">{c.label}</p>
-                <c.icon className={`h-4 w-4 ${c.color} opacity-40`} />
+      {/* 현재 재고 */}
+      {data && (
+        <section className="grid grid-cols-4 gap-3">
+          {/* 미검토 */}
+          <div className="bg-white border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-2">미검토</p>
+            <div className="grid grid-cols-2 gap-3 divide-x">
+              <div>
+                <p className="text-3xl font-bold leading-none mb-1.5">{data.pending.searchPage.total.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground leading-tight">
+                  강사찾기 {data.pending.searchPage.regular}
+                  <br />
+                  YT채널수집 {data.pending.searchPage.youtube}
+                </p>
               </div>
-              <p className="text-3xl font-bold mt-3">{c.value}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* 모집 퍼널 */}
-      <section>
-        <h3 className={SECTION_TITLE}>모집 퍼널</h3>
-        <div className={`${CARD} p-5`}>
-          <div className="grid grid-cols-4 gap-4">
-            {funnel.map((f, idx) => {
-              const pct = total > 0 ? Math.round((f.value / total) * 100) : 0;
-              return (
-                <div key={f.label} className="flex gap-3 items-stretch">
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <f.icon className={`h-3.5 w-3.5 ${f.color}`} />
-                        <span className="text-xs text-muted-foreground">{f.label}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{pct}%</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full ${f.bar} rounded-full`} style={{ width: `${pct}%` }} />
-                    </div>
-                    <p className="text-3xl font-bold">{f.value}</p>
-                    <p className="text-xs text-muted-foreground h-4">
-                      {idx > 0 ? `전환율 ${rate(f.value, funnel[idx - 1].value)}` : ""}
-                    </p>
-                  </div>
-                  {idx < funnel.length - 1 && (
-                    <div className="flex items-center pt-6">
-                      <ArrowRight className="h-4 w-4 text-gray-200 shrink-0" />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* 하단: 상태별 분포 + 섹션별 반응률 */}
-      <section className="grid grid-cols-2 gap-3 items-stretch">
-        {/* 상태별 분포 */}
-        <div className="flex flex-col">
-          <h3 className={SECTION_TITLE}>상태별 분포</h3>
-          <div className={`${CARD} p-5 space-y-3 flex-1`}>
-            {STATUSES.map((s) => {
-              const count = stats.byStatus[s] || 0;
-              const pct = total > 0 ? (count / total) * 100 : 0;
-              return (
-                <div key={s} className="flex items-center gap-3">
-                  <Badge className={`text-xs px-2 py-0.5 w-[80px] justify-center shrink-0 ${STATUS_COLORS[s]}`}>{s}</Badge>
-                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gray-400 rounded-full" style={{ width: `${pct}%` }} />
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums w-10 text-right">{count}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 섹션별 발송 반응률 */}
-        {stats.waveRates && (
-          <div className="flex flex-col">
-            <h3 className={SECTION_TITLE}>섹션별 발송 반응률</h3>
-            <div className={`${CARD} p-5 flex flex-col justify-between flex-1`}>
-              {sectionWaveConfig.map(({ key, dot, count }) => {
-                const waves = stats.waveRates![key];
-                return (
-                  <div key={key}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
-                        <span className="text-sm font-medium">{key}</span>
-                      </div>
-                      <span className="text-sm font-bold">{count}명</span>
-                    </div>
-                    <div className="flex gap-4 pl-4">
-                      {waves.map((w, idx) => (
-                        <div key={idx} className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <span>{idx + 1}차</span>
-                          {w.rate !== null ? (
-                            <span className={`font-semibold ${w.rate > 0 ? "text-green-600" : "text-gray-400"}`}>
-                              {w.rate}%
-                            </span>
-                          ) : (
-                            <span className="text-gray-300">-</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="pl-3">
+                <p className="text-3xl font-bold leading-none mb-1.5">{data.pending.applications.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground leading-tight">
+                  구글폼
+                  <br />
+                  지원서
+                </p>
+              </div>
             </div>
           </div>
-        )}
-      </section>
+
+          {/* 발송 대상 */}
+          <div className="bg-white border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-2">발송 대상</p>
+            <p className="text-3xl font-bold leading-none mb-1.5">{data.toSend.total.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">
+              발송예정 {data.toSend.planned} · 진행중 {data.toSend.inProgress}
+            </p>
+          </div>
+
+          {/* 예정된 미팅 */}
+          <div className="bg-white border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-2">예정된 미팅</p>
+            <p className="text-3xl font-bold leading-none mb-1.5">{data.meetings.upcoming.toLocaleString()}</p>
+          </div>
+
+          {/* 계약 완료 */}
+          <div className="bg-white border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-2">계약 완료</p>
+            <p className="text-3xl font-bold leading-none mb-1.5 text-emerald-600">
+              {data.contracts.total.toLocaleString()}
+            </p>
+            <p className="text-xs text-muted-foreground leading-tight">
+              발송 이후 {data.contracts.fromSendRate != null ? `${data.contracts.fromSendRate.toFixed(1)}%` : "-"}
+              <br />
+              미팅 이후 {data.contracts.fromMeetingRate != null ? `${data.contracts.fromMeetingRate.toFixed(1)}%` : "-"}
+            </p>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
