@@ -69,6 +69,7 @@ export default function ContactTab() {
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
 
@@ -222,6 +223,39 @@ export default function ContactTab() {
     estimateSize: () => ROW_H,
     overscan: 20,
   });
+
+  // 다른 탭 사이드바에서 "컨택관리에서 수정"으로 진입한 경우, 해당 강사 행을 상단으로 스크롤
+  useEffect(() => {
+    const focusId = state.focusInstructorId;
+    if (!focusId) return;
+    // 컨택관리 목록(발송 예정/진행 중/보류/계약 완료) 자체에 없는 강사는 노출 불가 — 포커스만 해제
+    const inContact = contactInstructors.some((i) => i.id === focusId);
+    if (!inContact) {
+      dispatch({ type: "FOCUS_INSTRUCTOR", id: null });
+      return;
+    }
+    // 필터로 가려져 있으면 먼저 필터를 리셋하고 다음 렌더에서 다시 처리
+    const inFiltered = filtered.some((i) => i.id === focusId);
+    if (!inFiltered) {
+      setViewFilter("all");
+      setSearch("");
+      setWaveFilters({});
+      setSendMethodFilter("");
+      setDateFilter("");
+      return;
+    }
+    const idx = filtered.findIndex((i) => i.id === focusId);
+    virtualizer.scrollToIndex(idx, { align: "start" });
+    setHighlightedId(focusId);
+    dispatch({ type: "FOCUS_INSTRUCTOR", id: null });
+  }, [state.focusInstructorId, contactInstructors, filtered, virtualizer, dispatch]);
+
+  // 하이라이트는 잠깐만 보였다가 사라지도록 자동 해제
+  useEffect(() => {
+    if (!highlightedId) return;
+    const t = setTimeout(() => setHighlightedId(null), 2500);
+    return () => clearTimeout(t);
+  }, [highlightedId]);
 
   /* ── 개별 발송 저장 (응답여부 모달 저장) ── */
   const handleWaveSave = async (instructorId: string, waveNumber: number, data: { result: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => {
@@ -656,11 +690,13 @@ export default function ContactTab() {
             {virtualizer.getVirtualItems().map((vRow) => {
               const i = filtered[vRow.index];
               const isSelected = selectedIds.has(i.id);
+              const isHighlighted = i.id === highlightedId;
               const rowBg = isSelected ? "bg-blue-100/70" : (vRow.index % 2 === 0 ? "bg-white" : "bg-slate-100");
+              const highlightClass = isHighlighted ? "ring-2 ring-inset ring-primary/60 bg-yellow-50" : "";
               return (
                 <div
                   key={i.id}
-                  className={`grid items-center border-b text-sm transition-colors ${rowBg}`}
+                  className={`grid items-center border-b text-sm transition-colors ${rowBg} ${highlightClass}`}
                   style={{
                     position: "absolute", top: 0, left: 0, right: 0,
                     height: ROW_H,

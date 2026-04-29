@@ -401,7 +401,11 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                 </div>
                 <button
                   className="text-xs text-primary hover:underline flex items-center gap-1"
-                  onClick={() => { dispatch({ type: "SET_TAB", tab: "contact" }); onClose(); }}
+                  onClick={() => {
+                    dispatch({ type: "SET_TAB", tab: "contact" });
+                    dispatch({ type: "FOCUS_INSTRUCTOR", id: instructor.id });
+                    onClose();
+                  }}
                 >
                   컨택관리에서 수정
                   <ArrowRight className="h-3 w-3" />

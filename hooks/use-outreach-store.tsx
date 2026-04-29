@@ -29,6 +29,8 @@ interface AppState {
   tab: TabId;
   instructors: Instructor[];
   selectedId: string | null;
+  // 다른 탭에서 컨택관리 탭으로 진입 시 특정 강사를 상단에 스크롤·하이라이트하기 위한 1회성 신호
+  focusInstructorId: string | null;
   history: StatusHistory[];
   waves: OutreachWave[];
   applications: Application[];
@@ -45,6 +47,7 @@ const initialState: AppState = {
   tab: "dashboard",
   instructors: [],
   selectedId: null,
+  focusInstructorId: null,
   history: [],
   waves: [],
   applications: [],
@@ -71,6 +74,7 @@ type Action =
   | { type: "ADD_INSTRUCTOR"; instructor: Instructor }
   | { type: "DELETE_INSTRUCTOR"; id: string }
   | { type: "SELECT_INSTRUCTOR"; id: string | null }
+  | { type: "FOCUS_INSTRUCTOR"; id: string | null }
   | { type: "SET_HISTORY"; history: StatusHistory[] }
   | { type: "SET_WAVES"; waves: OutreachWave[] }
   | { type: "SET_APPLICATIONS"; applications: Application[] }
@@ -93,7 +97,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "SET_LOADING":
       return { ...state, loading: action.loading };
     case "SET_TAB":
-      return { ...state, tab: action.tab, selectedId: null };
+      return { ...state, tab: action.tab, selectedId: null, focusInstructorId: null };
     case "SET_INSTRUCTORS":
       return { ...state, instructors: action.instructors };
     case "UPDATE_INSTRUCTOR":
@@ -117,6 +121,8 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case "SELECT_INSTRUCTOR":
       return { ...state, selectedId: action.id };
+    case "FOCUS_INSTRUCTOR":
+      return { ...state, focusInstructorId: action.id };
     case "SET_HISTORY":
       return { ...state, history: action.history };
     case "SET_WAVES":
