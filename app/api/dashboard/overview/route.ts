@@ -156,6 +156,11 @@ export async function GET() {
   let upcomingMeetings = 0;
   let undatedMeetings = 0;
   let metInstructors = 0;
+  let thisWeekMeetings = 0;
+
+  // 이번 주 일요일까지 범위
+  const thisSunday = addDays(thisMonday, 6);
+  const thisSundayStr = dateToStr(thisSunday);
 
   for (const i of instrList) {
     if (i.status === "발송 예정") toSendPlanned++;
@@ -164,10 +169,13 @@ export async function GET() {
     if (i.status === "계약 완료") contracted++;
 
     const md = (i.meeting_date || "").trim();
-    if (md && md.slice(0, 10) >= todayStr) upcomingMeetings++;
+    const mdDate = md.slice(0, 10);
+    if (md && mdDate >= todayStr) upcomingMeetings++;
     if (i.meeting_confirmed && !md) undatedMeetings++;
     // 미팅 이후 전환율 분모: 이미 미팅이 끝난 강사 (meeting_date < 오늘)
-    if (md && md.slice(0, 10) < todayStr) metInstructors++;
+    if (md && mdDate < todayStr) metInstructors++;
+    // 이번 주 미팅 (월~일)
+    if (md && mdDate >= thisMondayStr && mdDate <= thisSundayStr) thisWeekMeetings++;
   }
 
   let pendingYT = 0;
@@ -195,7 +203,7 @@ export async function GET() {
       searchPage: { total: pendingSearchPageTotal, regular: pendingSearchPageRegular, youtube: pendingYT },
       applications: pendingApplications,
     },
-    meetings: { upcoming: upcomingMeetings, undated: undatedMeetings },
+    meetings: { upcoming: upcomingMeetings, undated: undatedMeetings, thisWeek: thisWeekMeetings },
     contracts: {
       total: contracted,
       sentInstructors: sentInstructorCount,

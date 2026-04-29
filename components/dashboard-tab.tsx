@@ -21,7 +21,7 @@ interface Overview {
     searchPage: { total: number; regular: number; youtube: number };
     applications: number;
   };
-  meetings: { upcoming: number; undated: number };
+  meetings: { upcoming: number; undated: number; thisWeek: number };
   contracts: {
     total: number;
     sentInstructors: number;
@@ -200,10 +200,11 @@ export default function DashboardTab() {
             </p>
           </div>
 
-          {/* 예정된 미팅 */}
+          {/* 확정된 미팅 */}
           <div className="bg-white border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground mb-2">예정된 미팅</p>
+            <p className="text-xs text-muted-foreground mb-2">확정된 미팅</p>
             <p className="text-3xl font-bold leading-none mb-1.5">{data.meetings.upcoming.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">이번주 미팅 {data.meetings.thisWeek}</p>
           </div>
 
           {/* 계약 완료 */}
