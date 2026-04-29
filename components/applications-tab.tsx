@@ -79,6 +79,17 @@ export default function ApplicationsTab() {
   const [sortKey, setSortKey] = useState<keyof Application | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [detailApp, setDetailApp] = useState<Application | null>(null);
+  const [confirmAdd, setConfirmAdd] = useState<Application | null>(null);
+  const [confirmBulkAdd, setConfirmBulkAdd] = useState<Application[] | null>(null);
+
+  // 강사 등록 시 사용할 이름 (강사 등록 로직과 동일)
+  const getRegisterName = (app: Application) => app.applicant_name || app.activity_name;
+  // 같은 이름의 기존 강사 찾기 (공백 trim, 대소문자 무시)
+  const findDuplicates = (name: string) => {
+    const k = (name || "").trim().toLowerCase();
+    if (!k) return [];
+    return state.instructors.filter((i) => (i.name || "").trim().toLowerCase() === k);
+  };
 
   const handleSort = (key: keyof Application) => {
     if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -181,15 +192,20 @@ export default function ApplicationsTab() {
     }
   };
 
-  // 일괄 강사 등록
-  const handleBulkAddToInstructors = async () => {
+  // 일괄 강사 등록 — 모달 열기
+  const handleBulkAddToInstructors = () => {
     const apps = state.applications.filter((a) => selected.has(a.id) && !a.instructor_id);
     if (apps.length === 0) { toast.error("등록 가능한 지원서가 없습니다."); return; }
+    setConfirmBulkAdd(apps);
+  };
+
+  // 일괄 강사 등록 — 실제 실행
+  const runBulkAdd = async (apps: Application[]) => {
     try {
       for (const app of apps) {
         const res = await fetch("/api/instructors", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: app.applicant_name || app.activity_name, phone: app.contact, source: "지원서", notes: `${app.source_platform} | ${app.experience} | ${app.topic}`, _force: true }),
+          body: JSON.stringify({ name: getRegisterName(app), phone: app.contact, source: "지원서", notes: `${app.source_platform} | ${app.experience} | ${app.topic}`, _force: true }),
         });
         if (res.ok) {
           const instructor = await res.json();
@@ -356,7 +372,7 @@ export default function ApplicationsTab() {
                   <TableCell className="py-2">
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setDetailApp(a)}><Eye className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleAddToInstructors(a)} disabled={!!a.instructor_id && state.instructors.some((i) => i.id === a.instructor_id)}><UserPlus className={`h-4 w-4 ${a.instructor_id && state.instructors.some((i) => i.id === a.instructor_id) ? "text-muted-foreground/40" : ""}`} /></Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setConfirmAdd(a)} disabled={!!a.instructor_id && state.instructors.some((i) => i.id === a.instructor_id)}><UserPlus className={`h-4 w-4 ${a.instructor_id && state.instructors.some((i) => i.id === a.instructor_id) ? "text-muted-foreground/40" : ""}`} /></Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => handleDelete(a.id)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </TableCell>
@@ -387,6 +403,100 @@ export default function ApplicationsTab() {
           </DialogContent>
         </Dialog>
       )}
+
+      {confirmAdd && (() => {
+        const name = getRegisterName(confirmAdd);
+        const dups = findDuplicates(name);
+        return (
+          <Dialog open onOpenChange={() => setConfirmAdd(null)}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-base">강사 추가 확인</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                <div className="rounded-md border bg-muted/30 px-3 py-2">
+                  <p className="font-semibold">{name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {confirmAdd.source_platform}{confirmAdd.contact ? ` · ${confirmAdd.contact}` : ""}
+                  </p>
+                </div>
+                {dups.length > 0 ? (
+                  <div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
+                    <p className="font-medium">⚠ 같은 이름의 기존 강사 {dups.length}명</p>
+                    <ul className="mt-1 space-y-0.5 text-orange-700">
+                      {dups.slice(0, 5).map((i) => (
+                        <li key={i.id}>· {i.name}{i.phone ? ` (${i.phone})` : ""}</li>
+                      ))}
+                      {dups.length > 5 && <li>· 외 {dups.length - 5}명</li>}
+                    </ul>
+                    <p className="mt-1.5 text-orange-700/80">그래도 추가하면 별도 강사로 등록됩니다.</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground px-1">이름이 동일한 기존 강사가 없습니다.</p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setConfirmAdd(null)}>취소</Button>
+                <Button onClick={async () => {
+                  const app = confirmAdd;
+                  setConfirmAdd(null);
+                  await handleAddToInstructors(app);
+                }}>추가</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
+
+      {confirmBulkAdd && (() => {
+        const items = confirmBulkAdd.map((a) => {
+          const name = getRegisterName(a);
+          return { app: a, name, dups: findDuplicates(name) };
+        });
+        const dupTotal = items.filter((i) => i.dups.length > 0).length;
+        return (
+          <Dialog open onOpenChange={() => setConfirmBulkAdd(null)}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-base">{confirmBulkAdd.length}명 강사 추가 확인</DialogTitle>
+                {dupTotal > 0 && (
+                  <p className="text-xs text-orange-700">
+                    ⚠ 이름 중복 {dupTotal}명 — 그래도 추가하면 별도 강사로 등록됩니다.
+                  </p>
+                )}
+              </DialogHeader>
+              <ScrollArea className="max-h-[55vh] -mx-2 px-2">
+                <div className="space-y-1 py-1">
+                  {items.map(({ app, name, dups }) => (
+                    <div key={app.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-muted/40">
+                      <div className="text-sm min-w-0">
+                        <span className="font-medium">{name}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{app.source_platform}</span>
+                      </div>
+                      {dups.length > 0 && (
+                        <span
+                          className="shrink-0 text-xs text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded"
+                          title={dups.map((d) => `${d.name}${d.phone ? ` (${d.phone})` : ""}`).join("\n")}
+                        >
+                          중복 {dups.length}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setConfirmBulkAdd(null)}>취소</Button>
+                <Button onClick={async () => {
+                  const apps = confirmBulkAdd;
+                  setConfirmBulkAdd(null);
+                  await runBulkAdd(apps);
+                }}>{confirmBulkAdd.length}명 추가</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }
