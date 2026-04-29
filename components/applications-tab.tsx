@@ -13,12 +13,27 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { APPLICATION_SOURCES } from "@/lib/constants";
 import type { Application } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Eye, UserPlus, Trash2, Search, ChevronUp, ChevronDown } from "lucide-react";
+import { Eye, UserPlus, Trash2, Search, ChevronUp, ChevronDown, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
+
+// 채널 표시 라벨 (DB 값 → UI 표시값). DB/Apps Script 값은 건드리지 않음
+const SOURCE_LABELS: Record<string, string> = {
+  "핏크닉카": "핏크닉카페",
+  "머니업카": "머니업카페",
+};
+
+// 검토 상태 표시 라벨 (DB 값은 "미확인" 유지, UI에서만 "미검토"로 표시)
+const REVIEW_LABELS: Record<string, string> = {
+  "미확인": "미검토",
+};
+const reviewLabel = (k: string) => REVIEW_LABELS[k] ?? k;
 
 // 출처별 상세 필드 순서
 function getDetailFields(app: Application): [string, string][] {
@@ -58,6 +73,7 @@ function getDetailFields(app: Application): [string, string][] {
 export default function ApplicationsTab() {
   const { state, dispatch, loadApplications } = useOutreach();
   const [activeSource, setActiveSource] = useState<string>("전체");
+  const [reviewFilter, setReviewFilter] = useState<string>("전체");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<keyof Application | null>(null);
@@ -85,6 +101,7 @@ export default function ApplicationsTab() {
   const filtered = useMemo(() => {
     return state.applications.filter((a) => {
       if (activeSource !== "전체" && a.source_platform !== activeSource) return false;
+      if (reviewFilter !== "전체" && a.review_status !== reviewFilter) return false;
       if (search) {
         const q = search.toLowerCase();
         return (
@@ -95,7 +112,7 @@ export default function ApplicationsTab() {
       }
       return true;
     });
-  }, [state.applications, activeSource, search]);
+  }, [state.applications, activeSource, reviewFilter, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -108,12 +125,19 @@ export default function ApplicationsTab() {
   }, [filtered, sortKey, sortDir]);
 
   const handleReviewStatus = async (app: Application, status: string) => {
+    // 낙관적 업데이트: 즉시 UI 반영
+    const prev = state.applications;
+    dispatch({
+      type: "SET_APPLICATIONS",
+      applications: prev.map((a) => (a.id === app.id ? { ...a, review_status: status as Application["review_status"] } : a)),
+    });
     try {
       const res = await fetch(`/api/applications/${app.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ review_status: status }) });
       if (!res.ok) throw new Error("Failed");
-      await loadApplications();
-      toast.success("검토 상태 업데이트");
-    } catch { toast.error("실패"); }
+    } catch {
+      dispatch({ type: "SET_APPLICATIONS", applications: prev });
+      toast.error("검토 상태 업데이트 실패");
+    }
   };
 
   const handleAddToInstructors = async (app: Application) => {
@@ -135,16 +159,26 @@ export default function ApplicationsTab() {
 
   // 일괄 검토 상태 변경
   const handleBulkReview = async (status: string) => {
+    const ids = selected;
+    const count = ids.size;
+    const prev = state.applications;
+    // 낙관적 업데이트
+    dispatch({
+      type: "SET_APPLICATIONS",
+      applications: prev.map((a) => (ids.has(a.id) ? { ...a, review_status: status as Application["review_status"] } : a)),
+    });
+    setSelected(new Set());
     try {
       await Promise.all(
-        Array.from(selected).map((id) =>
+        Array.from(ids).map((id) =>
           fetch(`/api/applications/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ review_status: status }) })
         )
       );
-      await loadApplications();
-      setSelected(new Set());
-      toast.success(`${selected.size}건 ${status}으로 변경`);
-    } catch { toast.error("실패"); }
+      toast.success(`${count}건 ${reviewLabel(status)}로 변경`);
+    } catch {
+      dispatch({ type: "SET_APPLICATIONS", applications: prev });
+      toast.error("실패");
+    }
   };
 
   // 일괄 강사 등록
@@ -200,12 +234,21 @@ export default function ApplicationsTab() {
     return c;
   }, [state.applications]);
 
+  const reviewCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const a of state.applications) {
+      if (activeSource !== "전체" && a.source_platform !== activeSource) continue;
+      c[a.review_status] = (c[a.review_status] || 0) + 1;
+    }
+    return c;
+  }, [state.applications, activeSource]);
+
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">지원서</h2>
 
       <div className="flex gap-2 flex-wrap">
-        {[{ key: "전체", label: `전체 (${state.applications.length})` }, ...APPLICATION_SOURCES.map((s) => ({ key: s, label: `${s} (${sourceCounts[s] || 0})` }))].map((f) => (
+        {[{ key: "전체", label: `전체 (${state.applications.length})` }, ...APPLICATION_SOURCES.map((s) => ({ key: s, label: `${SOURCE_LABELS[s] ?? s} (${sourceCounts[s] || 0})` }))].map((f) => (
           <button
             key={f.key}
             onClick={() => setActiveSource(f.key)}
@@ -225,7 +268,7 @@ export default function ApplicationsTab() {
             확인완료
           </Button>
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleBulkReview("미확인")}>
-            미확인
+            미검토
           </Button>
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleBulkAddToInstructors}>
             <UserPlus className="h-3.5 w-3.5 mr-1" />강사 등록
@@ -258,7 +301,28 @@ export default function ApplicationsTab() {
               <SortableHead label="활동명" col="activity_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHead label="채널" col="source_platform" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <TableHead className="py-2 text-xs font-semibold">강의주제</TableHead>
-              <SortableHead label="검토" col="review_status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <TableHead className="py-2 text-xs font-semibold">
+                <DropdownMenu>
+                  <DropdownMenuTrigger className="inline-flex items-center gap-0.5 outline-none hover:text-foreground select-none">
+                    <span className={reviewFilter !== "전체" ? "text-primary" : ""}>
+                      검토{reviewFilter !== "전체" ? `: ${reviewLabel(reviewFilter)}` : ""}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {[
+                      { key: "전체", count: (reviewCounts["미확인"] || 0) + (reviewCounts["확인완료"] || 0) },
+                      { key: "미확인", count: reviewCounts["미확인"] || 0 },
+                      { key: "확인완료", count: reviewCounts["확인완료"] || 0 },
+                    ].map((f) => (
+                      <DropdownMenuItem key={f.key} onClick={() => setReviewFilter(f.key)} className="text-xs">
+                        <span className="flex-1">{reviewLabel(f.key)} ({f.count})</span>
+                        {reviewFilter === f.key && <Check className="ml-2 h-3.5 w-3.5" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </TableHead>
               <TableHead className="py-2 text-xs font-semibold w-20"></TableHead>
             </TableRow>
           </TableHeader>
@@ -278,9 +342,13 @@ export default function ApplicationsTab() {
                   <TableCell className="py-2 text-sm text-muted-foreground max-w-[200px] truncate">{a.topic}</TableCell>
                   <TableCell className="py-2">
                     <Select value={a.review_status} onValueChange={(v) => handleReviewStatus(a, v)}>
-                      <SelectTrigger className="w-[90px] h-7 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className={`w-[90px] h-7 text-xs font-medium ${
+                        a.review_status === "확인완료"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                          : "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                      }`}><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="미확인">미확인</SelectItem>
+                        <SelectItem value="미확인">미검토</SelectItem>
                         <SelectItem value="확인완료">확인완료</SelectItem>
                       </SelectContent>
                     </Select>

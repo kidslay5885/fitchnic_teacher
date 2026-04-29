@@ -32,7 +32,7 @@ export default function DashboardTab() {
     if (meet > 0)
       items.push({ label: "미팅 예정", count: meet, icon: Calendar, iconColor: "text-purple-500", iconBg: "bg-purple-100", tab: "meeting" });
     if (stats && stats.pendingApplications > 0)
-      items.push({ label: "지원서 미확인", count: stats.pendingApplications, icon: FileText, iconColor: "text-orange-500", iconBg: "bg-orange-100", tab: "applications" });
+      items.push({ label: "지원서 미검토", count: stats.pendingApplications, icon: FileText, iconColor: "text-orange-500", iconBg: "bg-orange-100", tab: "applications" });
 
     return items;
   }, [state.instructors, stats]);
