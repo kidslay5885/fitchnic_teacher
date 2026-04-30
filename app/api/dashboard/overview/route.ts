@@ -33,6 +33,15 @@ function daysInMonth(d: Date): number {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
 }
 
+// 월요일 시작 기준, 해당 월에서 몇 주차인지 (1-based)
+function getMonthWeekUTC(d: Date): number {
+  const day = d.getUTCDate();
+  const firstOfMo = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+  const firstDow = firstOfMo.getUTCDay();
+  const offset = firstDow === 0 ? 6 : firstDow - 1;
+  return Math.ceil((day + offset) / 7);
+}
+
 const PAGE = 1000;
 
 type SB = ReturnType<typeof getSupabase>;
@@ -191,6 +200,158 @@ export async function GET() {
   const fromSendRate = sentInstructorCount > 0 ? (contracted / sentInstructorCount) * 100 : null;
   const fromMeetingRate = metInstructors > 0 ? (contracted / metInstructors) * 100 : null;
 
+  // === 추이 데이터 ===
+  // 일별 발송/응답 맵
+  const dailyMap = new Map<string, { sent: number; responded: number }>();
+  for (const w of waves) {
+    if (!w.sent_date) continue;
+    const e = dailyMap.get(w.sent_date) ?? { sent: 0, responded: 0 };
+    e.sent++;
+    if (w.result === "응답" || w.result === "거절") e.responded++;
+    dailyMap.set(w.sent_date, e);
+  }
+
+  // 주별(요일별) 추이
+  const weeklyDates = (start: Date) => {
+    const out: string[] = [];
+    for (let i = 0; i < 7; i++) out.push(dateToStr(addDays(start, i)));
+    return out;
+  };
+  const buildDaily = (dates: string[]) => {
+    const sent: number[] = [];
+    const responded: number[] = [];
+    const rate: (number | null)[] = [];
+    for (const d of dates) {
+      const e = dailyMap.get(d) ?? { sent: 0, responded: 0 };
+      sent.push(e.sent);
+      responded.push(e.responded);
+      rate.push(e.sent > 0 ? (e.responded / e.sent) * 100 : null);
+    }
+    return { sent, responded, rate };
+  };
+  const thisWeekDates = weeklyDates(thisMonday);
+  const lastWeekDates = weeklyDates(lastMonday);
+  const thisWeekDaily = buildDaily(thisWeekDates);
+  const lastWeekDaily = buildDaily(lastWeekDates);
+
+  // 월별(주차별) 추이
+  const aggregateMonthByWeek = (monthFirst: Date) => {
+    const days = daysInMonth(monthFirst);
+    const lastDay = addDays(monthFirst, days - 1);
+    const weekCount = getMonthWeekUTC(lastDay);
+    const sent: number[] = new Array(weekCount).fill(0);
+    const responded: number[] = new Array(weekCount).fill(0);
+    for (let i = 0; i < days; i++) {
+      const date = addDays(monthFirst, i);
+      const dateStr = dateToStr(date);
+      const wkIdx = getMonthWeekUTC(date) - 1;
+      const e = dailyMap.get(dateStr);
+      if (e) {
+        sent[wkIdx] += e.sent;
+        responded[wkIdx] += e.responded;
+      }
+    }
+    const rate = sent.map((s, i) => (s > 0 ? (responded[i] / s) * 100 : null));
+    return { sent, responded, rate, weekCount };
+  };
+  const thisMonthByWeek = aggregateMonthByWeek(thisMonthFirst);
+  const lastMonthByWeek = aggregateMonthByWeek(lastMonthFirst);
+
+  // 헤더 요약 응답률
+  let thisWeekResp = 0;
+  let lastWeekResp = 0;
+  let thisMonthResp = 0;
+  let lastMonthResp = 0;
+  for (const w of waves) {
+    const d = w.sent_date;
+    if (!d) continue;
+    const isResp = w.result === "응답" || w.result === "거절";
+    if (isResp) {
+      if (d >= thisMondayStr && d <= todayStr) thisWeekResp++;
+      if (d >= lastMondayStr && d <= lastWeekEndStr) lastWeekResp++;
+      if (d >= thisMonthFirstStr && d <= todayStr) thisMonthResp++;
+      if (d >= lastMonthFirstStr && d <= lastMonthEndStr) lastMonthResp++;
+    }
+  }
+  const thisWeekRate = thisWeekSent > 0 ? (thisWeekResp / thisWeekSent) * 100 : null;
+  const lastWeekRate = lastWeekSent > 0 ? (lastWeekResp / lastWeekSent) * 100 : null;
+  const thisMonthRate = thisMonthSent > 0 ? (thisMonthResp / thisMonthSent) * 100 : null;
+  const lastMonthRate = lastMonthSent > 0 ? (lastMonthResp / lastMonthSent) * 100 : null;
+
+  // 지난주/지난달 마감 합계
+  const lastWeekFinalEnd = dateToStr(addDays(lastMonday, 6));
+  let lastWeekFinalSent = 0;
+  for (const w of waves) {
+    if (w.sent_date && w.sent_date >= lastMondayStr && w.sent_date <= lastWeekFinalEnd) lastWeekFinalSent++;
+  }
+  const lastMonthFullEnd = dateToStr(addDays(lastMonthFirst, daysInMonth(lastMonthFirst) - 1));
+  let lastMonthFullSent = 0;
+  for (const w of waves) {
+    if (w.sent_date && w.sent_date >= lastMonthFirstStr && w.sent_date <= lastMonthFullEnd) lastMonthFullSent++;
+  }
+
+  // === 회차별 누적 응답 분석 ===
+  // 코호트: 1차 sent_date in [today-90d, today-14d]
+  const ninetyDaysAgo = dateToStr(addDays(today, -90));
+  const twoWeeksAgo = dateToStr(addDays(today, -14));
+
+  const wavesByInstr: Record<string, typeof waves> = {};
+  for (const w of waves) {
+    if (!wavesByInstr[w.instructor_id]) wavesByInstr[w.instructor_id] = [];
+    wavesByInstr[w.instructor_id].push(w);
+  }
+
+  let cohortSize = 0;
+  let respondedAt1 = 0;
+  let respondedBy2 = 0;
+  let respondedBy3 = 0;
+  for (const id of Object.keys(wavesByInstr)) {
+    const ws = wavesByInstr[id];
+    const w1 = ws.find((w) => w.wave_number === 1);
+    if (!w1?.sent_date) continue;
+    if (w1.sent_date < ninetyDaysAgo || w1.sent_date > twoWeeksAgo) continue;
+
+    cohortSize++;
+    const w2 = ws.find((w) => w.wave_number === 2);
+    const w3 = ws.find((w) => w.wave_number === 3);
+
+    const r1 = w1.result === "응답" || w1.result === "거절";
+    const r2 = w2 ? w2.result === "응답" || w2.result === "거절" : false;
+    const r3 = w3 ? w3.result === "응답" || w3.result === "거절" : false;
+
+    if (r1) respondedAt1++;
+    if (r1 || r2) respondedBy2++;
+    if (r1 || r2 || r3) respondedBy3++;
+  }
+
+  const pct = (n: number) => (cohortSize > 0 ? (n / cohortSize) * 100 : 0);
+  const waveAnalysis = {
+    cohortSize,
+    waves: [
+      {
+        wave: 1,
+        newCount: respondedAt1,
+        cumCount: respondedAt1,
+        cumRate: pct(respondedAt1),
+        deltaP: pct(respondedAt1),
+      },
+      {
+        wave: 2,
+        newCount: respondedBy2 - respondedAt1,
+        cumCount: respondedBy2,
+        cumRate: pct(respondedBy2),
+        deltaP: pct(respondedBy2 - respondedAt1),
+      },
+      {
+        wave: 3,
+        newCount: respondedBy3 - respondedBy2,
+        cumCount: respondedBy3,
+        cumRate: pct(respondedBy3),
+        deltaP: pct(respondedBy3 - respondedBy2),
+      },
+    ],
+  };
+
   return NextResponse.json({
     firstSentDate,
     wavesSent,
@@ -211,5 +372,53 @@ export async function GET() {
       fromSendRate,
       fromMeetingRate,
     },
+    trends: {
+      weekly: {
+        thisWeek: {
+          dates: thisWeekDates,
+          sent: thisWeekDaily.sent,
+          responded: thisWeekDaily.responded,
+          rate: thisWeekDaily.rate,
+          totalSent: thisWeekSent,
+          totalResp: thisWeekResp,
+          totalRate: thisWeekRate,
+        },
+        lastWeek: {
+          dates: lastWeekDates,
+          sent: lastWeekDaily.sent,
+          responded: lastWeekDaily.responded,
+          rate: lastWeekDaily.rate,
+          totalSent: lastWeekSent,
+          totalResp: lastWeekResp,
+          totalRate: lastWeekRate,
+          fullWeekSent: lastWeekFinalSent,
+        },
+        daysIntoWeek,
+      },
+      monthly: {
+        thisMonth: {
+          sent: thisMonthByWeek.sent,
+          responded: thisMonthByWeek.responded,
+          rate: thisMonthByWeek.rate,
+          weekCount: thisMonthByWeek.weekCount,
+          totalSent: thisMonthSent,
+          totalResp: thisMonthResp,
+          totalRate: thisMonthRate,
+          monthLabel: today.getUTCMonth() + 1,
+        },
+        lastMonth: {
+          sent: lastMonthByWeek.sent,
+          responded: lastMonthByWeek.responded,
+          rate: lastMonthByWeek.rate,
+          weekCount: lastMonthByWeek.weekCount,
+          totalSent: lastMonthSent,
+          totalResp: lastMonthResp,
+          totalRate: lastMonthRate,
+          fullMonthSent: lastMonthFullSent,
+          monthLabel: lastMonthFirst.getUTCMonth() + 1,
+        },
+      },
+    },
+    waveAnalysis,
   });
 }

@@ -1,12 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import WaveCumulativeAnalysis from "@/components/dashboard/wave-cumulative-analysis";
+import SendTrendChart from "@/components/dashboard/send-trend-chart";
+import ResponseRateChart from "@/components/dashboard/response-rate-chart";
 
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
 interface PeriodStat {
   sent: number;
   lastSamePeriodSent: number;
+}
+
+interface DailyTrend {
+  dates: string[];
+  sent: number[];
+  responded: number[];
+  rate: (number | null)[];
+  totalSent: number;
+  totalResp: number;
+  totalRate: number | null;
+}
+
+interface MonthlyTrend {
+  sent: number[];
+  responded: number[];
+  rate: (number | null)[];
+  weekCount: number;
+  totalSent: number;
+  totalResp: number;
+  totalRate: number | null;
+  monthLabel: number;
 }
 
 interface Overview {
@@ -28,6 +52,27 @@ interface Overview {
     metInstructors: number;
     fromSendRate: number | null;
     fromMeetingRate: number | null;
+  };
+  trends: {
+    weekly: {
+      thisWeek: DailyTrend;
+      lastWeek: DailyTrend & { fullWeekSent: number };
+      daysIntoWeek: number;
+    };
+    monthly: {
+      thisMonth: MonthlyTrend;
+      lastMonth: MonthlyTrend & { fullMonthSent: number };
+    };
+  };
+  waveAnalysis: {
+    cohortSize: number;
+    waves: {
+      wave: number;
+      newCount: number;
+      cumCount: number;
+      cumRate: number;
+      deltaP: number;
+    }[];
   };
 }
 
@@ -86,7 +131,7 @@ export default function DashboardTab() {
   const today = new Date();
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-7xl">
       {/* 헤더 */}
       <h1 className="text-2xl font-bold">강사 모집 현황</h1>
 
@@ -219,6 +264,15 @@ export default function DashboardTab() {
               미팅 이후 {data.contracts.fromMeetingRate != null ? `${data.contracts.fromMeetingRate.toFixed(1)}%` : "-"}
             </p>
           </div>
+        </section>
+      )}
+
+      {/* 추이 + 회차별 분석 */}
+      {data && (
+        <section className="grid grid-cols-3 gap-3 items-stretch">
+          <SendTrendChart weekly={data.trends.weekly} monthly={data.trends.monthly} />
+          <ResponseRateChart weekly={data.trends.weekly} monthly={data.trends.monthly} />
+          <WaveCumulativeAnalysis data={data.waveAnalysis} />
         </section>
       )}
     </div>
