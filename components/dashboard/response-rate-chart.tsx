@@ -19,7 +19,7 @@ interface Props {
   monthly: MonthlyData;
 }
 
-const DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
+const DAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const fmt = (v: number | null | undefined) => (v == null ? "-" : `${v.toFixed(1)}%`);
 
@@ -88,6 +88,17 @@ export default function ResponseRateChart({ weekly, monthly }: Props) {
         <div className="text-[11px]">응답 = 응답 + 거절</div>
       </div>
 
+      <div className="flex gap-3 text-[11px] text-muted-foreground mb-2">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5 bg-sky-700" />
+          이번 응답률
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-0.5" style={{ borderTop: "1.5px dashed #bae6fd" }} />
+          지난 응답률
+        </span>
+      </div>
+
       <div className="flex-1 min-h-[220px]">
         <ResponsiveContainer width="100%" height={240}>
           <LineChart data={chartData} margin={{ top: 5, right: 5, left: -15, bottom: 0 }}>
@@ -125,17 +136,6 @@ export default function ResponseRateChart({ weekly, monthly }: Props) {
             />
           </LineChart>
         </ResponsiveContainer>
-      </div>
-
-      <div className="flex gap-3 justify-center text-[11px] text-muted-foreground mt-1">
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-sky-700" />
-          이번 응답률
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-0.5 bg-sky-200 border-dashed" style={{ borderTopWidth: 1, borderColor: "#bae6fd" }} />
-          지난 응답률
-        </span>
       </div>
     </div>
   );

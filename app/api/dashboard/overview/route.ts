@@ -19,10 +19,10 @@ function addDays(d: Date, n: number): Date {
   return r;
 }
 
-function mondayOf(d: Date): Date {
-  const dow = d.getUTCDay();
-  const offset = dow === 0 ? 6 : dow - 1;
-  return addDays(d, -offset);
+// 일요일 시작 기준, 해당 주의 일요일을 반환
+function sundayOf(d: Date): Date {
+  const dow = d.getUTCDay(); // 0=Sun, ..., 6=Sat
+  return addDays(d, -dow);
 }
 
 function firstOfMonth(d: Date): Date {
@@ -33,13 +33,12 @@ function daysInMonth(d: Date): number {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
 }
 
-// 월요일 시작 기준, 해당 월에서 몇 주차인지 (1-based)
+// 일요일 시작 기준, 해당 월에서 몇 주차인지 (1-based)
 function getMonthWeekUTC(d: Date): number {
   const day = d.getUTCDate();
   const firstOfMo = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-  const firstDow = firstOfMo.getUTCDay();
-  const offset = firstDow === 0 ? 6 : firstDow - 1;
-  return Math.ceil((day + offset) / 7);
+  const firstDow = firstOfMo.getUTCDay(); // Sun=0, ..., Sat=6
+  return Math.ceil((day + firstDow) / 7);
 }
 
 const PAGE = 1000;
@@ -47,9 +46,10 @@ const PAGE = 1000;
 type SB = ReturnType<typeof getSupabase>;
 
 async function fetchAllInstructors(sb: SB) {
+  const cols = "id, status, source, meeting_date, meeting_confirmed, send_method";
   const { data: firstPage, count, error } = await sb
     .from("instructors")
-    .select("id, status, source, meeting_date, meeting_confirmed", { count: "exact" })
+    .select(cols, { count: "exact" })
     .eq("is_banned", false)
     .range(0, PAGE - 1);
 
@@ -64,7 +64,7 @@ async function fetchAllInstructors(sb: SB) {
       remaining.map((from) =>
         sb
           .from("instructors")
-          .select("id, status, source, meeting_date, meeting_confirmed")
+          .select(cols)
           .eq("is_banned", false)
           .range(from, from + PAGE - 1),
       ),
@@ -102,7 +102,12 @@ export async function GET() {
     source: string;
     meeting_date: string | null;
     meeting_confirmed: boolean;
+    send_method: string | null;
   }[];
+
+  // 강사 ID → send_method 매핑
+  const instrSendMethod = new Map<string, string>();
+  for (const i of instrList) instrSendMethod.set(i.id, i.send_method || "");
 
   // 누적 발송 / 응답
   let firstSentDate: string | null = null;
@@ -120,13 +125,13 @@ export async function GET() {
   }
   const totalSent = wavesSent[1] + wavesSent[2] + wavesSent[3];
 
-  // 이번 주 / 이번 달
+  // 이번 주 / 이번 달 (일요일 시작)
   const todayStr = todayInKST();
   const today = dateStrToDate(todayStr);
-  const thisMonday = mondayOf(today);
-  const lastMonday = addDays(thisMonday, -7);
-  const daysIntoWeek = Math.round((today.getTime() - thisMonday.getTime()) / 86400000);
-  const lastWeekSamePeriodEnd = addDays(lastMonday, daysIntoWeek);
+  const thisSunday = sundayOf(today);
+  const lastSunday = addDays(thisSunday, -7);
+  const daysIntoWeek = Math.round((today.getTime() - thisSunday.getTime()) / 86400000);
+  const lastWeekSamePeriodEnd = addDays(lastSunday, daysIntoWeek);
 
   const thisMonthFirst = firstOfMonth(today);
   const lastMonthFirst = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
@@ -137,8 +142,8 @@ export async function GET() {
     Date.UTC(lastMonthFirst.getUTCFullYear(), lastMonthFirst.getUTCMonth(), lastMonthSameDay),
   );
 
-  const thisMondayStr = dateToStr(thisMonday);
-  const lastMondayStr = dateToStr(lastMonday);
+  const thisSundayStr = dateToStr(thisSunday);
+  const lastSundayStr = dateToStr(lastSunday);
   const lastWeekEndStr = dateToStr(lastWeekSamePeriodEnd);
   const thisMonthFirstStr = dateToStr(thisMonthFirst);
   const lastMonthFirstStr = dateToStr(lastMonthFirst);
@@ -151,8 +156,8 @@ export async function GET() {
   for (const w of waves) {
     const d = w.sent_date;
     if (!d) continue;
-    if (d >= thisMondayStr && d <= todayStr) thisWeekSent++;
-    if (d >= lastMondayStr && d <= lastWeekEndStr) lastWeekSent++;
+    if (d >= thisSundayStr && d <= todayStr) thisWeekSent++;
+    if (d >= lastSundayStr && d <= lastWeekEndStr) lastWeekSent++;
     if (d >= thisMonthFirstStr && d <= todayStr) thisMonthSent++;
     if (d >= lastMonthFirstStr && d <= lastMonthEndStr) lastMonthSent++;
   }
@@ -167,9 +172,9 @@ export async function GET() {
   let metInstructors = 0;
   let thisWeekMeetings = 0;
 
-  // 이번 주 일요일까지 범위
-  const thisSunday = addDays(thisMonday, 6);
-  const thisSundayStr = dateToStr(thisSunday);
+  // 이번 주 토요일까지 범위 (일요일 시작 기준)
+  const thisSaturday = addDays(thisSunday, 6);
+  const thisSaturdayStr = dateToStr(thisSaturday);
 
   for (const i of instrList) {
     if (i.status === "발송 예정") toSendPlanned++;
@@ -183,8 +188,8 @@ export async function GET() {
     if (i.meeting_confirmed && !md) undatedMeetings++;
     // 미팅 이후 전환율 분모: 이미 미팅이 끝난 강사 (meeting_date < 오늘)
     if (md && mdDate < todayStr) metInstructors++;
-    // 이번 주 미팅 (월~일)
-    if (md && mdDate >= thisMondayStr && mdDate <= thisSundayStr) thisWeekMeetings++;
+    // 이번 주 미팅 (일~토)
+    if (md && mdDate >= thisSundayStr && mdDate <= thisSaturdayStr) thisWeekMeetings++;
   }
 
   let pendingYT = 0;
@@ -229,8 +234,8 @@ export async function GET() {
     }
     return { sent, responded, rate };
   };
-  const thisWeekDates = weeklyDates(thisMonday);
-  const lastWeekDates = weeklyDates(lastMonday);
+  const thisWeekDates = weeklyDates(thisSunday);
+  const lastWeekDates = weeklyDates(lastSunday);
   const thisWeekDaily = buildDaily(thisWeekDates);
   const lastWeekDaily = buildDaily(lastWeekDates);
 
@@ -267,8 +272,8 @@ export async function GET() {
     if (!d) continue;
     const isResp = w.result === "응답" || w.result === "거절";
     if (isResp) {
-      if (d >= thisMondayStr && d <= todayStr) thisWeekResp++;
-      if (d >= lastMondayStr && d <= lastWeekEndStr) lastWeekResp++;
+      if (d >= thisSundayStr && d <= todayStr) thisWeekResp++;
+      if (d >= lastSundayStr && d <= lastWeekEndStr) lastWeekResp++;
       if (d >= thisMonthFirstStr && d <= todayStr) thisMonthResp++;
       if (d >= lastMonthFirstStr && d <= lastMonthEndStr) lastMonthResp++;
     }
@@ -279,10 +284,10 @@ export async function GET() {
   const lastMonthRate = lastMonthSent > 0 ? (lastMonthResp / lastMonthSent) * 100 : null;
 
   // 지난주/지난달 마감 합계
-  const lastWeekFinalEnd = dateToStr(addDays(lastMonday, 6));
+  const lastWeekFinalEnd = dateToStr(addDays(lastSunday, 6));
   let lastWeekFinalSent = 0;
   for (const w of waves) {
-    if (w.sent_date && w.sent_date >= lastMondayStr && w.sent_date <= lastWeekFinalEnd) lastWeekFinalSent++;
+    if (w.sent_date && w.sent_date >= lastSundayStr && w.sent_date <= lastWeekFinalEnd) lastWeekFinalSent++;
   }
   const lastMonthFullEnd = dateToStr(addDays(lastMonthFirst, daysInMonth(lastMonthFirst) - 1));
   let lastMonthFullSent = 0;
@@ -290,7 +295,7 @@ export async function GET() {
     if (w.sent_date && w.sent_date >= lastMonthFirstStr && w.sent_date <= lastMonthFullEnd) lastMonthFullSent++;
   }
 
-  // === 회차별 누적 응답 분석 ===
+  // === 회차별 누적 응답 분석 (채널별) ===
   // 코호트: 1차 sent_date in [today-90d, today-14d]
   const ninetyDaysAgo = dateToStr(addDays(today, -90));
   const twoWeeksAgo = dateToStr(addDays(today, -14));
@@ -301,55 +306,78 @@ export async function GET() {
     wavesByInstr[w.instructor_id].push(w);
   }
 
-  let cohortSize = 0;
-  let respondedAt1 = 0;
-  let respondedBy2 = 0;
-  let respondedBy3 = 0;
+  type Channel = "email" | "dm" | "other";
+  const channelStats: Record<Channel, { cohort: number; r1: number; r2: number; r3: number }> = {
+    email: { cohort: 0, r1: 0, r2: 0, r3: 0 },
+    dm: { cohort: 0, r1: 0, r2: 0, r3: 0 },
+    other: { cohort: 0, r1: 0, r2: 0, r3: 0 },
+  };
+
   for (const id of Object.keys(wavesByInstr)) {
     const ws = wavesByInstr[id];
     const w1 = ws.find((w) => w.wave_number === 1);
     if (!w1?.sent_date) continue;
     if (w1.sent_date < ninetyDaysAgo || w1.sent_date > twoWeeksAgo) continue;
 
-    cohortSize++;
+    // is_banned=false인 강사만 매핑에 있음 → banned는 자동 제외
+    const sendMethod = instrSendMethod.get(id);
+    if (sendMethod === undefined) continue;
+
+    const channel: Channel =
+      sendMethod === "이메일" ? "email" : sendMethod === "DM" ? "dm" : "other";
+
     const w2 = ws.find((w) => w.wave_number === 2);
     const w3 = ws.find((w) => w.wave_number === 3);
 
-    const r1 = w1.result === "응답" || w1.result === "거절";
-    const r2 = w2 ? w2.result === "응답" || w2.result === "거절" : false;
-    const r3 = w3 ? w3.result === "응답" || w3.result === "거절" : false;
+    const isResp = (w?: { result: string }) =>
+      !!w && (w.result === "응답" || w.result === "거절");
 
-    if (r1) respondedAt1++;
-    if (r1 || r2) respondedBy2++;
-    if (r1 || r2 || r3) respondedBy3++;
+    const r1 = isResp(w1);
+    const r2 = isResp(w2);
+    const r3 = isResp(w3);
+
+    channelStats[channel].cohort++;
+    if (r1) channelStats[channel].r1++;
+    if (r1 || r2) channelStats[channel].r2++;
+    if (r1 || r2 || r3) channelStats[channel].r3++;
   }
 
-  const pct = (n: number) => (cohortSize > 0 ? (n / cohortSize) * 100 : 0);
+  function buildChannelWaves(s: { cohort: number; r1: number; r2: number; r3: number }, multi: boolean) {
+    const pct = (n: number) => (s.cohort > 0 ? (n / s.cohort) * 100 : 0);
+    const w1 = {
+      wave: 1,
+      newCount: s.r1,
+      cumCount: s.r1,
+      cumRate: pct(s.r1),
+      deltaP: pct(s.r1),
+    };
+    if (!multi) return { cohortSize: s.cohort, waves: [w1] };
+    return {
+      cohortSize: s.cohort,
+      waves: [
+        w1,
+        {
+          wave: 2,
+          newCount: s.r2 - s.r1,
+          cumCount: s.r2,
+          cumRate: pct(s.r2),
+          deltaP: pct(s.r2 - s.r1),
+        },
+        {
+          wave: 3,
+          newCount: s.r3 - s.r2,
+          cumCount: s.r3,
+          cumRate: pct(s.r3),
+          deltaP: pct(s.r3 - s.r2),
+        },
+      ],
+    };
+  }
+
   const waveAnalysis = {
-    cohortSize,
-    waves: [
-      {
-        wave: 1,
-        newCount: respondedAt1,
-        cumCount: respondedAt1,
-        cumRate: pct(respondedAt1),
-        deltaP: pct(respondedAt1),
-      },
-      {
-        wave: 2,
-        newCount: respondedBy2 - respondedAt1,
-        cumCount: respondedBy2,
-        cumRate: pct(respondedBy2),
-        deltaP: pct(respondedBy2 - respondedAt1),
-      },
-      {
-        wave: 3,
-        newCount: respondedBy3 - respondedBy2,
-        cumCount: respondedBy3,
-        cumRate: pct(respondedBy3),
-        deltaP: pct(respondedBy3 - respondedBy2),
-      },
-    ],
+    email: buildChannelWaves(channelStats.email, true),
+    dm: buildChannelWaves(channelStats.dm, false),
+    other: buildChannelWaves(channelStats.other, false),
   };
 
   return NextResponse.json({

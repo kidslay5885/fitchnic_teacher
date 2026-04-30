@@ -65,28 +65,33 @@ interface Overview {
     };
   };
   waveAnalysis: {
-    cohortSize: number;
-    waves: {
-      wave: number;
-      newCount: number;
-      cumCount: number;
-      cumRate: number;
-      deltaP: number;
-    }[];
+    email: WaveChannelData;
+    dm: WaveChannelData;
+    other: WaveChannelData;
   };
+}
+
+interface WaveChannelData {
+  cohortSize: number;
+  waves: {
+    wave: number;
+    newCount: number;
+    cumCount: number;
+    cumRate: number;
+    deltaP: number;
+  }[];
 }
 
 function formatToday(d: Date) {
   return `${d.getMonth() + 1}/${d.getDate()} (${DOW_KO[d.getDay()]})`;
 }
 
-// 월요일 시작 기준, 해당 월에서 몇 주차인지
+// 일요일 시작 기준, 해당 월에서 몇 주차인지
 function getMonthWeek(d: Date) {
   const day = d.getDate();
   const firstOfMonth = new Date(d.getFullYear(), d.getMonth(), 1);
-  const firstDow = firstOfMonth.getDay();
-  const offset = firstDow === 0 ? 6 : firstDow - 1;
-  return Math.ceil((day + offset) / 7);
+  const firstDow = firstOfMonth.getDay(); // Sun=0, ..., Sat=6
+  return Math.ceil((day + firstDow) / 7);
 }
 
 function formatStartDate(iso: string) {
@@ -131,7 +136,7 @@ export default function DashboardTab() {
   const today = new Date();
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <div className="space-y-6 max-w-[1480px]">
       {/* 헤더 */}
       <h1 className="text-2xl font-bold">강사 모집 현황</h1>
 
