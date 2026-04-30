@@ -141,7 +141,7 @@ export default function DashboardTab() {
       <h1 className="text-2xl font-bold">강사 모집 현황</h1>
 
       {/* 상단 메타 띠 */}
-      <div className="flex items-center gap-x-5 gap-y-2 flex-wrap rounded-lg border bg-white px-4 py-2.5 text-sm">
+      <div className="flex items-center gap-x-5 gap-y-2 flex-wrap px-1 py-1 text-sm">
         <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-gray-900 font-medium">
           오늘 {formatToday(today)} · {today.getMonth() + 1}월 {getMonthWeek(today)}주차
         </span>
@@ -174,7 +174,7 @@ export default function DashboardTab() {
         <section className="grid grid-cols-3 gap-3">
           {/* 이번 주 발송 */}
           <div className="bg-white border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground mb-2">이번 주 발송</p>
+            <p className="text-xs font-semibold text-foreground mb-2">이번 주 발송</p>
             <div className="flex items-baseline gap-2 mb-1.5">
               <p className="text-3xl font-bold leading-none">{data.thisWeek.sent.toLocaleString()}</p>
               <ChangeIndicator
@@ -189,7 +189,7 @@ export default function DashboardTab() {
 
           {/* 이번 달 발송 */}
           <div className="bg-white border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground mb-2">이번 달 발송</p>
+            <p className="text-xs font-semibold text-foreground mb-2">이번 달 발송</p>
             <div className="flex items-baseline gap-2 mb-1.5">
               <p className="text-3xl font-bold leading-none">{data.thisMonth.sent.toLocaleString()}</p>
               <ChangeIndicator
@@ -204,7 +204,7 @@ export default function DashboardTab() {
 
           {/* 누적 발송 */}
           <div className="bg-white border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground mb-2">누적 발송</p>
+            <p className="text-xs font-semibold text-foreground mb-2">누적 발송</p>
             <p className="text-3xl font-bold leading-none mb-1.5">{data.totalSent.toLocaleString()}</p>
             <p className="text-xs text-muted-foreground">
               {data.firstSentDate
@@ -220,7 +220,7 @@ export default function DashboardTab() {
         <section className="grid grid-cols-4 gap-3">
           {/* 미검토 */}
           <div className="bg-white border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground mb-2">미검토</p>
+            <p className="text-xs font-semibold text-foreground mb-2">미검토</p>
             <div className="grid grid-cols-2 gap-3 divide-x">
               <div>
                 <p className="text-3xl font-bold leading-none mb-1.5">{data.pending.searchPage.total.toLocaleString()}</p>
@@ -243,7 +243,7 @@ export default function DashboardTab() {
 
           {/* 발송 대상 */}
           <div className="bg-white border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground mb-2">발송 대상</p>
+            <p className="text-xs font-semibold text-foreground mb-2">발송 대상</p>
             <p className="text-3xl font-bold leading-none mb-1.5">{data.toSend.total.toLocaleString()}</p>
             <p className="text-xs text-muted-foreground">
               발송예정 {data.toSend.planned} · 진행중 {data.toSend.inProgress}
@@ -252,14 +252,14 @@ export default function DashboardTab() {
 
           {/* 확정된 미팅 */}
           <div className="bg-white border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground mb-2">확정된 미팅</p>
+            <p className="text-xs font-semibold text-foreground mb-2">확정된 미팅</p>
             <p className="text-3xl font-bold leading-none mb-1.5">{data.meetings.upcoming.toLocaleString()}</p>
             <p className="text-xs text-muted-foreground">이번주 미팅 {data.meetings.thisWeek}</p>
           </div>
 
           {/* 계약 완료 */}
           <div className="bg-white border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground mb-2">계약 완료</p>
+            <p className="text-xs font-semibold text-foreground mb-2">계약 완료</p>
             <p className="text-3xl font-bold leading-none mb-1.5 text-emerald-600">
               {data.contracts.total.toLocaleString()}
             </p>
