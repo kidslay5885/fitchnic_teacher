@@ -42,7 +42,7 @@ function EmailView({ data }: { data: ChannelData }) {
   return (
     <>
       <p className="text-xs text-muted-foreground mb-4">
-        최근 90일 · 2주 미경과 제외 · 1차 발송 대상 {cohortSize}명 기준
+        발송 수단 '이메일' · 대상 {cohortSize}명 기준
       </p>
 
       {cohortSize === 0 ? (
@@ -156,7 +156,7 @@ function DmOtherView({ dm, other }: { dm: ChannelData; other: ChannelData }) {
   return (
     <>
       <p className="text-xs text-muted-foreground mb-4">
-        최근 90일 · 2주 미경과 제외 · DM·기타는 1차 발송 후 종료
+        발송 수단 'DM'·'기타' · 1차 발송 후 종료
       </p>
 
       {totalCohort === 0 ? (

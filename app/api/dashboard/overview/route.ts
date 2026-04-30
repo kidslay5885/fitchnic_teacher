@@ -74,21 +74,44 @@ async function fetchAllInstructors(sb: SB) {
   return all;
 }
 
+async function fetchAllWaves(sb: SB) {
+  const cols = "instructor_id, wave_number, sent_date, result";
+  const { data: firstPage, count, error } = await sb
+    .from("outreach_waves")
+    .select(cols, { count: "exact" })
+    .range(0, PAGE - 1);
+
+  if (error) throw error;
+
+  const all: any[] = [...(firstPage ?? [])];
+  const total = count ?? 0;
+  if (total > PAGE) {
+    const remaining: number[] = [];
+    for (let from = PAGE; from < total; from += PAGE) remaining.push(from);
+    const results = await Promise.all(
+      remaining.map((from) =>
+        sb.from("outreach_waves").select(cols).range(from, from + PAGE - 1),
+      ),
+    );
+    for (const { data } of results) if (data) all.push(...data);
+  }
+  return all;
+}
+
 export async function GET() {
   const sb = getSupabase();
 
-  const [wavesRes, ytRes, appRes, instructors] = await Promise.all([
-    sb.from("outreach_waves").select("instructor_id, wave_number, sent_date, result"),
+  const [wavesData, ytRes, appRes, instructors] = await Promise.all([
+    fetchAllWaves(sb),
     sb.from("youtube_channels").select("status"),
     sb.from("applications").select("review_status"),
     fetchAllInstructors(sb),
   ]);
 
-  if (wavesRes.error) return NextResponse.json({ error: wavesRes.error.message }, { status: 500 });
   if (ytRes.error) return NextResponse.json({ error: ytRes.error.message }, { status: 500 });
   if (appRes.error) return NextResponse.json({ error: appRes.error.message }, { status: 500 });
 
-  const waves = (wavesRes.data ?? []) as {
+  const waves = wavesData as {
     instructor_id: string;
     wave_number: number;
     sent_date: string | null;
@@ -296,10 +319,8 @@ export async function GET() {
   }
 
   // === 회차별 누적 응답 분석 (채널별) ===
-  // 코호트: 1차 sent_date in [today-90d, today-14d]
-  const ninetyDaysAgo = dateToStr(addDays(today, -90));
-  const twoWeeksAgo = dateToStr(addDays(today, -14));
-
+  // 분모: instructors.send_method로 분류한 강사 전체 (is_banned=false)
+  // 분자: 그중 wave 1/2/3에서 result IN ('응답','거절') 인 강사 (누적)
   const wavesByInstr: Record<string, typeof waves> = {};
   for (const w of waves) {
     if (!wavesByInstr[w.instructor_id]) wavesByInstr[w.instructor_id] = [];
@@ -313,30 +334,28 @@ export async function GET() {
     other: { cohort: 0, r1: 0, r2: 0, r3: 0 },
   };
 
-  for (const id of Object.keys(wavesByInstr)) {
-    const ws = wavesByInstr[id];
+  const isResp = (w?: { result: string }) =>
+    !!w && (w.result === "응답" || w.result === "거절");
+
+  for (const i of instrList) {
+    const sm = i.send_method || "";
+    let channel: Channel | null = null;
+    if (sm === "이메일") channel = "email";
+    else if (sm === "DM") channel = "dm";
+    else if (sm) channel = "other"; // 비어있지 않고 이메일/DM도 아닌 값
+    if (channel === null) continue;
+
+    channelStats[channel].cohort++;
+
+    const ws = wavesByInstr[i.id] || [];
     const w1 = ws.find((w) => w.wave_number === 1);
-    if (!w1?.sent_date) continue;
-    if (w1.sent_date < ninetyDaysAgo || w1.sent_date > twoWeeksAgo) continue;
-
-    // is_banned=false인 강사만 매핑에 있음 → banned는 자동 제외
-    const sendMethod = instrSendMethod.get(id);
-    if (sendMethod === undefined) continue;
-
-    const channel: Channel =
-      sendMethod === "이메일" ? "email" : sendMethod === "DM" ? "dm" : "other";
-
     const w2 = ws.find((w) => w.wave_number === 2);
     const w3 = ws.find((w) => w.wave_number === 3);
-
-    const isResp = (w?: { result: string }) =>
-      !!w && (w.result === "응답" || w.result === "거절");
 
     const r1 = isResp(w1);
     const r2 = isResp(w2);
     const r3 = isResp(w3);
 
-    channelStats[channel].cohort++;
     if (r1) channelStats[channel].r1++;
     if (r1 || r2) channelStats[channel].r2++;
     if (r1 || r2 || r3) channelStats[channel].r3++;
