@@ -157,6 +157,7 @@ export default function MeetingReportPage() {
     if (!date) return [];
     const targetIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     return meetings.filter((mt) => {
+      if (mt.remind_disabled) return false;
       if (mt.remind_date) return mt.remind_date === targetIso;
       return calcRemindDate(mt.meeting_date || "") === targetIso;
     });

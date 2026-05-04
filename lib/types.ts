@@ -59,6 +59,7 @@ export interface Instructor {
   post_info: string;
   remind_date: string;
   remind_done: boolean;
+  remind_disabled: boolean;
   meeting_confirmed: boolean;
   source: InstructorSource;
   instructor_info: string;

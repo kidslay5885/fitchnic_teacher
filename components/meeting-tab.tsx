@@ -210,10 +210,12 @@ export default function MeetingTab() {
   };
 
   // 리마인드 대상 조회: remind_date가 있으면 그걸 사용, 없으면 미팅일+1달(주말→금)
+  // remind_disabled=true면 명시적으로 삭제된 상태이므로 자동 계산도 무시
   const getRemindersForDate = (date: Date | null) => {
     if (!date) return [];
     const targetIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     return meetings.filter((mt) => {
+      if (mt.remind_disabled) return false;
       if (mt.remind_date) return mt.remind_date === targetIso;
       return calcRemindDate(mt.meeting_date || "") === targetIso;
     });
@@ -257,7 +259,7 @@ export default function MeetingTab() {
   const openEdit = (i: Instructor) => {
     const { date, time } = parseMeetingDate(i.meeting_date || "");
     const post = parsePostInfo(i.post_info || "");
-    const remindDate = i.remind_date || (i.meeting_date ? calcRemindDate(i.meeting_date) : "");
+    const remindDate = i.remind_date || (i.remind_disabled || !i.meeting_date ? "" : calcRemindDate(i.meeting_date));
     let preQ: Record<string, string> = {};
     try { if (i.pre_questions) preQ = JSON.parse(i.pre_questions); } catch {}
     // 미팅 날짜 기준 기본 탭 결정
@@ -292,6 +294,7 @@ export default function MeetingTab() {
           meeting_date: meetingDate, meeting_memo: data.memo,
           meeting_confirmed: data.confirmed,
           remind_date: data.remindDate || "",
+          remind_disabled: !data.remindDate,
           meeting_type: data.meetingType || "",
           pre_info: data.preInfo,
           pre_questions: JSON.stringify(data.preQuestions),
@@ -566,7 +569,7 @@ export default function MeetingTab() {
                             {dayReminders.map((mt) => (
                               <button
                                 key={`remind-${mt.id}`}
-                                onClick={() => { setRemindModal(mt); setRemindDate(mt.remind_date || calcRemindDate(mt.meeting_date || "")); setRemindDone(!!mt.remind_done); }}
+                                onClick={() => { setRemindModal(mt); setRemindDate(mt.remind_date || (mt.remind_disabled ? "" : calcRemindDate(mt.meeting_date || ""))); setRemindDone(!!mt.remind_done); }}
                                 className={`w-full text-left rounded px-1.5 py-0.5 text-[11px] transition-colors truncate border ${
                                   mt.remind_done
                                     ? "bg-green-50 border-green-200 hover:bg-green-100"
@@ -829,7 +832,7 @@ export default function MeetingTab() {
             const res = await fetch(`/api/instructors/${inst.id}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ remind_date: remindDate, remind_done: remindDone }),
+              body: JSON.stringify({ remind_date: remindDate, remind_done: remindDone, remind_disabled: !remindDate }),
             });
             if (!res.ok) throw new Error("Failed");
             dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
@@ -842,7 +845,7 @@ export default function MeetingTab() {
             const res = await fetch(`/api/instructors/${inst.id}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ remind_date: null, remind_done: false }),
+              body: JSON.stringify({ remind_date: null, remind_done: false, remind_disabled: true }),
             });
             if (!res.ok) throw new Error("Failed");
             dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
