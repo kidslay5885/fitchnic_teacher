@@ -256,7 +256,7 @@ export default function MeetingReportPage() {
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
-                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.contact_assignee || i.assignee}</td>
+                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap">{i.contact_assignee || i.assignee}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium text-blue-700 whitespace-nowrap">{formatMeetingDate(i.meeting_date || "")}</td>
                         <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap">
                           {i.meeting_type ? (
@@ -278,7 +278,7 @@ export default function MeetingReportPage() {
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
-                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.contact_assignee || i.assignee}</td>
+                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap">{i.contact_assignee || i.assignee}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">-</td>
                         <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap">
                           {i.meeting_type ? (
@@ -300,7 +300,7 @@ export default function MeetingReportPage() {
                         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">{i.name}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60"><Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[i.status as InstructorStatus] || ""}`}>{i.status}</Badge></td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px]">{i.field}</td>
-                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">{i.contact_assignee || i.assignee}</td>
+                        <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap">{i.contact_assignee || i.assignee}</td>
                         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground">-</td>
                         <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap">
                           {i.meeting_type ? (
