@@ -65,7 +65,7 @@ function getDetailFields(app: Application): [string, string][] {
     ];
   }
 
-  // 핏크닉홈, 핏크닉카, 머니업홈, 머니업카
+  // 핏크닉홈, 핏크닉카, 머니업홈, 머니업카, 머니업카카오, 핏크닉카카오
   return [
     ...common,
     ["강의 주제", app.topic],
