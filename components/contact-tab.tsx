@@ -125,12 +125,22 @@ export default function ContactTab() {
   }, [contactInstructors, wavesMap]);
 
   const filtered = useMemo(() => {
-    let list = contactInstructors;
+    const trimmedSearch = search.trim();
+    // 검색어가 있고 전체 보기일 때만 제외/거절 강사도 후보에 포함 (연락 금지는 계속 제외)
+    let list = (trimmedSearch && viewFilter === "all")
+      ? state.instructors.filter((i) =>
+          !i.is_banned && (
+            CONTACT_STATUSES.includes(i.status as InstructorStatus) ||
+            i.status === "제외" ||
+            i.status === "거절"
+          ),
+        )
+      : contactInstructors;
     if (viewFilter === "no_preinfo") list = list.filter((i) => i.has_response && !i.pre_info);
     else if (viewFilter === "check_needed") list = list.filter((i) => checkNeededIds.has(i.id));
     else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
-    if (search) {
-      const q = search.toLowerCase().replace(/\s/g, "");
+    if (trimmedSearch) {
+      const q = trimmedSearch.toLowerCase().replace(/\s/g, "");
       const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
       list = list.filter((i) => strip(i.name).includes(q) || strip(i.field).includes(q) || strip(i.email).includes(q));
     }
@@ -198,7 +208,7 @@ export default function ContactTab() {
     }
 
     return sorted;
-  }, [contactInstructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds, sendMethodFilter, dateFilter]);
+  }, [contactInstructors, state.instructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds, sendMethodFilter, dateFilter]);
 
   // 발송일이 있는 날짜 집합 (달력에 점 표시용)
   const datesWithWave = useMemo(() => {
