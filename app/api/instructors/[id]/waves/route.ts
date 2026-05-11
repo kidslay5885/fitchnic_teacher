@@ -108,8 +108,13 @@ export async function POST(
     performedBy: instInfo?.assignee || "",
   });
 
-  // 발송 결과가 "거절"이면 강사 상태도 "거절"로 변경
+  // 발송 결과가 "거절"이면 강사 상태도 "거절"로 변경하고 사유를 강사 단위에도 반영
   if (body.result === "거절") {
+    const rejectReason: string = (body.reject_reason || "").toString().trim();
+    const historyReason = rejectReason
+      ? `${body.wave_number}차 발송 거절 - ${rejectReason}`
+      : `${body.wave_number}차 발송 거절`;
+
     const { data: inst } = await sb
       .from("instructors")
       .select("status, assignee")
@@ -124,12 +129,25 @@ export async function POST(
           from_status: inst.status,
           to_status: "거절",
           changed_by: inst.assignee || "",
-          reason: `${body.wave_number}차 발송 거절`,
+          reason: historyReason,
         });
 
       await sb
         .from("instructors")
-        .update({ status: "거절", updated_at: new Date().toISOString() })
+        .update({
+          status: "거절",
+          exclude_reason: rejectReason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+    } else if (inst && rejectReason) {
+      // 이미 "거절" 상태여도 사유만 갱신 (강사찾기 페이지 사유 컬럼에 반영)
+      await sb
+        .from("instructors")
+        .update({
+          exclude_reason: rejectReason,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", id);
     }
   }

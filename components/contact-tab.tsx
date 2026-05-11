@@ -258,14 +258,14 @@ export default function ContactTab() {
   }, [highlightedId]);
 
   /* ── 개별 발송 저장 (응답여부 모달 저장) ── */
-  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { result: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => {
+  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { result: string; reject_reason: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => {
     try {
-      const { pre_info, meeting_type, contact_assignee, has_own_lecture, lecture_appeal, sns_over_10k, meeting_type_override, result } = data;
+      const { pre_info, meeting_type, contact_assignee, has_own_lecture, lecture_appeal, sns_over_10k, meeting_type_override, result, reject_reason } = data;
       // 발송 기록 저장 (result만 업데이트, sent_date 등은 건드리지 않음)
       const res = await fetch(`/api/instructors/${instructorId}/waves`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wave_number: waveNumber, result }),
+        body: JSON.stringify({ wave_number: waveNumber, result, reject_reason }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "저장 실패");
       // 사전 정보 + 미팅 방식 + 평가 데이터는 강사 테이블에 저장 (1~3차 공유)
@@ -1167,11 +1167,12 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   lectureAppeal: string;
   snsOver10k: string;
   meetingTypeOverride: boolean;
-  onSave: (data: { result: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => Promise<void>;
+  onSave: (data: { result: string; reject_reason: string; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
   const [result, setResult] = useState(wave?.result || "");
+  const [rejectReason, setRejectReason] = useState(wave?.reject_reason || "");
   const [preInfo, setPreInfo] = useState(initialPreInfo);
   const [meetingType, setMeetingType] = useState(initialMeetingType);
   const [contactAssignee, setContactAssignee] = useState(initialContactAssignee);
@@ -1214,7 +1215,8 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await onSave({ result: result || "체크필요", pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee, has_own_lecture: hasOwnLecture, lecture_appeal: lectureAppeal, sns_over_10k: snsOver10k, meeting_type_override: isOverride });
+      const finalResult = result || "체크필요";
+      await onSave({ result: finalResult, reject_reason: finalResult === "거절" ? rejectReason.trim() : "", pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee, has_own_lecture: hasOwnLecture, lecture_appeal: lectureAppeal, sns_over_10k: snsOver10k, meeting_type_override: isOverride });
     } finally { setSaving(false); }
   };
 
@@ -1233,12 +1235,23 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
           <div className="w-[380px] space-y-4 overflow-y-auto pr-1">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">결과</label>
-              <Select value={result || "체크필요"} onValueChange={setResult}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2 items-stretch">
+                <Select value={result || "체크필요"} onValueChange={setResult}>
+                  <SelectTrigger className="h-9 text-sm w-[110px] shrink-0"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {result === "거절" && (
+                  <input
+                    type="text"
+                    className="flex-1 min-w-0 h-9 border rounded-md px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    placeholder="거절 사유 입력..."
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                  />
+                )}
+              </div>
             </div>
 
             <div>
