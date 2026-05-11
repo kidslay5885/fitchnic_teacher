@@ -38,6 +38,7 @@ interface Overview {
   wavesSent: Record<number, number>;
   totalSent: number;
   responsesReceived: number;
+  today: { sent: number; yesterdaySent: number };
   thisWeek: PeriodStat;
   thisMonth: PeriodStat;
   toSend: { total: number; planned: number; inProgress: number };
@@ -169,9 +170,24 @@ export default function DashboardTab() {
         )}
       </div>
 
-      {/* 활동량: 이번 주 / 이번 달 / 누적 */}
+      {/* 활동량: 오늘 / 이번 주 / 이번 달 / 누적 */}
       {data && (
-        <section className="grid grid-cols-3 gap-3">
+        <section className="grid grid-cols-4 gap-3">
+          {/* 오늘 발송 */}
+          <div className="bg-white border rounded-xl p-4">
+            <p className="text-xs font-semibold text-foreground mb-2">오늘 발송</p>
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <p className="text-3xl font-bold leading-none">{data.today.sent.toLocaleString()}</p>
+              <ChangeIndicator
+                thisVal={data.today.sent}
+                lastVal={data.today.yesterdaySent}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              어제 {data.today.yesterdaySent}건
+            </p>
+          </div>
+
           {/* 이번 주 발송 */}
           <div className="bg-white border rounded-xl p-4">
             <p className="text-xs font-semibold text-foreground mb-2">이번 주 발송</p>

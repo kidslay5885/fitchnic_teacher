@@ -176,9 +176,14 @@ export async function GET() {
   let lastWeekSent = 0;
   let thisMonthSent = 0;
   let lastMonthSent = 0;
+  let todaySent = 0;
+  let yesterdaySent = 0;
+  const yesterdayStr = dateToStr(addDays(today, -1));
   for (const w of waves) {
     const d = w.sent_date;
     if (!d) continue;
+    if (d === todayStr) todaySent++;
+    if (d === yesterdayStr) yesterdaySent++;
     if (d >= thisSundayStr && d <= todayStr) thisWeekSent++;
     if (d >= lastSundayStr && d <= lastWeekEndStr) lastWeekSent++;
     if (d >= thisMonthFirstStr && d <= todayStr) thisMonthSent++;
@@ -404,6 +409,7 @@ export async function GET() {
     wavesSent,
     totalSent,
     responsesReceived,
+    today: { sent: todaySent, yesterdaySent },
     thisWeek: { sent: thisWeekSent, lastSamePeriodSent: lastWeekSent },
     thisMonth: { sent: thisMonthSent, lastSamePeriodSent: lastMonthSent },
     toSend: { total: toSendTotal, planned: toSendPlanned, inProgress: toSendInProgress },
