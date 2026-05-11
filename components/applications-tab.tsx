@@ -29,10 +29,8 @@ const SOURCE_LABELS: Record<string, string> = {
   "머니업카": "머니업카페",
 };
 
-// 검토 상태 표시 라벨 (DB 값은 "미확인" 유지, UI에서만 "미검토"로 표시)
-const REVIEW_LABELS: Record<string, string> = {
-  "미확인": "미검토",
-};
+// 검토 상태 표시 라벨 (DB 값과 UI 표시값이 다를 때 매핑)
+const REVIEW_LABELS: Record<string, string> = {};
 const reviewLabel = (k: string) => REVIEW_LABELS[k] ?? k;
 
 // 출처별 상세 필드 순서
@@ -54,6 +52,15 @@ function getDetailFields(app: Application): [string, string][] {
       ["경력/성과", app.career],
       ["수강생이 얻는 것", app.student_benefits],
       ["SNS 종류", app.sns_types],
+      ["SNS 링크", app.sns_link],
+    ];
+  }
+
+  if (app.source_platform === "대표님SNS") {
+    // 폼이 짧음: 지원 동기·경력/성과·수강생 성과·수강생이 얻는 것 항목 없음
+    return [
+      ...common,
+      ["강의 주제", app.topic],
       ["SNS 링크", app.sns_link],
     ];
   }
@@ -284,7 +291,7 @@ export default function ApplicationsTab() {
             확인완료
           </Button>
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleBulkReview("미확인")}>
-            미검토
+            미확인
           </Button>
           <Button size="sm" variant="outline" className="h-8 text-xs" onClick={handleBulkAddToInstructors}>
             <UserPlus className="h-3.5 w-3.5 mr-1" />강사 등록
@@ -364,7 +371,7 @@ export default function ApplicationsTab() {
                           : "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
                       }`}><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="미확인">미검토</SelectItem>
+                        <SelectItem value="미확인">미확인</SelectItem>
                         <SelectItem value="확인완료">확인완료</SelectItem>
                       </SelectContent>
                     </Select>
