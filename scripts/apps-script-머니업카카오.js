@@ -2,7 +2,9 @@ const API_URL = "https://fitchnic-teacher.vercel.app/api/applications";
 
 function onFormSubmit(e) {
   const v = e.values;
-  // v[0]: 타임스탬프
+  // v[0]: 시트 타임스탬프 (실제 폼 제출 시간)
+  const ts = v[0] ? new Date(v[0]) : null;
+  const submittedAt = ts && !isNaN(ts.getTime()) ? ts.toISOString() : new Date().toISOString();
 
   const payload = {
     source_platform: "머니업카카오",
@@ -19,7 +21,7 @@ function onFormSubmit(e) {
     lecture_format: "",
     sns_types: "",
     review_status: "미확인",
-    submitted_at: new Date().toISOString(),
+    submitted_at: submittedAt,
   };
 
   UrlFetchApp.fetch(API_URL, {
@@ -28,6 +30,45 @@ function onFormSubmit(e) {
     payload: JSON.stringify(payload),
     muteHttpExceptions: true,
   });
+}
+
+// 기존 DB의 submitted_at을 시트 타임스탬프로 패치하는 SQL 생성 (1회 실행)
+// 실행 후 Drive에 .sql 파일이 생성됨 — 파일 열어 SQL 복사 후 Supabase SQL Editor에 붙여넣기
+function generatePatchSQL() {
+  const CHANNEL = "머니업카카오";
+  const NAME_IDX = 1;     // 1. 성함
+  const CONTACT_IDX = 3;  // 3. 연락처
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const data = sheet.getDataRange().getValues();
+  const rows = [];
+  const seen = {};
+  const dups = [];
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const ts = row[0];
+    const name = String(row[NAME_IDX] || "").trim();
+    const contact = String(row[CONTACT_IDX] || "").trim();
+    if (!(ts instanceof Date) || !name) continue;
+    const key = name + "|" + contact;
+    if (seen[key]) dups.push(key);
+    seen[key] = true;
+    rows.push("  (" + sqlEsc(name) + ", " + sqlEsc(contact) + ", '" + ts.toISOString() + "')");
+  }
+  const sql =
+    "-- " + CHANNEL + " (" + rows.length + "건)\n" +
+    "UPDATE applications a SET submitted_at = v.ts::timestamptz\n" +
+    "FROM (VALUES\n" + rows.join(",\n") + "\n) AS v(name, contact, ts)\n" +
+    "WHERE a.source_platform = '" + CHANNEL + "'\n" +
+    "  AND a.applicant_name = v.name\n" +
+    "  AND a.contact = v.contact;\n";
+  const file = DriveApp.createFile("patch-submitted-at-" + CHANNEL + ".sql", sql);
+  Logger.log("SQL 파일: " + file.getUrl());
+  if (dups.length > 0) Logger.log("중복 (동일 이름+연락처) " + dups.length + "건: " + dups.join(", "));
+  Logger.log(sql);
+}
+
+function sqlEsc(s) {
+  return "'" + String(s).replace(/'/g, "''") + "'";
 }
 
 // 기존 데이터 일괄 등록 (1회만 실행)

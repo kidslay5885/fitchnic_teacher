@@ -83,8 +83,9 @@ export default function ApplicationsTab() {
   const [reviewFilter, setReviewFilter] = useState<string>("전체");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [sortKey, setSortKey] = useState<keyof Application | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // 기본 정렬: 최신 지원서 우선
+  const [sortKey, setSortKey] = useState<keyof Application | null>("submitted_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [detailApp, setDetailApp] = useState<Application | null>(null);
   const [confirmAdd, setConfirmAdd] = useState<Application | null>(null);
   const [confirmBulkAdd, setConfirmBulkAdd] = useState<Application[] | null>(null);
@@ -323,6 +324,7 @@ export default function ApplicationsTab() {
               <SortableHead label="이름" col="applicant_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHead label="활동명" col="activity_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHead label="채널" col="source_platform" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHead label="제출일" col="submitted_at" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <TableHead className="py-2 text-xs font-semibold">강의주제</TableHead>
               <TableHead className="py-2 text-xs font-semibold">
                 <DropdownMenu>
@@ -351,7 +353,7 @@ export default function ApplicationsTab() {
           </TableHeader>
           <TableBody>
             {sorted.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-sm text-muted-foreground">지원서가 없습니다.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-sm text-muted-foreground">지원서가 없습니다.</TableCell></TableRow>
             ) : (
               sorted.map((a, idx) => (
                 <TableRow key={a.id} className={`${idx % 2 === 1 ? "bg-muted/20" : ""} ${selected.has(a.id) ? "!bg-primary/10" : ""}`}>
@@ -362,6 +364,9 @@ export default function ApplicationsTab() {
                   </TableCell>
                   <TableCell className="py-2 text-sm text-muted-foreground">{a.activity_name}</TableCell>
                   <TableCell className="py-2 text-sm text-muted-foreground">{a.source_platform}</TableCell>
+                  <TableCell className="py-2 text-sm text-muted-foreground whitespace-nowrap">
+                    {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString("ko-KR") : ""}
+                  </TableCell>
                   <TableCell className="py-2 text-sm text-muted-foreground max-w-[200px] truncate">{a.topic}</TableCell>
                   <TableCell className="py-2">
                     <Select value={a.review_status} onValueChange={(v) => handleReviewStatus(a, v)}>

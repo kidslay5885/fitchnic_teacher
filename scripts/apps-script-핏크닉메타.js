@@ -2,7 +2,9 @@ const API_URL = "https://fitchnic-teacher.vercel.app/api/applications";
 
 function onFormSubmit(e) {
   const v = e.values;
-  // v[0]: 타임스탬프
+  // v[0]: 시트 타임스탬프 (실제 폼 제출 시간)
+  const ts = v[0] ? new Date(v[0]) : null;
+  const submittedAt = ts && !isNaN(ts.getTime()) ? ts.toISOString() : new Date().toISOString();
 
   const payload = {
     source_platform: "핏크닉메타",
@@ -19,7 +21,7 @@ function onFormSubmit(e) {
     sns_link: v[11] || "",            // 11. SNS 링크
     student_results: "",
     review_status: "미확인",
-    submitted_at: new Date().toISOString(),
+    submitted_at: submittedAt,
   };
 
   UrlFetchApp.fetch(API_URL, {
