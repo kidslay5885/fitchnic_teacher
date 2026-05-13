@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     const res = htmlResponse({
       ok: true,
       title: "Gmail 재인증 완료",
-      message: "새 refresh_token이 저장되었습니다. 이 창은 자동으로 닫힙니다.",
+      message: "새 refresh_token이 저장되었습니다. 잠시 후 메인 화면으로 이동합니다.",
     });
     // state 쿠키 정리
     res.cookies.delete("gmail_oauth_state");
@@ -106,14 +106,22 @@ function htmlResponse({ ok, title, message }: { ok: boolean; title: string; mess
   <div class="card">
     <p class="title">${escapeHtml(title)}</p>
     <p class="msg">${escapeHtml(message)}</p>
-    <button class="btn" onclick="closeWindow()">닫기</button>
+    <button class="btn" onclick="dismiss()">${ok ? "지금 이동" : "닫기"}</button>
   </div>
 <script>
-  function closeWindow(){
-    try { if (window.opener) { window.opener.postMessage({ type: 'gmail-oauth', ok: ${ok} }, '*'); } } catch(e){}
-    window.close();
+  function dismiss(){
+    // 팝업으로 열린 경우: 부모에 알리고 자기 창 닫기
+    try {
+      if (window.opener && window.opener !== window) {
+        window.opener.postMessage({ type: 'gmail-oauth', ok: ${ok} }, '*');
+        window.close();
+        return;
+      }
+    } catch(e){}
+    // 같은 창에서 열린 경우: 메인으로 이동(성공 시에만)
+    ${ok ? `window.location.replace('/?gmail_reauthed=1');` : "history.length > 1 ? history.back() : window.location.replace('/');"}
   }
-  ${ok ? `setTimeout(closeWindow, 1500);` : ""}
+  ${ok ? `setTimeout(dismiss, 1500);` : ""}
 </script>
 </body>
 </html>`;

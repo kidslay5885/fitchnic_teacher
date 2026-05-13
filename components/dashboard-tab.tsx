@@ -172,6 +172,17 @@ export default function DashboardTab() {
     };
   }, [loadGmailHealth]);
 
+  // Gmail 재인증 콜백에서 ?gmail_reauthed=1 로 돌아온 직후 즉시 재핑 + URL 정리
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("gmail_reauthed") === "1") {
+      loadGmailHealth();
+      url.searchParams.delete("gmail_reauthed");
+      window.history.replaceState({}, "", url.pathname + (url.search ? url.search : "") + url.hash);
+    }
+  }, [loadGmailHealth]);
+
   const today = new Date();
 
   return (
