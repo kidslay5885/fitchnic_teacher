@@ -4,8 +4,9 @@ import { getSupabase } from "@/lib/supabase";
 import { classifyGmailError } from "@/lib/discord";
 
 // 가벼운 Gmail 토큰 헬스 체크.
-// gmail.users.getProfile 한 번으로 OAuth refresh가 트리거되어 만료/유효 판단.
-// 발송보다 훨씬 가벼움(메일 보내지 않음).
+// gmail.send 스코프만 있는 refresh_token으로는 getProfile 등 다른 API가 막혀 있어
+// (insufficient authentication scopes), OAuth refresh 자체로만 검증한다.
+// 토큰이 만료/폐기되면 invalid_grant 에러가 발생하므로 그것만으로 충분.
 export async function GET() {
   const clientId = process.env.GMAIL_CLIENT_ID;
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
@@ -43,11 +44,11 @@ export async function GET() {
   try {
     const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
     oauth2.setCredentials({ refresh_token: refreshToken });
-    const gmail = google.gmail({ version: "v1", auth: oauth2 });
-    const res = await gmail.users.getProfile({ userId: "me" });
+    // access_token 갱신 시도만으로 refresh_token 유효성 확인
+    const { token } = await oauth2.getAccessToken();
+    if (!token) throw new Error("access_token 발급 실패");
     return NextResponse.json({
       ok: true,
-      email: res.data.emailAddress || "",
       checkedAt: new Date().toISOString(),
     });
   } catch (e) {
