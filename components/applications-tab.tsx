@@ -20,8 +20,9 @@ import { APPLICATION_SOURCES } from "@/lib/constants";
 import type { Application } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Eye, UserPlus, Trash2, Search, ChevronUp, ChevronDown, Check } from "lucide-react";
+import { Eye, UserPlus, Trash2, Search, ChevronUp, ChevronDown, Check, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { editDistance } from "@/lib/utils";
 
 // 채널 표시 라벨 (DB 값 → UI 표시값). DB/Apps Script 값은 건드리지 않음
 const SOURCE_LABELS: Record<string, string> = {
@@ -78,7 +79,7 @@ function getDetailFields(app: Application): [string, string][] {
 }
 
 export default function ApplicationsTab() {
-  const { state, dispatch, loadApplications } = useOutreach();
+  const { state, dispatch, loadApplications, loadYoutubeChannels } = useOutreach();
   const [activeSource, setActiveSource] = useState<string>("전체");
   const [reviewFilter, setReviewFilter] = useState<string>("전체");
   const [search, setSearch] = useState("");
@@ -90,13 +91,75 @@ export default function ApplicationsTab() {
   const [confirmAdd, setConfirmAdd] = useState<Application | null>(null);
   const [confirmBulkAdd, setConfirmBulkAdd] = useState<Application[] | null>(null);
 
-  // 강사 등록 시 사용할 이름 (강사 등록 로직과 동일)
-  const getRegisterName = (app: Application) => app.applicant_name || app.activity_name;
-  // 같은 이름의 기존 강사 찾기 (공백 trim, 대소문자 무시)
-  const findDuplicates = (name: string) => {
-    const k = (name || "").trim().toLowerCase();
-    if (!k) return [];
-    return state.instructors.filter((i) => (i.name || "").trim().toLowerCase() === k);
+  // YT채널 목록이 없으면 로드 (비슷한 이름 체크용)
+  useEffect(() => {
+    if (!state.youtubeChannels || state.youtubeChannels.length === 0) {
+      loadYoutubeChannels();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 강사 등록 시 사용할 이름: 활동명(이름) — 한쪽만 있으면 그것만
+  const getRegisterName = (app: Application) => {
+    const a = (app.activity_name || "").trim();
+    const n = (app.applicant_name || "").trim();
+    if (a && n) return `${a}(${n})`;
+    return a || n;
+  };
+  // 중복/유사 체크 후보: 활동명·이름 각각 (공백 제거 후 동일하면 하나만)
+  const getNameCandidates = (app: Application) => {
+    const a = (app.activity_name || "").trim();
+    const n = (app.applicant_name || "").trim();
+    const out: string[] = [];
+    if (a) out.push(a);
+    if (n && n.replace(/\s+/g, "") !== a.replace(/\s+/g, "")) out.push(n);
+    return out;
+  };
+  type NameMatch = { key: string; name: string; sub: string; source: "instructors" | "youtube_channels" };
+  // 한 이름에 대해 instructors + youtube_channels 에서 정확/유사 일치 찾기
+  const findMatchesFor = (name: string): { duplicates: NameMatch[]; similars: NameMatch[] } => {
+    const normalize = (s: string) => (s || "").replace(/\s+/g, "").toLowerCase();
+    const k = normalize(name);
+    if (!k) return { duplicates: [], similars: [] };
+    const isClose = (n: string) => {
+      if (!n) return false;
+      if (n === k) return false;
+      if (n.includes(k) || k.includes(n)) return true;
+      const maxLen = Math.max(n.length, k.length);
+      const threshold = maxLen <= 3 ? 1 : 2;
+      return editDistance(n, k) <= threshold;
+    };
+    const dupInst: NameMatch[] = state.instructors
+      .filter((i) => normalize(i.name) === k)
+      .map((i) => ({ key: `i:${i.id}`, name: i.name, sub: i.phone || "", source: "instructors" }));
+    const dupYt: NameMatch[] = (state.youtubeChannels || [])
+      .filter((c) => normalize(c.channel_name) === k)
+      .map((c) => ({ key: `y:${c.id}`, name: c.channel_name, sub: c.keyword || "", source: "youtube_channels" }));
+    let simInst: NameMatch[] = [];
+    let simYt: NameMatch[] = [];
+    if (k.length >= 2) {
+      simInst = state.instructors
+        .filter((i) => isClose(normalize(i.name)))
+        .map((i) => ({ key: `i:${i.id}`, name: i.name, sub: i.phone || "", source: "instructors" }));
+      simYt = (state.youtubeChannels || [])
+        .filter((c) => isClose(normalize(c.channel_name)))
+        .map((c) => ({ key: `y:${c.id}`, name: c.channel_name, sub: c.keyword || "", source: "youtube_channels" }));
+    }
+    return { duplicates: [...dupInst, ...dupYt], similars: [...simInst, ...simYt] };
+  };
+  // 지원서 한 건에 대한 종합 중복/유사 검사 (후보별로 검사 후 dedup)
+  const findAllMatches = (app: Application) => {
+    const candidates = getNameCandidates(app);
+    const dupMap = new Map<string, NameMatch>();
+    const simMap = new Map<string, NameMatch>();
+    for (const c of candidates) {
+      const { duplicates, similars } = findMatchesFor(c);
+      duplicates.forEach((m) => dupMap.set(m.key, m));
+      similars.forEach((m) => simMap.set(m.key, m));
+    }
+    // 정확 중복으로 이미 잡힌 건 유사 목록에서 제외
+    for (const k of dupMap.keys()) simMap.delete(k);
+    return { candidates, duplicates: [...dupMap.values()], similars: [...simMap.values()] };
   };
 
   const handleSort = (key: keyof Application) => {
@@ -164,7 +227,7 @@ export default function ApplicationsTab() {
     try {
       const res = await fetch("/api/instructors", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: app.applicant_name || app.activity_name, phone: app.contact, source: "지원서", notes: `${app.source_platform} | ${app.experience} | ${app.topic}`, _force: true }),
+        body: JSON.stringify({ name: getRegisterName(app), phone: app.contact, source: "지원서", assignee: "지원서", notes: `${app.source_platform} | ${app.experience} | ${app.topic}`, _force: true }),
       });
       if (!res.ok) throw new Error("Failed");
       const instructor = await res.json();
@@ -172,7 +235,7 @@ export default function ApplicationsTab() {
       // 지원서에 instructor_id 연결
       await fetch(`/api/applications/${app.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ instructor_id: instructor.id }) });
       await loadApplications();
-      toast.success(`${app.applicant_name} 강사찾기에 추가`);
+      toast.success(`${getRegisterName(app)} 강사찾기에 추가`);
     } catch { toast.error("추가 실패"); }
   };
 
@@ -213,7 +276,7 @@ export default function ApplicationsTab() {
       for (const app of apps) {
         const res = await fetch("/api/instructors", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: getRegisterName(app), phone: app.contact, source: "지원서", notes: `${app.source_platform} | ${app.experience} | ${app.topic}`, _force: true }),
+          body: JSON.stringify({ name: getRegisterName(app), phone: app.contact, source: "지원서", assignee: "지원서", notes: `${app.source_platform} | ${app.experience} | ${app.topic}`, _force: true }),
         });
         if (res.ok) {
           const instructor = await res.json();
@@ -418,7 +481,7 @@ export default function ApplicationsTab() {
 
       {confirmAdd && (() => {
         const name = getRegisterName(confirmAdd);
-        const dups = findDuplicates(name);
+        const { candidates, duplicates, similars } = findAllMatches(confirmAdd);
         return (
           <Dialog open onOpenChange={() => setConfirmAdd(null)}>
             <DialogContent className="max-w-md">
@@ -431,20 +494,45 @@ export default function ApplicationsTab() {
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {confirmAdd.source_platform}{confirmAdd.contact ? ` · ${confirmAdd.contact}` : ""}
                   </p>
+                  {candidates.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground/80 mt-1">
+                      체크 대상: {candidates.join(" · ")}
+                    </p>
+                  )}
                 </div>
-                {dups.length > 0 ? (
+                {duplicates.length > 0 && (
                   <div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
-                    <p className="font-medium">⚠ 같은 이름의 기존 강사 {dups.length}명</p>
+                    <p className="font-medium">⚠ 같은 이름 {duplicates.length}건</p>
                     <ul className="mt-1 space-y-0.5 text-orange-700">
-                      {dups.slice(0, 5).map((i) => (
-                        <li key={i.id}>· {i.name}{i.phone ? ` (${i.phone})` : ""}</li>
+                      {duplicates.slice(0, 5).map((d) => (
+                        <li key={d.key}>
+                          · {d.name}{d.sub ? ` (${d.sub})` : ""}
+                          {d.source === "youtube_channels" && <span className="ml-1 text-orange-500">[YT채널수집]</span>}
+                        </li>
                       ))}
-                      {dups.length > 5 && <li>· 외 {dups.length - 5}명</li>}
+                      {duplicates.length > 5 && <li>· 외 {duplicates.length - 5}건</li>}
                     </ul>
                     <p className="mt-1.5 text-orange-700/80">그래도 추가하면 별도 강사로 등록됩니다.</p>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground px-1">이름이 동일한 기존 강사가 없습니다.</p>
+                )}
+                {similars.length > 0 && (
+                  <div className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                    <p className="font-medium flex items-center gap-1">
+                      <AlertTriangle className="h-3.5 w-3.5" /> 비슷한 이름 {similars.length}건
+                    </p>
+                    <ul className="mt-1 space-y-0.5 text-yellow-700">
+                      {similars.slice(0, 5).map((d) => (
+                        <li key={d.key}>
+                          · {d.name}{d.sub ? ` (${d.sub})` : ""}
+                          {d.source === "youtube_channels" && <span className="ml-1 text-yellow-500">[YT채널수집]</span>}
+                        </li>
+                      ))}
+                      {similars.length > 5 && <li>· 외 {similars.length - 5}건</li>}
+                    </ul>
+                  </div>
+                )}
+                {duplicates.length === 0 && similars.length === 0 && (
+                  <p className="text-xs text-muted-foreground px-1">동일/유사 이름의 기존 강사가 없습니다.</p>
                 )}
               </div>
               <div className="flex justify-end gap-2 pt-2">
@@ -463,36 +551,55 @@ export default function ApplicationsTab() {
       {confirmBulkAdd && (() => {
         const items = confirmBulkAdd.map((a) => {
           const name = getRegisterName(a);
-          return { app: a, name, dups: findDuplicates(name) };
+          const { duplicates, similars } = findAllMatches(a);
+          return { app: a, name, duplicates, similars };
         });
-        const dupTotal = items.filter((i) => i.dups.length > 0).length;
+        const dupTotal = items.filter((i) => i.duplicates.length > 0).length;
+        const simTotal = items.filter((i) => i.similars.length > 0).length;
         return (
           <Dialog open onOpenChange={() => setConfirmBulkAdd(null)}>
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle className="text-base">{confirmBulkAdd.length}명 강사 추가 확인</DialogTitle>
-                {dupTotal > 0 && (
-                  <p className="text-xs text-orange-700">
-                    ⚠ 이름 중복 {dupTotal}명 — 그래도 추가하면 별도 강사로 등록됩니다.
-                  </p>
+                {(dupTotal > 0 || simTotal > 0) && (
+                  <div className="space-y-0.5 text-xs">
+                    {dupTotal > 0 && (
+                      <p className="text-orange-700">
+                        ⚠ 이름 중복 {dupTotal}명 — 그래도 추가하면 별도 강사로 등록됩니다.
+                      </p>
+                    )}
+                    {simTotal > 0 && (
+                      <p className="text-yellow-700">⚠ 비슷한 이름 {simTotal}명</p>
+                    )}
+                  </div>
                 )}
               </DialogHeader>
               <ScrollArea className="max-h-[55vh] -mx-2 px-2">
                 <div className="space-y-1 py-1">
-                  {items.map(({ app, name, dups }) => (
+                  {items.map(({ app, name, duplicates, similars }) => (
                     <div key={app.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 hover:bg-muted/40">
                       <div className="text-sm min-w-0">
                         <span className="font-medium">{name}</span>
                         <span className="ml-2 text-xs text-muted-foreground">{app.source_platform}</span>
                       </div>
-                      {dups.length > 0 && (
-                        <span
-                          className="shrink-0 text-xs text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded"
-                          title={dups.map((d) => `${d.name}${d.phone ? ` (${d.phone})` : ""}`).join("\n")}
-                        >
-                          중복 {dups.length}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {duplicates.length > 0 && (
+                          <span
+                            className="text-xs text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded"
+                            title={duplicates.map((d) => `${d.name}${d.sub ? ` (${d.sub})` : ""}${d.source === "youtube_channels" ? " [YT]" : ""}`).join("\n")}
+                          >
+                            중복 {duplicates.length}
+                          </span>
+                        )}
+                        {similars.length > 0 && (
+                          <span
+                            className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-300 px-1.5 py-0.5 rounded"
+                            title={similars.map((d) => `${d.name}${d.sub ? ` (${d.sub})` : ""}${d.source === "youtube_channels" ? " [YT]" : ""}`).join("\n")}
+                          >
+                            유사 {similars.length}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

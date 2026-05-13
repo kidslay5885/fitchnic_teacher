@@ -40,9 +40,9 @@ export const APPLICATION_SOURCES = [
   "머니업홈",
   "핏크닉카",
   "머니업카",
-  "대표님SNS",
-  "머니업카카오",
   "핏크닉카카오",
+  "머니업카카오",
+  "대표님SNS",
 ] as const;
 
 export const BANNED_PLATFORMS = [
