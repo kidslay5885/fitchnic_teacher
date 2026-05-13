@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Check } from "lucide-react";
+import { useOutreach } from "@/hooks/use-outreach-store";
+import { toast } from "sonner";
 
 interface LogEntry {
   id: string;
@@ -30,6 +32,10 @@ const ACTION_COLORS: Record<string, string> = {
   지원서등록: "bg-emerald-100 text-emerald-800",
   지원서수정: "bg-amber-100 text-amber-800",
   지원서삭제: "bg-red-100 text-red-700",
+  이메일발송: "bg-cyan-100 text-cyan-800",
+  이메일발송실패: "bg-red-100 text-red-700",
+  이메일발송스킵: "bg-gray-100 text-gray-700",
+  크론자동발송: "bg-slate-100 text-slate-700",
   금지플랫폼추가: "bg-orange-100 text-orange-800",
   금지플랫폼삭제: "bg-orange-100 text-orange-800",
   템플릿저장: "bg-purple-100 text-purple-800",
@@ -68,12 +74,15 @@ function timeAgo(iso: string) {
 }
 
 export default function ActivityTab() {
+  const { loadUnackedFailureCount } = useOutreach();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
   const [loading, setLoading] = useState(false);
+  const [unacked, setUnacked] = useState<LogEntry[]>([]);
+  const [ackBusy, setAckBusy] = useState<string | "__all__" | null>(null);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -88,13 +97,50 @@ export default function ActivityTab() {
     setLoading(false);
   }, [page]);
 
+  const loadUnacked = useCallback(async () => {
+    try {
+      const res = await fetch("/api/activity/unacked-failures");
+      if (!res.ok) return;
+      const data = await res.json();
+      setUnacked(data.logs || []);
+    } catch {}
+  }, []);
+
   useEffect(() => { loadLogs(); }, [loadLogs]);
+  useEffect(() => { loadUnacked(); }, [loadUnacked]);
 
   // 자동 갱신 (15초)
   useEffect(() => {
-    const interval = setInterval(loadLogs, 15000);
+    const interval = setInterval(() => {
+      loadLogs();
+      loadUnacked();
+    }, 15000);
     return () => clearInterval(interval);
-  }, [loadLogs]);
+  }, [loadLogs, loadUnacked]);
+
+  const acknowledge = async (target: { id?: string; all?: boolean }) => {
+    setAckBusy(target.all ? "__all__" : target.id || null);
+    const prev = unacked;
+    // 낙관적 업데이트
+    if (target.all) setUnacked([]);
+    else if (target.id) setUnacked(prev.filter((l) => l.id !== target.id));
+    try {
+      const body = target.all ? { all: true } : { ids: [target.id] };
+      const res = await fetch("/api/activity/acknowledge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Failed");
+      await loadUnackedFailureCount();
+      toast.success(target.all ? "모두 확인 처리" : "확인 처리");
+    } catch {
+      setUnacked(prev);
+      toast.error("확인 처리 실패");
+    } finally {
+      setAckBusy(null);
+    }
+  };
 
   const filtered = logs.filter((l) => {
     // 유형 필터
@@ -120,10 +166,48 @@ export default function ActivityTab() {
       <div className="shrink-0 space-y-3 pb-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">활동 로그</h2>
-          <Button size="sm" variant="outline" className="h-8 text-sm" onClick={loadLogs} disabled={loading}>
+          <Button size="sm" variant="outline" className="h-8 text-sm" onClick={() => { loadLogs(); loadUnacked(); }} disabled={loading}>
             <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />새로고침
           </Button>
         </div>
+
+        {unacked.length > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50/60">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-red-200">
+              <div className="flex items-center gap-1.5 text-sm font-semibold text-red-700">
+                <AlertCircle className="h-4 w-4" />
+                미확인 자동 발송 실패 {unacked.length}건
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-100"
+                disabled={ackBusy === "__all__"}
+                onClick={() => acknowledge({ all: true })}
+              >
+                <Check className="h-3.5 w-3.5 mr-1" />모두 확인
+              </Button>
+            </div>
+            <div className="max-h-[180px] overflow-auto divide-y divide-red-100">
+              {unacked.map((l) => (
+                <div key={l.id} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                  <span className="text-muted-foreground whitespace-nowrap w-[130px]">{formatDate(l.created_at)}</span>
+                  <span className="font-medium w-[120px] truncate" title={l.target_name}>{l.target_name || "-"}</span>
+                  <span className="flex-1 text-red-800 truncate" title={l.detail}>{l.detail || "-"}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-2 text-xs text-red-700 hover:bg-red-100"
+                    disabled={ackBusy === l.id || ackBusy === "__all__"}
+                    onClick={() => acknowledge({ id: l.id })}
+                  >
+                    <Check className="h-3.5 w-3.5 mr-0.5" />확인
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative max-w-xs">

@@ -64,20 +64,34 @@ export default function NavHeader({ collapsed, onToggle }: { collapsed: boolean;
       </nav>
 
       <div className="border-t px-2 py-2 space-y-1">
-        <button
-          onClick={() => dispatch({ type: "SET_TAB", tab: "activity" })}
-          title={collapsed ? "활동 로그" : undefined}
-          className={`w-full flex items-center gap-3 rounded-md text-sm font-medium transition-colors ${
-            collapsed ? "justify-center px-0 py-2" : "px-3 py-2"
-          } ${
-            state.tab === "activity"
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"
-          }`}
-        >
-          <Activity className="h-4.5 w-4.5 flex-shrink-0" />
-          {!collapsed && "활동 로그"}
-        </button>
+        {(() => {
+          const gmailUnhealthy = !!(state.gmailHealth && !state.gmailHealth.ok);
+          const hasAlert = state.unackedFailureCount > 0 || gmailUnhealthy;
+          const titleParts: string[] = [];
+          if (state.unackedFailureCount > 0) titleParts.push(`미확인 실패 ${state.unackedFailureCount}`);
+          if (gmailUnhealthy) titleParts.push("Gmail 연결 만료");
+          return (
+            <button
+              onClick={() => dispatch({ type: "SET_TAB", tab: "activity" })}
+              title={collapsed ? `활동 로그${titleParts.length ? ` · ${titleParts.join(" · ")}` : ""}` : undefined}
+              className={`relative w-full flex items-center gap-3 rounded-md text-sm font-medium transition-colors ${
+                collapsed ? "justify-center px-0 py-2" : "px-3 py-2"
+              } ${
+                state.tab === "activity"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              <span className="relative inline-flex flex-shrink-0">
+                <Activity className="h-4.5 w-4.5" />
+                {hasAlert && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-card" />
+                )}
+              </span>
+              {!collapsed && "활동 로그"}
+            </button>
+          );
+        })()}
         {!collapsed && (
           <p className="text-xs text-muted-foreground px-3 py-1">
             {state.instructors.length}명 관리 중

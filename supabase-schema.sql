@@ -106,12 +106,14 @@ CREATE TABLE IF NOT EXISTS message_templates (
 -- 7. 활동 로그 (통합)
 CREATE TABLE IF NOT EXISTS activity_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  action_type TEXT NOT NULL,       -- 예: 강사등록, 강사삭제, 강사수정, 상태변경, 발송저장, 발송삭제, 지원서등록, 지원서수정, 지원서삭제, 금지플랫폼추가, 금지플랫폼삭제, 템플릿저장, 보고서생성, 보고서삭제
+  action_type TEXT NOT NULL,       -- 예: 강사등록, 강사삭제, 강사수정, 상태변경, 발송저장, 발송삭제, 지원서등록, 지원서수정, 지원서삭제, 금지플랫폼추가, 금지플랫폼삭제, 템플릿저장, 보고서생성, 보고서삭제, 이메일발송, 이메일발송실패, 이메일발송스킵, 크론자동발송
   target_type TEXT NOT NULL,       -- 예: instructor, application, banned_platform, template, meeting_report
   target_id TEXT DEFAULT '',
   target_name TEXT DEFAULT '',
   detail TEXT DEFAULT '',
   performed_by TEXT DEFAULT '',
+  acknowledged_at TIMESTAMPTZ,     -- 자동 발송 실패 등 사용자 확인 시간
+  acknowledged_by TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -163,6 +165,9 @@ CREATE INDEX IF NOT EXISTS idx_outreach_waves_instructor ON outreach_waves(instr
 CREATE INDEX IF NOT EXISTS idx_applications_platform ON applications(source_platform);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_target ON activity_logs(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_unacked_fail
+  ON activity_logs(created_at DESC)
+  WHERE action_type = '이메일발송실패' AND acknowledged_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_youtube_channels_email ON youtube_channels(email);
 CREATE INDEX IF NOT EXISTS idx_youtube_channels_profile ON youtube_channels(profile);
 CREATE INDEX IF NOT EXISTS idx_youtube_channels_status ON youtube_channels(status);

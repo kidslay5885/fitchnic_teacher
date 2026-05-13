@@ -39,6 +39,17 @@ interface AppState {
   youtubeChannels: YouTubeChannel[];
   filters: FilterState;
   stats: DashboardStats | null;
+  unackedFailureCount: number;
+  gmailHealth: GmailHealth | null;
+}
+
+export interface GmailHealth {
+  ok: boolean;
+  email?: string;
+  kind?: string;
+  label?: string;
+  message?: string;
+  checkedAt: string;
 }
 
 const initialState: AppState = {
@@ -62,6 +73,8 @@ const initialState: AppState = {
     source: "전체",
   },
   stats: null,
+  unackedFailureCount: 0,
+  gmailHealth: null,
 };
 
 // ===== Actions =====
@@ -82,7 +95,9 @@ type Action =
   | { type: "SET_BANNED_PLATFORMS"; platforms: BannedPlatform[] }
   | { type: "SET_YOUTUBE_CHANNELS"; channels: YouTubeChannel[] }
   | { type: "SET_FILTER"; filters: Partial<FilterState> }
-  | { type: "SET_STATS"; stats: DashboardStats };
+  | { type: "SET_STATS"; stats: DashboardStats }
+  | { type: "SET_UNACKED_FAILURE_COUNT"; count: number }
+  | { type: "SET_GMAIL_HEALTH"; health: GmailHealth | null };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -142,6 +157,10 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case "SET_STATS":
       return { ...state, stats: action.stats };
+    case "SET_UNACKED_FAILURE_COUNT":
+      return { ...state, unackedFailureCount: action.count };
+    case "SET_GMAIL_HEALTH":
+      return { ...state, gmailHealth: action.health };
     default:
       return state;
   }
@@ -159,6 +178,8 @@ interface StoreCtx {
   loadTemplates: () => Promise<void>;
   loadBannedPlatforms: () => Promise<void>;
   loadYoutubeChannels: () => Promise<void>;
+  loadUnackedFailureCount: () => Promise<void>;
+  loadGmailHealth: () => Promise<void>;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -246,6 +267,24 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadUnackedFailureCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/activity/unacked-failures");
+      if (!res.ok) return;
+      const data = await res.json();
+      dispatch({ type: "SET_UNACKED_FAILURE_COUNT", count: data.total || 0 });
+    } catch {}
+  }, []);
+
+  const loadGmailHealth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/gmail/health");
+      if (!res.ok) return;
+      const data = (await res.json()) as GmailHealth;
+      dispatch({ type: "SET_GMAIL_HEALTH", health: data });
+    } catch {}
+  }, []);
+
   // Initial hydration
   useEffect(() => {
     async function hydrate() {
@@ -299,6 +338,38 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     };
   }, [loadInstructors, loadStats]);
 
+  // 미확인 자동 발송 실패 카운트 폴링 (초기 1회 + 60초 + 탭 가시화 시)
+  useEffect(() => {
+    loadUnackedFailureCount();
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") loadUnackedFailureCount();
+    }, 60000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") loadUnackedFailureCount();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loadUnackedFailureCount]);
+
+  // Gmail 토큰 헬스 폴링 (초기 1회 + 5분 + 탭 가시화 시)
+  useEffect(() => {
+    loadGmailHealth();
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") loadGmailHealth();
+    }, 5 * 60 * 1000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") loadGmailHealth();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loadGmailHealth]);
+
   return React.createElement(
     Ctx.Provider,
     {
@@ -313,6 +384,8 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
         loadTemplates,
         loadBannedPlatforms,
         loadYoutubeChannels,
+        loadUnackedFailureCount,
+        loadGmailHealth,
       },
     },
     children

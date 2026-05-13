@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import WaveCumulativeAnalysis from "@/components/dashboard/wave-cumulative-analysis";
 import SendTrendChart from "@/components/dashboard/send-trend-chart";
 import ResponseRateChart from "@/components/dashboard/response-rate-chart";
+import { AlertTriangle, LogIn } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useOutreach } from "@/hooks/use-outreach-store";
 
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -125,7 +128,9 @@ function ChangeIndicator({ thisVal, lastVal }: { thisVal: number; lastVal: numbe
 }
 
 export default function DashboardTab() {
+  const { state: { gmailHealth } } = useOutreach();
   const [data, setData] = useState<Overview | null>(null);
+  const [reAuthing, setReAuthing] = useState(false);
 
   useEffect(() => {
     fetch("/api/dashboard/overview")
@@ -140,6 +145,33 @@ export default function DashboardTab() {
     <div className="space-y-6 max-w-[1480px]">
       {/* 헤더 */}
       <h1 className="text-2xl font-bold">강사 모집 현황</h1>
+
+      {/* Gmail 연결 만료 알림 — 실패 시에만 노출 */}
+      {gmailHealth && !gmailHealth.ok && (
+        <div className="rounded-lg border border-red-300 bg-red-50 p-3 flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+          <div className="flex-1 text-sm">
+            <p className="font-semibold text-red-700">
+              Gmail 연결 만료 — 자동 발송이 작동하지 않습니다
+            </p>
+            <p className="text-xs text-red-600/90 mt-0.5">
+              {gmailHealth.label || "OAuth 토큰 오류"}
+              {gmailHealth.message ? ` · ${gmailHealth.message}` : ""}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white shrink-0"
+            disabled={reAuthing}
+            onClick={() => {
+              setReAuthing(true);
+              window.location.href = "/api/gmail-oauth/start";
+            }}
+          >
+            <LogIn className="h-4 w-4 mr-1.5" />Gmail 다시 연결
+          </Button>
+        </div>
+      )}
 
       {/* 상단 메타 띠 */}
       <div className="flex items-center gap-x-5 gap-y-2 flex-wrap px-1 py-1 text-sm">
