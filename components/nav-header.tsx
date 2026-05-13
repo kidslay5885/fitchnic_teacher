@@ -43,12 +43,13 @@ export default function NavHeader({ collapsed, onToggle }: { collapsed: boolean;
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = state.tab === t.id;
+          const showAlert = t.id === "dashboard" && !!(state.gmailHealth && !state.gmailHealth.ok);
           return (
             <button
               key={t.id}
               onClick={() => dispatch({ type: "SET_TAB", tab: t.id })}
-              title={collapsed ? t.label : undefined}
-              className={`w-full flex items-center gap-3 rounded-md text-sm font-medium transition-colors ${
+              title={collapsed ? `${t.label}${showAlert ? " · Gmail 연결 만료" : ""}` : undefined}
+              className={`relative w-full flex items-center gap-3 rounded-md text-sm font-medium transition-colors ${
                 collapsed ? "justify-center px-0 py-2" : "px-3 py-2"
               } ${
                 active
@@ -56,7 +57,12 @@ export default function NavHeader({ collapsed, onToggle }: { collapsed: boolean;
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
             >
-              <Icon className="h-4.5 w-4.5 flex-shrink-0" />
+              <span className="relative inline-flex flex-shrink-0">
+                <Icon className="h-4.5 w-4.5" />
+                {showAlert && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-card" />
+                )}
+              </span>
               {!collapsed && t.label}
             </button>
           );

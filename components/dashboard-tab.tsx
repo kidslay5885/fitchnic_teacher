@@ -1,20 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import WaveCumulativeAnalysis from "@/components/dashboard/wave-cumulative-analysis";
 import SendTrendChart from "@/components/dashboard/send-trend-chart";
 import ResponseRateChart from "@/components/dashboard/response-rate-chart";
 import { AlertTriangle, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface GmailHealth {
-  ok: boolean;
-  email?: string;
-  kind?: string;
-  label?: string;
-  message?: string;
-  checkedAt: string;
-}
+import { useOutreach } from "@/hooks/use-outreach-store";
 
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -136,8 +128,8 @@ function ChangeIndicator({ thisVal, lastVal }: { thisVal: number; lastVal: numbe
 }
 
 export default function DashboardTab() {
+  const { state: { gmailHealth }, loadGmailHealth } = useOutreach();
   const [data, setData] = useState<Overview | null>(null);
-  const [gmailHealth, setGmailHealth] = useState<GmailHealth | null>(null);
   const [reAuthing, setReAuthing] = useState(false);
 
   useEffect(() => {
@@ -146,31 +138,6 @@ export default function DashboardTab() {
       .then((d) => setData(d))
       .catch(() => {});
   }, []);
-
-  const loadGmailHealth = useCallback(async () => {
-    try {
-      const res = await fetch("/api/gmail/health");
-      if (!res.ok) return;
-      const d = await res.json();
-      setGmailHealth(d);
-    } catch {}
-  }, []);
-
-  // Gmail 연결 상태: 마운트 시 + 5분 폴링 + 탭 가시화 시 즉시
-  useEffect(() => {
-    loadGmailHealth();
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") loadGmailHealth();
-    }, 5 * 60 * 1000);
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") loadGmailHealth();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [loadGmailHealth]);
 
   // Gmail 재인증 콜백에서 ?gmail_reauthed=1 로 돌아온 직후 즉시 재핑 + URL 정리
   useEffect(() => {
