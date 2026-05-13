@@ -40,16 +40,6 @@ interface AppState {
   filters: FilterState;
   stats: DashboardStats | null;
   unackedFailureCount: number;
-  gmailHealth: GmailHealth | null;
-}
-
-export interface GmailHealth {
-  ok: boolean;
-  email?: string;
-  kind?: string;
-  label?: string;
-  message?: string;
-  checkedAt: string;
 }
 
 const initialState: AppState = {
@@ -74,7 +64,6 @@ const initialState: AppState = {
   },
   stats: null,
   unackedFailureCount: 0,
-  gmailHealth: null,
 };
 
 // ===== Actions =====
@@ -96,8 +85,7 @@ type Action =
   | { type: "SET_YOUTUBE_CHANNELS"; channels: YouTubeChannel[] }
   | { type: "SET_FILTER"; filters: Partial<FilterState> }
   | { type: "SET_STATS"; stats: DashboardStats }
-  | { type: "SET_UNACKED_FAILURE_COUNT"; count: number }
-  | { type: "SET_GMAIL_HEALTH"; health: GmailHealth | null };
+  | { type: "SET_UNACKED_FAILURE_COUNT"; count: number };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -159,8 +147,6 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, stats: action.stats };
     case "SET_UNACKED_FAILURE_COUNT":
       return { ...state, unackedFailureCount: action.count };
-    case "SET_GMAIL_HEALTH":
-      return { ...state, gmailHealth: action.health };
     default:
       return state;
   }
@@ -179,7 +165,6 @@ interface StoreCtx {
   loadBannedPlatforms: () => Promise<void>;
   loadYoutubeChannels: () => Promise<void>;
   loadUnackedFailureCount: () => Promise<void>;
-  loadGmailHealth: () => Promise<void>;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -276,15 +261,6 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
-  const loadGmailHealth = useCallback(async () => {
-    try {
-      const res = await fetch("/api/gmail/health");
-      if (!res.ok) return;
-      const data = (await res.json()) as GmailHealth;
-      dispatch({ type: "SET_GMAIL_HEALTH", health: data });
-    } catch {}
-  }, []);
-
   // Initial hydration
   useEffect(() => {
     async function hydrate() {
@@ -354,21 +330,6 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     };
   }, [loadUnackedFailureCount]);
 
-  // Gmail 토큰 헬스 폴링 (초기 1회 + 5분 + 탭 가시화 시)
-  useEffect(() => {
-    loadGmailHealth();
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") loadGmailHealth();
-    }, 5 * 60 * 1000);
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") loadGmailHealth();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-  }, [loadGmailHealth]);
 
   return React.createElement(
     Ctx.Provider,
@@ -385,7 +346,6 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
         loadBannedPlatforms,
         loadYoutubeChannels,
         loadUnackedFailureCount,
-        loadGmailHealth,
       },
     },
     children
