@@ -32,7 +32,7 @@ export async function PATCH(req: Request) {
 
   // 업데이트
   const update: Record<string, unknown> = { status };
-  if (reason) update.exclude_reason = reason;
+  if (reason) update.reason = reason;
 
   const { error } = await sb
     .from("instructors")

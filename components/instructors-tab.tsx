@@ -113,7 +113,8 @@ function InstructorListView() {
           strip(i.youtube).includes(q) ||
           strip(i.instagram).includes(q) ||
           strip(i.lecture_platform).includes(q) ||
-          strip(i.notes).includes(q)
+          strip(i.notes).includes(q) ||
+          strip(i.reason).includes(q)
         );
       }
       return true;
@@ -199,8 +200,7 @@ function InstructorListView() {
     try {
       const inst = state.instructors.find(i => i.id === instructorId);
       const body: any = { status: newStatus, _changed_by: inst?.assignee || "", _reason: reason };
-      if (newStatus === "컨펌 필요") body.confirm_reason = reason;
-      if (requiresReason(newStatus)) body.exclude_reason = reason;
+      if (newStatus === "컨펌 필요" || requiresReason(newStatus)) body.reason = reason;
       const res = await fetch(`/api/instructors/${instructorId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -380,13 +380,7 @@ function InstructorListView() {
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.notes}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.source}</span></div>
                   <div className="px-2 flex items-center border-r border-gray-200/60 text-muted-foreground overflow-hidden"><span className="truncate">{i.created_at ? new Date(i.created_at).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }) : ""}</span></div>
-                  <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate" title={
-                    i.status === "컨펌 필요" ? (i.confirm_reason || "") :
-                    ["제외", "보류", "거절"].includes(i.status) ? (i.exclude_reason || "") : ""
-                  }>{
-                    i.status === "컨펌 필요" ? (i.confirm_reason || "") :
-                    ["제외", "보류", "거절"].includes(i.status) ? (i.exclude_reason || "") : ""
-                  }</span></div>
+                  <div className="px-2 flex items-center text-muted-foreground overflow-hidden"><span className="truncate" title={i.reason || ""}>{i.reason || ""}</span></div>
                 </div>
               );
             })}

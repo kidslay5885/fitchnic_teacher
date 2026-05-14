@@ -50,7 +50,7 @@ export async function PATCH(
       const from = current.status as InstructorStatus;
       const to = body.status as InstructorStatus;
 
-      if (requiresReason(to) && !body.exclude_reason && !body._reason) {
+      if (requiresReason(to) && !body.reason && !body._reason) {
         return NextResponse.json(
           { error: `'${to}' 전환 시 사유 입력이 필요합니다.` },
           { status: 400 }
@@ -63,7 +63,7 @@ export async function PATCH(
         from_status: from,
         to_status: to,
         changed_by: body._changed_by || "",
-        reason: body._reason || body.exclude_reason || "",
+        reason: body._reason || body.reason || "",
       });
     }
   }
@@ -117,13 +117,13 @@ export async function PATCH(
       targetType: "instructor",
       targetId: id,
       targetName: data.name,
-      detail: `${body._from_status || ""} → ${body.status}${body._reason || body.exclude_reason ? ` (사유: ${body._reason || body.exclude_reason})` : ""}`,
+      detail: `${body._from_status || ""} → ${body.status}${body._reason || body.reason ? ` (사유: ${body._reason || body.reason})` : ""}`,
       performedBy: body._changed_by || "",
     });
   }
 
   // 활동 로그: 정보 수정 (상태 외 필드 변경)
-  const infoFields = Object.keys(updateData).filter((k) => k !== "status" && k !== "exclude_reason" && k !== "updated_at");
+  const infoFields = Object.keys(updateData).filter((k) => k !== "status" && k !== "reason" && k !== "updated_at");
   if (infoFields.length > 0 && !body.status) {
     await logActivity({
       actionType: "강사수정",

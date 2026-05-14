@@ -137,7 +137,7 @@ export async function POST(
         .from("instructors")
         .update({
           status: "거절",
-          exclude_reason: rejectReason,
+          reason: rejectReason,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id);
@@ -146,7 +146,7 @@ export async function POST(
       await sb
         .from("instructors")
         .update({
-          exclude_reason: rejectReason,
+          reason: rejectReason,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id);

@@ -44,8 +44,7 @@ export interface Instructor {
   email: string;
   phone: string;
   status: InstructorStatus;
-  exclude_reason: string;
-  confirm_reason: string;
+  reason: string;
   contact_assignee: string;
   outreach_channel: OutreachChannel;
   send_method: string;

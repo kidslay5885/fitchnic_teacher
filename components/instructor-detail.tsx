@@ -83,11 +83,8 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
         _reason: statusChange.reason,
         _expected_updated_at: instructor.updated_at,
       };
-      if (requiresReason(statusChange.to as InstructorStatus)) {
-        body.exclude_reason = statusChange.reason;
-      }
-      if (statusChange.to === "컨펌 필요") {
-        body.confirm_reason = statusChange.reason;
+      if (requiresReason(statusChange.to as InstructorStatus) || statusChange.to === "컨펌 필요") {
+        body.reason = statusChange.reason;
       }
       const res = await fetch(`/api/instructors/${instructor.id}`, {
         method: "PATCH",
@@ -312,6 +309,7 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                   </div>
                   <div className="col-span-2"><Label className="text-xs">미팅 일정</Label><Input value={form.meeting_date} onChange={(e) => setForm({ ...form, meeting_date: e.target.value })} className="h-8 text-sm" /></div>
                   <div className="col-span-2"><Label className="text-xs">미팅 메모</Label><Textarea value={form.meeting_memo} onChange={(e) => setForm({ ...form, meeting_memo: e.target.value })} rows={3} className="text-sm" /></div>
+                  <div className="col-span-2"><Label className="text-xs">사유</Label><Textarea value={form.reason || ""} onChange={(e) => setForm({ ...form, reason: e.target.value })} rows={2} className="text-sm" placeholder="상태와 무관하게 자유 입력" /></div>
                   <div className="col-span-2"><Label className="text-xs">비고</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="text-sm" /></div>
                   <div className="col-span-2 flex gap-2">
                     <Button size="sm" className="h-8 text-sm" onClick={handleSave}>저장</Button>
@@ -362,7 +360,7 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
                   })()}
                   <InfoRow label="미팅일정" value={instructor.meeting_date} />
                   <InfoRow label="출처" value={instructor.source} />
-                  {instructor.exclude_reason && <InfoRow label="제외사유" value={instructor.exclude_reason} />}
+                  {instructor.reason && <InfoRow label="사유" value={instructor.reason} />}
                   {instructor.meeting_memo && (
                     <div className="pt-1">
                       <span className="text-xs text-muted-foreground">미팅메모</span>

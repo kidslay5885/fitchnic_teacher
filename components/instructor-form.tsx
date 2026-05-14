@@ -201,10 +201,8 @@ export default function InstructorForm({ onClose }: Props) {
         ref_link: refLinks.filter((l) => l.trim()).join(" , "),
         _force: force,
       };
-      if (requiresReason(form.status as InstructorStatus)) {
-        payload.exclude_reason = status_memo;
-      } else if (form.status === "컨펌 필요") {
-        payload.confirm_reason = status_memo;
+      if (requiresReason(form.status as InstructorStatus) || form.status === "컨펌 필요") {
+        payload.reason = status_memo;
       }
       const res = await fetch("/api/instructors", {
         method: "POST",

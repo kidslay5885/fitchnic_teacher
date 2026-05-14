@@ -60,7 +60,7 @@ async function importMainSheet() {
       id,
       name,
       status: str(r[1]) || "미검토",
-      exclude_reason: str(r[2]),
+      reason: str(r[2]),
       field: str(r[3]),
       assignee: str(r[4]),
       ref_link: str(r[6]),
@@ -245,7 +245,7 @@ async function importBanned() {
         ban_reason: banReason,
         source: "강사모집",
         status: "제외",
-        exclude_reason: "연락금지",
+        reason: "연락금지",
       });
     }
     count++;

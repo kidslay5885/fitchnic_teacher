@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS instructors (
   email TEXT DEFAULT '',
   phone TEXT DEFAULT '',
   status TEXT DEFAULT '미검토',
-  exclude_reason TEXT DEFAULT '',
+  reason TEXT DEFAULT '',
   outreach_channel TEXT DEFAULT '',
   dm_sent BOOLEAN DEFAULT false,
   email_sent BOOLEAN DEFAULT false,
