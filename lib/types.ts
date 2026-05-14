@@ -96,6 +96,7 @@ export interface OutreachWave {
   response_method: string;
   notes: string;
   reject_reason?: string;
+  response_date?: string | null;
 }
 
 export interface BannedPlatform {

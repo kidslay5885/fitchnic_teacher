@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS outreach_waves (
   instructor_id UUID REFERENCES instructors(id) ON DELETE CASCADE,
   wave_number INTEGER NOT NULL CHECK (wave_number BETWEEN 1 AND 3),
   sent_date DATE,
+  response_date DATE,
   result TEXT DEFAULT '',
   response_method TEXT DEFAULT '',
   pre_info TEXT DEFAULT '',

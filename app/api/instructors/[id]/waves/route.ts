@@ -28,6 +28,7 @@ export async function POST(
 
   // 빈 문자열은 null로 변환
   if (body.sent_date === "") body.sent_date = null;
+  if (body.response_date === "") body.response_date = null;
 
   // 발송일이 있는데 결과가 비어있으면 "체크필요"로 자동 설정
   if (body.sent_date) {
