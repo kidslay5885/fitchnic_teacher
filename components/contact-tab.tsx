@@ -664,10 +664,10 @@ export default function ContactTab() {
             <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
               checked={selectedIds.size === filtered.length && filtered.length > 0} readOnly />
           </div>
-          <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
+          <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" sub={`ㅇㅇㅇ'대표님'이 붙었을 때 자연스럽게`} />
           <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
           <div className="row-span-2 px-2 py-2.5 flex items-center justify-center border-r border-gray-200">진행</div>
-          <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
+          <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" sub={`ㅇㅇㅇ'콘텐츠'가 붙었을 때 자연스럽게`} />
           <SortHeader label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
           <SendMethodHeader active={sendMethodFilter} onFilter={setSendMethodFilter} extraClass="row-span-2 border-r-2 border-r-gray-300" />
           {/* 상단: 1차/2차/3차 그룹 헤더 */}
@@ -1731,11 +1731,26 @@ function SendMethodPopover({ instructor, x, y, onSelect, onClose }: {
 }
 
 /* ── 정렬 헤더 셀 ── */
-function SortHeader({ label, col, sk, sd, onSort, last, center, extraClass }: {
+function SortHeader({ label, col, sk, sd, onSort, last, center, extraClass, sub }: {
   label: string; col: SortKey; sk: SortKey | null; sd: SortDir;
   onSort: (k: SortKey) => void; last?: boolean; center?: boolean; extraClass?: string;
+  sub?: string;
 }) {
   const active = sk === col;
+  if (sub) {
+    return (
+      <div
+        className={`px-2 py-2.5 whitespace-nowrap flex flex-col ${center ? "items-center" : "items-start"} justify-center cursor-pointer hover:bg-gray-200/50 ${!last ? "border-r border-gray-200" : ""} ${active ? "text-primary font-bold" : ""} ${extraClass || ""}`}
+        onClick={() => onSort(col)}
+      >
+        <div className="flex items-center">
+          {label}
+          {active && (sd === "asc" ? <ChevronUp className="h-3.5 w-3.5 ml-0.5" /> : <ChevronDown className="h-3.5 w-3.5 ml-0.5" />)}
+        </div>
+        <div className="text-[11px] font-medium text-gray-600 mt-0.5">{sub}</div>
+      </div>
+    );
+  }
   return (
     <div
       className={`px-2 py-2.5 whitespace-nowrap flex items-center cursor-pointer hover:bg-gray-200/50 ${center ? "justify-center" : ""} ${!last ? "border-r border-gray-200" : ""} ${active ? "text-primary font-bold" : ""} ${extraClass || ""}`}
