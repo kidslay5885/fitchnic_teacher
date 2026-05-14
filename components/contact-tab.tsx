@@ -664,12 +664,12 @@ export default function ContactTab() {
             <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
               checked={selectedIds.size === filtered.length && filtered.length > 0} readOnly />
           </div>
-          <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" sub={`ㅇㅇㅇ'대표님'이 붙었을 때 자연스럽게`} />
-          <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
-          <div className="row-span-2 px-2 py-2.5 flex items-center justify-center border-r border-gray-200">진행</div>
-          <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" sub={`ㅇㅇㅇ'콘텐츠'가 붙었을 때 자연스럽게`} />
-          <SortHeader label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2" />
-          <SendMethodHeader active={sendMethodFilter} onFilter={setSendMethodFilter} extraClass="row-span-2 border-r-2 border-r-gray-300" />
+          <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2 text-[13px]" sub={`~ '대표님'이 붙었을 때 자연스럽게`} />
+          <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2 text-[13px]" />
+          <div className="row-span-2 px-2 py-2.5 text-[13px] flex items-center justify-center border-r border-gray-200">진행</div>
+          <SortHeader label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2 text-[13px]" sub={`~ '콘텐츠'가 붙었을 때 자연스럽게`} />
+          <SortHeader label="이메일" col="email" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2 text-[13px]" />
+          <SendMethodHeader active={sendMethodFilter} onFilter={setSendMethodFilter} extraClass="row-span-2 text-[13px] border-r-2 border-r-gray-300" />
           {/* 상단: 1차/2차/3차 그룹 헤더 */}
           {[1, 2, 3].map((n) => (
             <div
@@ -1745,7 +1745,7 @@ function SortHeader({ label, col, sk, sd, onSort, last, center, extraClass, sub 
       {label}
       {active && (sd === "asc" ? <ChevronUp className="h-3.5 w-3.5 ml-0.5" /> : <ChevronDown className="h-3.5 w-3.5 ml-0.5" />)}
       {sub && (
-        <span className="absolute left-2 right-2 top-1/2 mt-2 text-[10px] font-normal text-gray-400 leading-tight pointer-events-none">
+        <span className="absolute left-2 right-2 top-1/2 mt-3 text-[11px] font-normal text-red-500 leading-tight pointer-events-none">
           {sub}
         </span>
       )}
