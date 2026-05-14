@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import { useRowSelection } from "@/hooks/use-row-selection";
@@ -447,8 +447,18 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
   }, [onClose]);
 
   const popW = 220;
-  const adjustedX = Math.min(x, window.innerWidth - popW - 16);
-  const adjustedY = y + 200 > window.innerHeight ? y - 200 - 8 : y;
+  const [pos, setPos] = useState<{ left: number; top: number; ready: boolean }>({ left: x, top: y, ready: false });
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const margin = 8;
+    const rect = ref.current.getBoundingClientRect();
+    let left = Math.min(x, window.innerWidth - rect.width - margin);
+    left = Math.max(margin, left);
+    let top = y + rect.height + margin > window.innerHeight ? y - rect.height - margin : y;
+    top = Math.max(margin, Math.min(top, window.innerHeight - rect.height - margin));
+    setPos({ left, top, ready: true });
+  }, [x, y, pendingStatus]);
 
   const needsInput = (status: InstructorStatus) => requiresReason(status) || status === "컨펌 필요";
 
@@ -474,7 +484,7 @@ function StatusPopover({ instructor, x, y, onConfirm, onClose }: {
     <div
       ref={ref}
       className="fixed z-50 bg-white border rounded-lg shadow-lg p-3 space-y-2"
-      style={{ left: adjustedX, top: adjustedY, width: popW }}
+      style={{ left: pos.left, top: pos.top, width: popW, visibility: pos.ready ? "visible" : "hidden" }}
     >
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold text-muted-foreground">
