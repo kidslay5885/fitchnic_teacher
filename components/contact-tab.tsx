@@ -1737,27 +1737,18 @@ function SortHeader({ label, col, sk, sd, onSort, last, center, extraClass, sub 
   sub?: string;
 }) {
   const active = sk === col;
-  if (sub) {
-    return (
-      <div
-        className={`px-2 py-2.5 whitespace-nowrap flex flex-col ${center ? "items-center" : "items-start"} justify-center cursor-pointer hover:bg-gray-200/50 ${!last ? "border-r border-gray-200" : ""} ${active ? "text-primary font-bold" : ""} ${extraClass || ""}`}
-        onClick={() => onSort(col)}
-      >
-        <div className="flex items-center">
-          {label}
-          {active && (sd === "asc" ? <ChevronUp className="h-3.5 w-3.5 ml-0.5" /> : <ChevronDown className="h-3.5 w-3.5 ml-0.5" />)}
-        </div>
-        <div className="text-[11px] font-medium text-gray-600 mt-0.5">{sub}</div>
-      </div>
-    );
-  }
   return (
     <div
-      className={`px-2 py-2.5 whitespace-nowrap flex items-center cursor-pointer hover:bg-gray-200/50 ${center ? "justify-center" : ""} ${!last ? "border-r border-gray-200" : ""} ${active ? "text-primary font-bold" : ""} ${extraClass || ""}`}
+      className={`relative px-2 py-2.5 whitespace-nowrap flex items-center cursor-pointer hover:bg-gray-200/50 ${center ? "justify-center" : ""} ${!last ? "border-r border-gray-200" : ""} ${active ? "text-primary font-bold" : ""} ${extraClass || ""}`}
       onClick={() => onSort(col)}
     >
       {label}
       {active && (sd === "asc" ? <ChevronUp className="h-3.5 w-3.5 ml-0.5" /> : <ChevronDown className="h-3.5 w-3.5 ml-0.5" />)}
+      {sub && (
+        <span className="absolute left-2 right-2 top-1/2 mt-2 text-[10px] font-normal text-gray-400 leading-tight pointer-events-none">
+          {sub}
+        </span>
+      )}
     </div>
   );
 }
