@@ -1203,6 +1203,8 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   const [snsOver10k, setSnsOver10k] = useState(initialSnsOver10k);
   const [isOverride, setIsOverride] = useState(initialOverride);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // 평가 입력 변경 시 자동 산출
   const autoMeetingType = calculateMeetingType(hasOwnLecture, lectureAppeal, snsOver10k);
@@ -1426,13 +1428,53 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
             {saving ? "저장 중..." : "저장"}
           </Button>
           {wave && (
-            <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600" onClick={onDelete}>
+            <Button size="sm" variant="outline" className="h-9 text-sm text-red-500 hover:text-red-600" onClick={() => setConfirmDelete(true)}>
               삭제
             </Button>
           )}
           <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
         </div>
       </div>
+
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+          onClick={(e) => { e.stopPropagation(); if (!deleting) setConfirmDelete(false); }}
+        >
+          <div
+            className="bg-white rounded-lg shadow-lg w-[360px] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-base font-semibold mb-2">발송 기록 삭제</p>
+            <p className="text-sm text-muted-foreground mb-5">
+              {waveNumber}차 발송 기록을 정말 삭제하시겠습니까?<br />
+              이 작업은 되돌릴 수 없습니다.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 text-sm"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+              >
+                취소
+              </Button>
+              <Button
+                size="sm"
+                className="h-9 text-sm bg-red-500 hover:bg-red-600 text-white"
+                onClick={async () => {
+                  setDeleting(true);
+                  try { await onDelete(); } finally { setDeleting(false); setConfirmDelete(false); }
+                }}
+                disabled={deleting}
+              >
+                {deleting ? "삭제 중..." : "삭제"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
