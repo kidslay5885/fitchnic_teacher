@@ -97,10 +97,11 @@ function InstructorListView() {
   );
 
   const filtered = useMemo(() => {
+    const hasSearch = !!state.filters.search;
     return state.instructors.filter((i) => {
-      // 연락 금지 강사 및 YT채널수집 출처 제외
-      if (i.is_banned) return false;
+      // YT채널수집 출처는 항상 제외, 연락금지 강사는 검색어가 있을 때만 포함
       if (i.source === "YT채널수집") return false;
+      if (i.is_banned && !hasSearch) return false;
       const f = state.filters;
       if (f.status !== "전체" && i.status !== f.status) return false;
       if (f.search) {
