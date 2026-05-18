@@ -3,8 +3,8 @@ import { google } from "googleapis";
 import { saveGmailRefreshToken } from "@/lib/gmail";
 
 // GET /api/gmail-oauth/callback?code=...&state=...
-// 구글이 redirect 로 호출. code 를 토큰으로 교환 → refresh_token 을 DB 저장.
-// 결과는 자동으로 닫히는 HTML 페이지로 응답.
+// 구글이 redirect 로 호출. code 를 토큰으로 교환 → refresh_token 을 gmail_accounts 에 저장.
+// 어떤 계정 슬롯에 저장할지는 start 에서 박아둔 쿠키 + 실제 인증된 이메일을 교차 검증.
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const code = sp.get("code");
@@ -27,6 +27,15 @@ export async function GET(request: NextRequest) {
       ok: false,
       title: "재인증 실패",
       message: "state 검증 실패. 다시 시도해주세요.",
+    });
+  }
+
+  const expectedEmail = request.cookies.get("gmail_oauth_account")?.value;
+  if (!expectedEmail) {
+    return htmlResponse({
+      ok: false,
+      title: "재인증 실패",
+      message: "어떤 계정에 저장할지 알 수 없습니다. 다시 시작해주세요.",
     });
   }
 
@@ -63,15 +72,37 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    await saveGmailRefreshToken(tokens.refresh_token);
+    // id_token 으로 실제 로그인한 계정 검증 — 다른 계정으로 로그인했다면 거부
+    // (gmail.send 스코프만으로는 users.getProfile 호출이 막혀 있어 openid+email 의 id_token 사용)
+    if (!tokens.id_token) {
+      return htmlResponse({
+        ok: false,
+        title: "재인증 실패",
+        message: "id_token 이 발급되지 않았습니다. 스코프 설정을 확인하세요.",
+      });
+    }
+    const ticket = await oauth2.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: clientId,
+    });
+    const actualEmail = ticket.getPayload()?.email?.toLowerCase();
+    if (!actualEmail || actualEmail !== expectedEmail.toLowerCase()) {
+      return htmlResponse({
+        ok: false,
+        title: "잘못된 계정",
+        message: `${expectedEmail} 로 로그인해야 합니다. 실제 로그인한 계정: ${actualEmail ?? "(알 수 없음)"}. 다시 시도해주세요.`,
+      });
+    }
+
+    await saveGmailRefreshToken(expectedEmail, tokens.refresh_token);
 
     const res = htmlResponse({
       ok: true,
       title: "Gmail 재인증 완료",
-      message: "새 refresh_token이 저장되었습니다. 잠시 후 메인 화면으로 이동합니다.",
+      message: `${expectedEmail} 계정의 새 refresh_token이 저장되었습니다.`,
     });
-    // state 쿠키 정리
     res.cookies.delete("gmail_oauth_state");
+    res.cookies.delete("gmail_oauth_account");
     return res;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

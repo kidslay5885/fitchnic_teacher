@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
-import { renderTemplate, sendEmail } from "@/lib/gmail";
+import { renderTemplate, sendEmail, getCronSenderAccount } from "@/lib/gmail";
 import { classifyGmailError, sendDiscordAlert } from "@/lib/discord";
 
 export const runtime = "nodejs";
@@ -16,6 +16,7 @@ type WaveSummary = {
 
 type Summary = {
   scheduled_at: string;
+  sender_email: string;
   wave2: WaveSummary;
   wave3: WaveSummary;
   aborted?: string;
@@ -74,6 +75,7 @@ async function isHolidayKST(date: Date): Promise<boolean> {
 // Cron: 매일 KST 10:06 (UTC 01:06)
 // 자동 발송 조건:
 //  - 직전 차수 result='체크필요' & sent_date ≤ 7일 전
+//  - 직전 차수 sender_account_id = is_cron_sender 계정 (= ceo)
 //  - 강사 status='진행 중', send_method='이메일', email 존재, is_banned=false
 //  - 현재 차수 발송 기록 없음
 //  - 3차의 경우, 1차 기록이 존재하면 1차 result='무응답'이어야 함
@@ -86,6 +88,29 @@ export async function GET(req: Request) {
 
   const sb = getSupabase();
   const now = new Date();
+
+  // 크론 전용 발송 계정 (is_cron_sender=true) — 없으면 즉시 중단
+  let cronSender;
+  try {
+    cronSender = await getCronSenderAccount();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await sendDiscordAlert({
+      title: "크론 발송 계정 미설정",
+      level: "error",
+      description: msg,
+    });
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+
+  if (!cronSender.refresh_token) {
+    await sendDiscordAlert({
+      title: "크론 발송 계정 인증 만료",
+      level: "error",
+      description: `${cronSender.email} 의 refresh_token 이 비어 있습니다 — 발송 모달에서 재인증하세요.`,
+    });
+    return NextResponse.json({ error: `${cronSender.email} 인증 필요` }, { status: 500 });
+  }
 
   if (await isHolidayKST(now)) {
     await logActivity({
@@ -105,6 +130,7 @@ export async function GET(req: Request) {
 
   const summary: Summary = {
     scheduled_at: now.toISOString(),
+    sender_email: cronSender.email,
     wave2: { sent: [], skipped: [], failed: [] },
     wave3: { sent: [], skipped: [], failed: [] },
   };
@@ -126,12 +152,14 @@ export async function GET(req: Request) {
       continue;
     }
 
-    // 이전 차수 발송 ≥ 7일 경과 & result="체크필요" 레코드
+    // 이전 차수 발송 ≥ 7일 경과 & result="체크필요" & sender_account_id = 크론 계정
+    // → 크론 계정으로 보낸 강사에게만 후속 발송
     const { data: candidates } = await sb
       .from("outreach_waves")
-      .select("instructor_id, sent_date, result")
+      .select("instructor_id, sent_date, result, sender_account_id")
       .eq("wave_number", prevWave)
       .eq("result", "체크필요")
+      .eq("sender_account_id", cronSender.id)
       .lte("sent_date", cutoff);
 
     if (!candidates || candidates.length === 0) continue;
@@ -210,9 +238,15 @@ export async function GET(req: Request) {
 
       try {
         const toName = inst.name?.trim() ? `${inst.name.trim()} 대표님` : undefined;
-        await sendEmail({ to: inst.email.trim(), subject, body, toName });
+        await sendEmail({
+          to: inst.email.trim(),
+          subject,
+          body,
+          toName,
+          senderAccount: cronSender,
+        });
 
-        // 현재 차수 기록
+        // 현재 차수 기록 — 크론 계정으로 발송했음을 sender_account_id 에 기록
         await sb
           .from("outreach_waves")
           .upsert(
@@ -221,6 +255,7 @@ export async function GET(req: Request) {
               wave_number: waveNumber,
               sent_date: todayStr,
               result: "체크필요",
+              sender_account_id: cronSender.id,
             },
             { onConflict: "instructor_id,wave_number" },
           );
@@ -243,7 +278,7 @@ export async function GET(req: Request) {
           targetType: "instructor",
           targetId: inst.id,
           targetName: inst.name,
-          detail: `${waveNumber}차 자동발송(크론) → ${inst.email}`,
+          detail: `${waveNumber}차 자동발송(크론) → ${inst.email} (${cronSender.email})`,
           performedBy: "system:cron",
         });
 
@@ -268,6 +303,7 @@ export async function GET(req: Request) {
             level: "error",
             description: msg.slice(0, 900),
             fields: [
+              { name: "발송 계정", value: cronSender.email, inline: true },
               { name: "차수", value: `${waveNumber}차`, inline: true },
               { name: "성공", value: `${summary[key].sent.length}건`, inline: true },
               { name: "실패", value: `${summary[key].failed.length}건`, inline: true },
@@ -294,7 +330,7 @@ export async function GET(req: Request) {
     targetType: "instructor",
     targetId: "cron",
     targetName: "자동 이메일 발송",
-    detail: `2차 ${summary.wave2.sent.length} / 3차 ${summary.wave3.sent.length} · 실패 ${totalFailed} · 스킵 ${totalSkipped}`,
+    detail: `[${cronSender.email}] 2차 ${summary.wave2.sent.length} / 3차 ${summary.wave3.sent.length} · 실패 ${totalFailed} · 스킵 ${totalSkipped}`,
     performedBy: "system:cron",
   });
 
@@ -302,7 +338,7 @@ export async function GET(req: Request) {
     await sendDiscordAlert({
       title: "자동 이메일 발송",
       level: totalFailed > 0 ? "warn" : "info",
-      description: `2차 ${summary.wave2.sent.length} · 3차 ${summary.wave3.sent.length} · 실패 ${totalFailed} · 스킵 ${totalSkipped}`,
+      description: `[${cronSender.email}] 2차 ${summary.wave2.sent.length} · 3차 ${summary.wave3.sent.length} · 실패 ${totalFailed} · 스킵 ${totalSkipped}`,
     });
   }
 

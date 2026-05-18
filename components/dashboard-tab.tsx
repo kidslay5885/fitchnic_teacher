@@ -176,10 +176,16 @@ export default function DashboardTab() {
             disabled={reAuthing}
             onClick={() => {
               setReAuthing(true);
-              window.location.href = "/api/gmail-oauth/start";
+              const email = gmailHealth.failedAccount?.email;
+              const url = email
+                ? `/api/gmail-oauth/start?account=${encodeURIComponent(email)}`
+                : "/api/gmail-oauth/start";
+              window.location.href = url;
             }}
           >
-            <LogIn className="h-4 w-4 mr-1.5" />Gmail 다시 연결
+            <LogIn className="h-4 w-4 mr-1.5" />
+            Gmail 다시 연결
+            {gmailHealth.failedAccount?.email ? ` (${gmailHealth.failedAccount.email})` : ""}
           </Button>
         </div>
       )}

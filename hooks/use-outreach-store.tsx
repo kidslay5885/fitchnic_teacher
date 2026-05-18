@@ -49,6 +49,16 @@ export interface GmailHealth {
   label?: string;
   message?: string;
   checkedAt: string;
+  failedAccount?: { email: string; label: string };
+  accounts?: {
+    email: string;
+    label: string;
+    is_default: boolean;
+    is_cron_sender: boolean;
+    ok: boolean;
+    kind?: string;
+    message?: string;
+  }[];
 }
 
 const initialState: AppState = {

@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
-import { renderTemplate, sendEmail } from "@/lib/gmail";
+import { renderTemplate, sendEmail, listGmailAccounts, type GmailAccount } from "@/lib/gmail";
 import { classifyGmailError, sendDiscordAlert } from "@/lib/discord";
 
 interface SendBody {
   instructorIds: string[];
   waveNumber: 1 | 2 | 3;
   changedBy?: string;
+  senderAccountId?: string;
 }
 
 // POST /api/outreach/send-email
 // 선택한 강사들에게 지정한 차수의 이메일 템플릿을 자동 발송
 export async function POST(req: Request) {
-  const { instructorIds, waveNumber, changedBy }: SendBody = await req.json();
+  const { instructorIds, waveNumber, changedBy, senderAccountId }: SendBody = await req.json();
 
   if (!Array.isArray(instructorIds) || instructorIds.length === 0) {
     return NextResponse.json({ error: "instructorIds required" }, { status: 400 });
@@ -23,6 +24,33 @@ export async function POST(req: Request) {
   }
 
   const sb = getSupabase();
+
+  // 0. 발송 계정 결정 (미지정 시 is_default)
+  let senderAccount: GmailAccount;
+  try {
+    const accounts = await listGmailAccounts();
+    const picked = senderAccountId
+      ? accounts.find((a) => a.id === senderAccountId)
+      : accounts.find((a) => a.is_default);
+    if (!picked) {
+      return NextResponse.json(
+        { error: senderAccountId ? "선택한 발송 계정을 찾을 수 없습니다" : "기본 발송 계정이 설정되어 있지 않습니다" },
+        { status: 400 },
+      );
+    }
+    if (!picked.refresh_token) {
+      return NextResponse.json(
+        {
+          error: `${picked.email} 계정이 인증되지 않았습니다 — 발송 모달의 [재인증] 버튼으로 로그인하세요.`,
+          needsAuth: { accountId: picked.id, email: picked.email },
+        },
+        { status: 400 },
+      );
+    }
+    senderAccount = picked;
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
 
   // 1. 템플릿 조회
   const { data: templates, error: tErr } = await sb
@@ -92,9 +120,9 @@ export async function POST(req: Request) {
     try {
       // Gmail API 발송 — 수신자에게 "강사명 대표님"으로 표시
       const toName = inst.name?.trim() ? `${inst.name.trim()} 대표님` : undefined;
-      await sendEmail({ to: inst.email.trim(), subject, body, toName });
+      await sendEmail({ to: inst.email.trim(), subject, body, toName, senderAccount });
 
-      // outreach_waves 기록 (차수별 send_method는 더 이상 사용하지 않음)
+      // outreach_waves 기록 — 어떤 계정에서 보냈는지 sender_account_id 에 기록
       await sb
         .from("outreach_waves")
         .upsert(
@@ -103,6 +131,7 @@ export async function POST(req: Request) {
             wave_number: waveNumber,
             sent_date: today,
             result: "체크필요",
+            sender_account_id: senderAccount.id,
           },
           { onConflict: "instructor_id,wave_number" },
         );
@@ -161,7 +190,7 @@ export async function POST(req: Request) {
         targetType: "instructor",
         targetId: inst.id,
         targetName: inst.name,
-        detail: `${waveNumber}차 자동발송 → ${inst.email}`,
+        detail: `${waveNumber}차 자동발송 → ${inst.email} (${senderAccount.email})`,
         performedBy: changedBy || inst.assignee || "",
       });
 
@@ -189,11 +218,12 @@ export async function POST(req: Request) {
       level: "error",
       description:
         abortedReason.kind === "token_expired"
-          ? "OAuth refresh_token이 만료 또는 폐기되었습니다. 발송 모달의 [Gmail 재인증] 버튼을 눌러 새로 갱신하세요."
+          ? `${senderAccount.email} 의 OAuth refresh_token이 만료 또는 폐기되었습니다. 발송 모달의 [재인증] 버튼을 눌러 새로 갱신하세요.`
           : abortedReason.kind === "quota"
-          ? "Gmail 일일 발송 한도를 초과했습니다. 24시간 후 자동 복구됩니다."
-          : "Gmail API 인증/권한 문제로 발송이 중단되었습니다.",
+          ? `${senderAccount.email} 의 Gmail 일일 발송 한도를 초과했습니다. 24시간 후 자동 복구됩니다.`
+          : `${senderAccount.email} Gmail API 인증/권한 문제로 발송이 중단되었습니다.`,
       fields: [
+        { name: "발송 계정", value: senderAccount.email, inline: true },
         { name: "차수", value: `${waveNumber}차`, inline: true },
         { name: "성공", value: `${sent.length}건`, inline: true },
         { name: "실패", value: `${failed.length}건`, inline: true },
@@ -215,7 +245,7 @@ export async function POST(req: Request) {
     await sendDiscordAlert({
       title: `메일 발송 일부 실패 (${waveNumber}차)`,
       level: "warn",
-      description: `성공 ${sent.length} / 실패 ${failed.length} / 스킵 ${skipped.length}`,
+      description: `[${senderAccount.email}] 성공 ${sent.length} / 실패 ${failed.length} / 스킵 ${skipped.length}`,
       fields: Object.entries(byKind).map(([label, { count, samples }]) => ({
         name: `${label} (${count}건)`,
         value: samples.join("\n").slice(0, 1000),
@@ -229,7 +259,7 @@ export async function POST(req: Request) {
     targetType: "instructor",
     targetId: instructorIds.join(","),
     targetName: sent.map((s) => s.name).join(", "),
-    detail: `${waveNumber}차 · 성공 ${sent.length} / 스킵 ${skipped.length} / 실패 ${failed.length}`,
+    detail: `${waveNumber}차 [${senderAccount.email}] · 성공 ${sent.length} / 스킵 ${skipped.length} / 실패 ${failed.length}`,
     performedBy: changedBy || "",
   });
 
@@ -237,6 +267,7 @@ export async function POST(req: Request) {
     sent,
     skipped,
     failed,
+    senderAccount: { id: senderAccount.id, email: senderAccount.email, label: senderAccount.label },
     aborted: abortedReason
       ? { kind: abortedReason.kind, label: abortedReason.label }
       : null,

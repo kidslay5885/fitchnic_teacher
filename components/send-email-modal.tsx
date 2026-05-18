@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import { toast } from "sonner";
-import { Send, Mail, AlertTriangle, Check, X } from "lucide-react";
+import { Send, Mail, AlertTriangle, Check, X, KeyRound } from "lucide-react";
 import type { Instructor, OutreachWave } from "@/lib/types";
 
 interface Props {
@@ -20,11 +21,21 @@ interface Props {
 
 type Wave = 1 | 2 | 3;
 
+interface GmailAccountListItem {
+  id: string;
+  email: string;
+  label: string;
+  is_default: boolean;
+  is_cron_sender: boolean;
+  authenticated: boolean;
+}
+
 interface SendResult {
   sent: { id: string; name: string }[];
   skipped: { id: string; name: string; reason: string }[];
   failed: { id: string; name: string; error: string }[];
   aborted?: { kind: string; label: string } | null;
+  senderAccount?: { id: string; email: string; label: string };
 }
 
 // 클라이언트에서도 동일한 치환 (미리보기용)
@@ -39,10 +50,49 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
   const [wave, setWave] = useState<Wave>(1);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<SendResult | null>(null);
+  const [accounts, setAccounts] = useState<GmailAccountListItem[]>([]);
+  const [senderAccountId, setSenderAccountId] = useState<string | null>(null);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+
+  // gmail 계정 목록 로드
+  const loadAccounts = useCallback(async () => {
+    setAccountsLoading(true);
+    try {
+      const res = await fetch("/api/gmail-accounts", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "계정 조회 실패");
+      const list = (data.accounts ?? []) as GmailAccountListItem[];
+      setAccounts(list);
+      // 기본값: is_default 계정
+      setSenderAccountId((prev) => {
+        if (prev && list.some((a) => a.id === prev)) return prev;
+        const def = list.find((a) => a.is_default) ?? list[0];
+        return def?.id ?? null;
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "계정 조회 실패");
+    } finally {
+      setAccountsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (open && state.templates.length === 0) loadTemplates();
-  }, [open, state.templates.length, loadTemplates]);
+    if (open) loadAccounts();
+  }, [open, state.templates.length, loadTemplates, loadAccounts]);
+
+  // OAuth 팝업이 끝나면 부모 창으로 postMessage 가 오므로 계정 목록 재로드
+  useEffect(() => {
+    if (!open) return;
+    const handler = (ev: MessageEvent) => {
+      if (ev.data?.type === "gmail-oauth") {
+        loadAccounts();
+        if (ev.data.ok) toast.success("Gmail 재인증 완료");
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [open, loadAccounts]);
 
   useEffect(() => {
     if (!open) {
@@ -59,6 +109,11 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
   const template = useMemo(
     () => state.templates.find((t) => t.channel === "이메일" && t.variant_label === `${wave}차`),
     [state.templates, wave],
+  );
+
+  const selectedAccount = useMemo(
+    () => accounts.find((a) => a.id === senderAccountId) ?? null,
+    [accounts, senderAccountId],
   );
 
   // 분류
@@ -97,6 +152,11 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     ? renderTemplate(template.body, { name: previewInst.name, field: previewInst.field })
     : "";
 
+  const openReauth = (email: string) => {
+    const url = `/api/gmail-oauth/start?account=${encodeURIComponent(email)}`;
+    window.open(url, "gmail-oauth", "width=520,height=640");
+  };
+
   const handleSend = async () => {
     if (categorized.toSend.length === 0) {
       toast.error("발송할 강사가 없습니다");
@@ -104,6 +164,14 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     }
     if (!template) {
       toast.error(`${wave}차 템플릿이 없습니다`);
+      return;
+    }
+    if (!selectedAccount) {
+      toast.error("발송 계정을 선택하세요");
+      return;
+    }
+    if (!selectedAccount.authenticated) {
+      toast.error(`${selectedAccount.email} 계정 인증이 필요합니다 — [재인증] 버튼을 눌러주세요`);
       return;
     }
     setSending(true);
@@ -115,6 +183,7 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
         body: JSON.stringify({
           instructorIds: categorized.toSend.map((i) => i.id),
           waveNumber: wave,
+          senderAccountId: selectedAccount.id,
         }),
       });
       const data = await res.json();
@@ -140,9 +209,71 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
         </DialogHeader>
 
         {result ? (
-          <ResultView result={result} onClose={onClose} />
+          <ResultView result={result} onClose={onClose} onReauth={openReauth} />
         ) : (
           <div className="space-y-4">
+            {/* 발송 계정 선택 */}
+            <div>
+              <Label className="text-xs">발송 계정</Label>
+              <div className="flex gap-2 mt-1.5 items-center">
+                <Select
+                  value={senderAccountId ?? ""}
+                  onValueChange={(v) => setSenderAccountId(v)}
+                  disabled={accountsLoading || accounts.length === 0}
+                >
+                  <SelectTrigger className="flex-1">
+                    {selectedAccount ? (
+                      <span className="truncate text-left">
+                        <span className="font-medium">{selectedAccount.label}</span>
+                        <span className="text-muted-foreground"> · {selectedAccount.email}</span>
+                        {!selectedAccount.authenticated && (
+                          <span className="text-red-600 ml-1">(미인증)</span>
+                        )}
+                      </span>
+                    ) : (
+                      <SelectValue placeholder={accountsLoading ? "로딩 중..." : "계정 선택"} />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem
+                        key={a.id}
+                        value={a.id}
+                        textValue={`${a.label} · ${a.email}`}
+                      >
+                        <span className="font-medium">{a.label}</span>
+                        <span className="text-muted-foreground"> · {a.email}</span>
+                        {!a.authenticated && <span className="text-red-600 ml-1">(미인증)</span>}
+                        {a.is_cron_sender && <span className="text-blue-600 ml-1">· 자동발송</span>}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedAccount && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openReauth(selectedAccount.email)}
+                    className="gap-1.5"
+                    title="이 계정 OAuth 재인증"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    재인증
+                  </Button>
+                )}
+              </div>
+              {selectedAccount && !selectedAccount.authenticated && (
+                <div className="mt-1.5 text-xs text-red-600">
+                  이 계정은 아직 인증되지 않았습니다. [재인증] 버튼을 눌러 Gmail 로그인 후 다시 시도하세요.
+                </div>
+              )}
+              {selectedAccount && !selectedAccount.is_cron_sender && (
+                <div className="mt-1.5 text-xs text-amber-700">
+                  ⚠️ 이 계정으로 1차 발송 시 2·3차 자동 발송(크론)은 진행되지 않습니다.
+                </div>
+              )}
+            </div>
+
             {/* 차수 선택 */}
             <div>
               <Label className="text-xs">차수 선택</Label>
@@ -244,7 +375,7 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
             ) : null}
 
             <div className="text-xs text-muted-foreground border-t pt-3">
-              · 발송 계정: <span className="font-medium">대표님 Gmail</span> ·
+              · 발송 계정: <span className="font-medium">{selectedAccount?.label ?? "(미선택)"}</span> ·
               발송 후 <span className="font-medium">{wave}차 기록이 자동 추가</span>되고
               발송 예정 상태는 <span className="font-medium">진행 중</span>으로 변경됩니다.
             </div>
@@ -253,7 +384,7 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
               <Button variant="outline" onClick={onClose} disabled={sending}>취소</Button>
               <Button
                 onClick={handleSend}
-                disabled={sending || categorized.toSend.length === 0 || !template}
+                disabled={sending || categorized.toSend.length === 0 || !template || !selectedAccount?.authenticated}
                 className="gap-1.5"
               >
                 <Send className="h-3.5 w-3.5" />
@@ -267,14 +398,25 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
   );
 }
 
-function ResultView({ result, onClose }: { result: SendResult; onClose: () => void }) {
-  const handleReauth = () => {
-    // 새 창에서 OAuth flow 진행 — 콜백이 자동 닫힘
-    window.open("/api/gmail-oauth/start", "gmail-oauth", "width=520,height=640");
-  };
+function ResultView({
+  result,
+  onClose,
+  onReauth,
+}: {
+  result: SendResult;
+  onClose: () => void;
+  onReauth: (email: string) => void;
+}) {
+  const reauthEmail = result.senderAccount?.email;
 
   return (
     <div className="space-y-4">
+      {result.senderAccount && (
+        <div className="text-xs text-muted-foreground">
+          발송 계정: <span className="font-medium">{result.senderAccount.label}</span> ({result.senderAccount.email})
+        </div>
+      )}
+
       {result.aborted && (
         <div className="border border-red-300 rounded-md p-3 bg-red-50 text-sm">
           <div className="flex items-center gap-1.5 font-semibold text-red-700">
@@ -282,14 +424,14 @@ function ResultView({ result, onClose }: { result: SendResult; onClose: () => vo
           </div>
           <div className="mt-1.5 text-xs text-red-700">
             {result.aborted.kind === "token_expired"
-              ? "OAuth 토큰이 만료/폐기되었습니다. 아래 [Gmail 재인증] 버튼을 눌러 새 창에서 대표님 계정으로 로그인하면 자동으로 갱신됩니다."
+              ? `${reauthEmail ?? "발송 계정"} OAuth 토큰이 만료/폐기되었습니다. 아래 [Gmail 재인증] 버튼으로 갱신하세요.`
               : result.aborted.kind === "quota"
               ? "Gmail 일일 발송 한도를 초과했습니다. 24시간 후 자동 복구됩니다. Discord 채널에 알림이 전송되었습니다."
               : "Gmail API 인증 문제로 발송이 중단되었습니다. Discord 채널의 상세 메시지를 확인하세요."}
           </div>
-          {result.aborted.kind === "token_expired" && (
+          {result.aborted.kind === "token_expired" && reauthEmail && (
             <div className="mt-2.5">
-              <Button size="sm" onClick={handleReauth} className="gap-1.5">
+              <Button size="sm" onClick={() => onReauth(reauthEmail)} className="gap-1.5">
                 <Mail className="h-3.5 w-3.5" /> Gmail 재인증
               </Button>
             </div>
