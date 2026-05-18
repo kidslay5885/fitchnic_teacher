@@ -47,23 +47,37 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+    // 자동 발송(크론) 전용 계정이 아닌 계정은 1차만 발송 가능
+    if (!picked.is_cron_sender && waveNumber !== 1) {
+      return NextResponse.json(
+        {
+          error: `${picked.email} 계정으로는 1차 발송만 가능합니다. 2·3차는 자동 발송 계정으로만 발송하세요.`,
+        },
+        { status: 400 },
+      );
+    }
     senderAccount = picked;
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
 
-  // 1. 템플릿 조회
+  // 1. 템플릿 조회 — 발송 계정 전용 템플릿 우선, 없으면 공용(sender_account_id IS NULL) fallback
   const { data: templates, error: tErr } = await sb
     .from("message_templates")
     .select("*")
     .eq("channel", "이메일")
     .eq("variant_label", `${waveNumber}차`)
-    .limit(1);
+    .or(`sender_account_id.eq.${senderAccount.id},sender_account_id.is.null`);
   if (tErr) return NextResponse.json({ error: tErr.message }, { status: 500 });
-  const template = templates?.[0];
+  const template =
+    templates?.find((t) => t.sender_account_id === senderAccount.id) ??
+    templates?.find((t) => t.sender_account_id === null) ??
+    null;
   if (!template) {
     return NextResponse.json(
-      { error: `${waveNumber}차 이메일 템플릿이 없습니다. 메시지 탭에서 먼저 등록하세요.` },
+      {
+        error: `${waveNumber}차 이메일 템플릿이 없습니다 (계정: ${senderAccount.email}). 메시지 탭에서 먼저 등록하세요.`,
+      },
       { status: 400 },
     );
   }

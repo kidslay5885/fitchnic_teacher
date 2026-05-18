@@ -12,7 +12,10 @@ export interface GmailAccount {
   refresh_token: string | null;
   is_default: boolean;
   is_cron_sender: boolean;
+  bcc: string[];
 }
+
+const ACCOUNT_COLUMNS = "id, email, label, refresh_token, is_default, is_cron_sender, bcc";
 
 // (계정 id → 클라이언트) 캐시. refresh_token 이 바뀌면 무효화된다.
 const clientCache = new Map<string, { token: string; client: ReturnType<typeof buildOAuth2Client> }>();
@@ -32,18 +35,30 @@ export async function listGmailAccounts(): Promise<GmailAccount[]> {
   const sb = getSupabase();
   const { data, error } = await sb
     .from("gmail_accounts")
-    .select("id, email, label, refresh_token, is_default, is_cron_sender")
+    .select(ACCOUNT_COLUMNS)
     .order("is_default", { ascending: false })
     .order("created_at", { ascending: true });
   if (error) throw new Error(`Gmail 계정 조회 실패: ${error.message}`);
-  return (data ?? []) as GmailAccount[];
+  return (data ?? []).map(normalizeAccount);
+}
+
+function normalizeAccount(row: Record<string, unknown>): GmailAccount {
+  return {
+    id: row.id as string,
+    email: row.email as string,
+    label: row.label as string,
+    refresh_token: (row.refresh_token as string | null) ?? null,
+    is_default: !!row.is_default,
+    is_cron_sender: !!row.is_cron_sender,
+    bcc: Array.isArray(row.bcc) ? (row.bcc as string[]) : [],
+  };
 }
 
 async function getAccount(accountId?: string | null): Promise<GmailAccount> {
   const sb = getSupabase();
   let query = sb
     .from("gmail_accounts")
-    .select("id, email, label, refresh_token, is_default, is_cron_sender");
+    .select(ACCOUNT_COLUMNS);
   if (accountId) query = query.eq("id", accountId);
   else query = query.eq("is_default", true);
 
@@ -56,19 +71,19 @@ async function getAccount(accountId?: string | null): Promise<GmailAccount> {
         : "기본 Gmail 계정이 설정되어 있지 않습니다. gmail_accounts 테이블에 is_default=true 인 row를 만들고 재인증하세요.",
     );
   }
-  return data as GmailAccount;
+  return normalizeAccount(data);
 }
 
 export async function getCronSenderAccount(): Promise<GmailAccount> {
   const sb = getSupabase();
   const { data, error } = await sb
     .from("gmail_accounts")
-    .select("id, email, label, refresh_token, is_default, is_cron_sender")
+    .select(ACCOUNT_COLUMNS)
     .eq("is_cron_sender", true)
     .maybeSingle();
   if (error) throw new Error(`크론 발송 계정 조회 실패: ${error.message}`);
   if (!data) throw new Error("is_cron_sender=true 인 Gmail 계정이 없습니다.");
-  return data as GmailAccount;
+  return normalizeAccount(data);
 }
 
 async function getClient(account: GmailAccount) {
@@ -111,12 +126,19 @@ function buildRawMessage(
   subject: string,
   body: string,
   toName?: string,
+  bcc?: string[],
 ) {
   const boundary = `fitchnic_${Math.random().toString(36).slice(2)}`;
-  const lines = [
+  const headers = [
     `From: ${formatAddress(fromEmail, fromName)}`,
     `To: ${formatAddress(to, toName)}`,
-    `Subject: ${encodeHeader(subject)}`,
+  ];
+  if (bcc && bcc.length > 0) {
+    headers.push(`Bcc: ${bcc.join(", ")}`);
+  }
+  headers.push(`Subject: ${encodeHeader(subject)}`);
+  const lines = [
+    ...headers,
     "MIME-Version: 1.0",
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     "",
@@ -166,7 +188,15 @@ export async function sendEmail({
   const account = senderAccount ?? (await getAccount(senderAccountId));
   const auth = await getClient(account);
   const gmail = google.gmail({ version: "v1", auth });
-  const raw = buildRawMessage(account.email, account.label, to, subject, body, toName);
+  const raw = buildRawMessage(
+    account.email,
+    account.label,
+    to,
+    subject,
+    body,
+    toName,
+    account.bcc,
+  );
   const res = await gmail.users.messages.send({
     userId: "me",
     requestBody: { raw },

@@ -148,6 +148,7 @@ export interface MessageTemplate {
   subject: string;
   body: string;
   variant_label: string;
+  sender_account_id?: string | null;
 }
 
 // ===== UI 상태 =====

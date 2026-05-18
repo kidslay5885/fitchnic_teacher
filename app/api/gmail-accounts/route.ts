@@ -17,6 +17,7 @@ export async function GET() {
         is_default: a.is_default,
         is_cron_sender: a.is_cron_sender,
         authenticated: !!a.refresh_token,
+        bcc: a.bcc,
       })),
     });
   } catch (e) {

@@ -28,6 +28,7 @@ interface GmailAccountListItem {
   is_default: boolean;
   is_cron_sender: boolean;
   authenticated: boolean;
+  bcc: string[];
 }
 
 interface SendResult {
@@ -106,15 +107,35 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     [instructors, selectedIds],
   );
 
-  const template = useMemo(
-    () => state.templates.find((t) => t.channel === "이메일" && t.variant_label === `${wave}차`),
-    [state.templates, wave],
-  );
-
   const selectedAccount = useMemo(
     () => accounts.find((a) => a.id === senderAccountId) ?? null,
     [accounts, senderAccountId],
   );
+
+  // 계정별 템플릿 우선, 없으면 공용(sender_account_id 미지정) fallback — 서버 조회와 동일 규칙
+  const template = useMemo(() => {
+    const sameWave = state.templates.filter(
+      (t) => t.channel === "이메일" && t.variant_label === `${wave}차`,
+    );
+    if (!selectedAccount) return sameWave[0];
+    return (
+      sameWave.find((t) => t.sender_account_id === selectedAccount.id) ??
+      sameWave.find((t) => !t.sender_account_id) ??
+      undefined
+    );
+  }, [state.templates, wave, selectedAccount]);
+
+  // 비-cron 계정 선택 시 강제로 1차로 전환 (2·3차는 서버에서도 거부됨)
+  useEffect(() => {
+    if (selectedAccount && !selectedAccount.is_cron_sender && wave !== 1) {
+      setWave(1);
+    }
+  }, [selectedAccount, wave]);
+
+  const allowedWaves: Wave[] = useMemo(() => {
+    if (!selectedAccount) return [1, 2, 3];
+    return selectedAccount.is_cron_sender ? [1, 2, 3] : [1];
+  }, [selectedAccount]);
 
   // 분류
   const categorized = useMemo(() => {
@@ -236,11 +257,7 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
                   </SelectTrigger>
                   <SelectContent>
                     {accounts.map((a) => (
-                      <SelectItem
-                        key={a.id}
-                        value={a.id}
-                        textValue={`${a.label} · ${a.email}`}
-                      >
+                      <SelectItem key={a.id} value={a.id}>
                         <span className="font-medium">{a.label}</span>
                         <span className="text-muted-foreground"> · {a.email}</span>
                         {!a.authenticated && <span className="text-red-600 ml-1">(미인증)</span>}
@@ -269,7 +286,7 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
               )}
               {selectedAccount && !selectedAccount.is_cron_sender && (
                 <div className="mt-1.5 text-xs text-amber-700">
-                  ⚠️ 이 계정으로 1차 발송 시 2·3차 자동 발송(크론)은 진행되지 않습니다.
+                  ⚠️ 이 계정은 1차만 발송 가능 · 후속 자동 발송(2·3차)은 진행되지 않습니다.
                 </div>
               )}
             </div>
@@ -278,20 +295,32 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
             <div>
               <Label className="text-xs">차수 선택</Label>
               <div className="flex gap-2 mt-1.5">
-                {([1, 2, 3] as Wave[]).map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setWave(n)}
-                    className={`px-4 py-2 rounded-md text-sm font-medium border transition-colors ${
-                      wave === n
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background hover:bg-muted border-border"
-                    }`}
-                  >
-                    {n}차
-                  </button>
-                ))}
+                {([1, 2, 3] as Wave[]).map((n) => {
+                  const disabled = !allowedWaves.includes(n);
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => !disabled && setWave(n)}
+                      disabled={disabled}
+                      title={disabled ? "이 계정은 1차 발송만 가능합니다" : undefined}
+                      className={`px-4 py-2 rounded-md text-sm font-medium border transition-colors ${
+                        wave === n
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : disabled
+                          ? "bg-muted/40 text-muted-foreground/60 border-border cursor-not-allowed"
+                          : "bg-background hover:bg-muted border-border"
+                      }`}
+                    >
+                      {n}차
+                    </button>
+                  );
+                })}
               </div>
+              {selectedAccount && !selectedAccount.is_cron_sender && (
+                <div className="mt-1.5 text-xs text-muted-foreground">
+                  이 계정은 1차 발송만 가능합니다. 2·3차는 자동 발송 계정으로만 진행됩니다.
+                </div>
+              )}
             </div>
 
             {/* 발송 요약 */}
@@ -374,10 +403,17 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
               </div>
             ) : null}
 
-            <div className="text-xs text-muted-foreground border-t pt-3">
-              · 발송 계정: <span className="font-medium">{selectedAccount?.label ?? "(미선택)"}</span> ·
-              발송 후 <span className="font-medium">{wave}차 기록이 자동 추가</span>되고
-              발송 예정 상태는 <span className="font-medium">진행 중</span>으로 변경됩니다.
+            <div className="text-xs text-muted-foreground border-t pt-3 space-y-1">
+              <div>
+                · 발송 계정: <span className="font-medium">{selectedAccount?.label ?? "(미선택)"}</span> ·
+                발송 후 <span className="font-medium">{wave}차 기록이 자동 추가</span>되고
+                발송 예정 상태는 <span className="font-medium">진행 중</span>으로 변경됩니다.
+              </div>
+              {selectedAccount && selectedAccount.bcc.length > 0 && (
+                <div>
+                  · 숨은참조(BCC): <span className="font-medium">{selectedAccount.bcc.join(", ")}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

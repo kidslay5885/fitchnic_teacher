@@ -139,16 +139,19 @@ export async function GET(req: Request) {
     const key = `wave${waveNumber}` as "wave2" | "wave3";
     const prevWave = waveNumber - 1;
 
-    // 템플릿 조회
+    // 템플릿 조회 — cron 계정 전용 우선, 없으면 공용 fallback
     const { data: templates } = await sb
       .from("message_templates")
       .select("*")
       .eq("channel", "이메일")
       .eq("variant_label", `${waveNumber}차`)
-      .limit(1);
-    const template = templates?.[0];
+      .or(`sender_account_id.eq.${cronSender.id},sender_account_id.is.null`);
+    const template =
+      templates?.find((t) => t.sender_account_id === cronSender.id) ??
+      templates?.find((t) => t.sender_account_id === null) ??
+      null;
     if (!template) {
-      summary[key].error = `${waveNumber}차 이메일 템플릿 없음`;
+      summary[key].error = `${waveNumber}차 이메일 템플릿 없음 (계정: ${cronSender.email})`;
       continue;
     }
 
