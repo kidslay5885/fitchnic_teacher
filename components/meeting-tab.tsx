@@ -187,11 +187,17 @@ export default function MeetingTab() {
     if (!date) return [];
     const m = date.getMonth() + 1, d = date.getDate();
     const iso = `${date.getFullYear()}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    // 시간 없는 항목은 맨 뒤로 보내기 위해 큰 값 사용
+    const timeToMinutes = (md: string) => {
+      const t = md.match(/(\d{1,2}):(\d{2})/);
+      if (!t) return Number.MAX_SAFE_INTEGER;
+      return +t[1] * 60 + +t[2];
+    };
     return meetings.filter((mt) => {
       const md = mt.meeting_date || "";
       return md.includes(iso) || md.includes(`${m}/${d}`) || md.includes(`${m}월 ${d}일`) ||
         md.includes(`${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}`);
-    });
+    }).sort((a, b) => timeToMinutes(a.meeting_date || "") - timeToMinutes(b.meeting_date || ""));
   };
 
   // 미팅 날짜 문자열에서 Date 객체 추출
