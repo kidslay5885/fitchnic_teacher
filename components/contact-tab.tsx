@@ -50,6 +50,8 @@ export default function ContactTab() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
+  // 발신 계정 id → 표기 매핑 (예: ceo → "대", 콘텐츠개발팀 → "팀"). 1차 발송 계정 기준 셀 표기에 사용
+  const [accountTagMap, setAccountTagMap] = useState<Record<string, { tag: string; label: string; email: string; badgeClass: string }>>({});
   const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
   const [editingFinal, setEditingFinal] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
@@ -117,6 +119,38 @@ export default function ContactTab() {
   }, [waveFetchInstructors]);
 
   useEffect(() => { loadAllWaves(); }, [loadAllWaves]);
+
+  // 발신 계정 목록 로드 — 1차 sender_account_id → 표기 매핑 (이메일 기반으로 짧은 태그 결정)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/gmail-accounts", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const map: Record<string, { tag: string; label: string; email: string; badgeClass: string }> = {};
+        for (const a of data.accounts ?? []) {
+          // 이메일 로컬 파트로 태그·색 결정: ceo → "대"(파랑), business.center → "팀"(청록), 그 외는 라벨/회색
+          const local = String(a.email).split("@")[0];
+          let tag = a.label;
+          let badgeClass = "bg-slate-100 text-slate-700";
+          if (local === "ceo") {
+            tag = "대";
+            badgeClass = "bg-blue-100 text-blue-700";
+          } else if (local === "business.center") {
+            tag = "팀";
+            badgeClass = "bg-teal-100 text-teal-700";
+          } else {
+            tag = a.label || local;
+          }
+          map[a.id] = { tag, label: a.label, email: a.email, badgeClass };
+        }
+        setAccountTagMap(map);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // 응답 받았지만 사전 정보 없는 강사
   const noPreInfoCount = useMemo(() => contactInstructors.filter((i) => i.has_response && !i.pre_info).length, [contactInstructors]);
@@ -475,6 +509,16 @@ export default function ContactTab() {
   const cnt = (s: string) => contactInstructors.filter((i) => i.status === s).length;
   const getWave = (id: string, n: number) => (wavesMap[id] || []).find((w) => w.wave_number === n);
 
+  // 발송수단 표시 — DB 값은 그대로, 1차 sender_account_id 기준 "이메일(대)/이메일(팀)" 분기
+  // sender 정보 없거나 매핑 실패 시 원본 그대로 반환 (필터/정렬은 i.send_method 그대로 사용)
+  const displaySendMethod = (inst: Instructor): string => {
+    const raw = inst.send_method || "";
+    if (raw !== "이메일") return raw;
+    const w1 = getWave(inst.id, 1);
+    const acc = w1?.sender_account_id ? accountTagMap[w1.sender_account_id] : null;
+    return acc ? `이메일(${acc.tag})` : "이메일";
+  };
+
   const formatWave = (w: OutreachWave | undefined) => {
     if (!w || (!w.sent_date && !w.result)) return "-";
     return w.result || (w.sent_date ? "체크필요" : "-");
@@ -607,7 +651,7 @@ export default function ContactTab() {
                 "상태": i.status,
                 "분야": i.field || "",
                 "이메일": i.email || "",
-                "발송 수단": i.send_method || "",
+                "발송 수단": displaySendMethod(i),
                 "1차 발송일": w1?.sent_date || "",
                 "1차 응답여부": w1?.result || "",
                 "2차 발송일": w2?.sent_date || "",
@@ -780,24 +824,36 @@ export default function ContactTab() {
                     })()}
                     <span className="text-muted-foreground truncate">{i.email || ""}</span>
                   </div>
-                  {/* 발송 수단 */}
-                  <div
-                    className="self-stretch px-2 flex items-center justify-center cursor-pointer hover:bg-gray-100/60 border-r-2 border-r-gray-300"
-                    onClick={(e) => handleSendMethodClick(e, i)}
-                    title={i.send_method || "미선택"}
-                  >
-                    {i.send_method ? (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        i.send_method === "DM" ? "bg-purple-100 text-purple-700" :
-                        i.send_method === "이메일" ? "bg-blue-100 text-blue-700" :
-                        "bg-amber-100 text-amber-700"
-                      }`}>
-                        {i.send_method}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-300">-</span>
-                    )}
-                  </div>
+                  {/* 발송 수단 — DB값은 그대로, 표시·색은 1차 발신 계정 기준 분기 */}
+                  {(() => {
+                    const display = displaySendMethod(i);
+                    const w1 = getWave(i.id, 1);
+                    const acc = w1?.sender_account_id ? accountTagMap[w1.sender_account_id] : null;
+                    const tooltip = acc
+                      ? `${i.send_method} · 1차 발신: ${acc.label} (${acc.email})`
+                      : (i.send_method || "미선택");
+                    const badgeClass =
+                      i.send_method === "DM"
+                        ? "bg-purple-100 text-purple-700"
+                        : i.send_method === "이메일"
+                        ? (acc?.badgeClass ?? "bg-blue-100 text-blue-700")
+                        : "bg-amber-100 text-amber-700";
+                    return (
+                      <div
+                        className="self-stretch px-2 flex items-center justify-center cursor-pointer hover:bg-gray-100/60 border-r-2 border-r-gray-300"
+                        onClick={(e) => handleSendMethodClick(e, i)}
+                        title={tooltip}
+                      >
+                        {i.send_method ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
+                            {display}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">-</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {/* 1/2/3차 발송일 + 응답여부 */}
                   {[1, 2, 3].map((n) => {
                     const w = getWave(i.id, n);
@@ -958,22 +1014,28 @@ export default function ContactTab() {
       )}
 
       {/* ── 발송 편집 모달 ── */}
-      {editingWave && (
-        <WaveModal
-          wave={getWave(editingWave.instructorId, editingWave.wave)}
-          waveNumber={editingWave.wave}
-          preInfo={state.instructors.find(i => i.id === editingWave.instructorId)?.pre_info || ""}
-          meetingType={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type || ""}
-          contactAssignee={state.instructors.find(i => i.id === editingWave.instructorId)?.contact_assignee || ""}
-          hasOwnLecture={state.instructors.find(i => i.id === editingWave.instructorId)?.has_own_lecture || ""}
-          lectureAppeal={state.instructors.find(i => i.id === editingWave.instructorId)?.lecture_appeal || ""}
-          snsOver10k={state.instructors.find(i => i.id === editingWave.instructorId)?.sns_over_10k || ""}
-          meetingTypeOverride={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type_override || false}
-          onSave={(data) => handleWaveSave(editingWave.instructorId, editingWave.wave, data)}
-          onDelete={() => handleWaveDelete(editingWave.instructorId, editingWave.wave)}
-          onClose={() => setEditingWave(null)}
-        />
-      )}
+      {editingWave && (() => {
+        const w = getWave(editingWave.instructorId, editingWave.wave);
+        const senderAcc = w?.sender_account_id ? accountTagMap[w.sender_account_id] : null;
+        return (
+          <WaveModal
+            wave={w}
+            waveNumber={editingWave.wave}
+            preInfo={state.instructors.find(i => i.id === editingWave.instructorId)?.pre_info || ""}
+            meetingType={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type || ""}
+            contactAssignee={state.instructors.find(i => i.id === editingWave.instructorId)?.contact_assignee || ""}
+            hasOwnLecture={state.instructors.find(i => i.id === editingWave.instructorId)?.has_own_lecture || ""}
+            lectureAppeal={state.instructors.find(i => i.id === editingWave.instructorId)?.lecture_appeal || ""}
+            snsOver10k={state.instructors.find(i => i.id === editingWave.instructorId)?.sns_over_10k || ""}
+            meetingTypeOverride={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type_override || false}
+            senderLabel={senderAcc?.label || null}
+            senderEmail={senderAcc?.email || null}
+            onSave={(data) => handleWaveSave(editingWave.instructorId, editingWave.wave, data)}
+            onDelete={() => handleWaveDelete(editingWave.instructorId, editingWave.wave)}
+            onClose={() => setEditingWave(null)}
+          />
+        );
+      })()}
 
       {/* ── 최종 상태 팝오버 ── */}
       {editingFinal && (
@@ -1178,7 +1240,7 @@ const MEETING_TYPE_DESCRIPTIONS: Record<string, string> = {
   "보류": "현재 조건 미충족. → 강사모집 탭 상태 \"보류\" 처리 후 대기",
 };
 
-function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: initialMeetingType, contactAssignee: initialContactAssignee, hasOwnLecture: initialHasOwnLecture, lectureAppeal: initialLectureAppeal, snsOver10k: initialSnsOver10k, meetingTypeOverride: initialOverride, onSave, onDelete, onClose }: {
+function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: initialMeetingType, contactAssignee: initialContactAssignee, hasOwnLecture: initialHasOwnLecture, lectureAppeal: initialLectureAppeal, snsOver10k: initialSnsOver10k, meetingTypeOverride: initialOverride, senderLabel, senderEmail, onSave, onDelete, onClose }: {
   wave: OutreachWave | undefined;
   waveNumber: number;
   preInfo: string;
@@ -1188,6 +1250,8 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   lectureAppeal: string;
   snsOver10k: string;
   meetingTypeOverride: boolean;
+  senderLabel?: string | null;
+  senderEmail?: string | null;
   onSave: (data: { result: string; reject_reason: string; response_date: string | null; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
@@ -1249,7 +1313,14 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-lg shadow-lg w-[820px] max-h-[90vh] p-6 flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
-          <p className="text-base font-semibold">{waveNumber}차 발송</p>
+          <div className="flex items-baseline gap-3">
+            <p className="text-base font-semibold">{waveNumber}차 발송</p>
+            {senderLabel && senderEmail && (
+              <p className="text-xs text-muted-foreground">
+                발신: <span className="font-medium text-foreground">{senderLabel}</span> ({senderEmail})
+              </p>
+            )}
+          </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="h-4 w-4" />
           </button>
