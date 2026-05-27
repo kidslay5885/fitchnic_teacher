@@ -9,12 +9,16 @@ interface SendBody {
   waveNumber: 1 | 2 | 3;
   changedBy?: string;
   senderAccountId?: string;
+  // 1명 발송 시 모달에서 직접 수정한 최종 제목·본문 (변수 치환 완료된 값)
+  overrideSubject?: string;
+  overrideBody?: string;
 }
 
 // POST /api/outreach/send-email
 // 선택한 강사들에게 지정한 차수의 이메일 템플릿을 자동 발송
 export async function POST(req: Request) {
-  const { instructorIds, waveNumber, changedBy, senderAccountId }: SendBody = await req.json();
+  const { instructorIds, waveNumber, changedBy, senderAccountId, overrideSubject, overrideBody }: SendBody =
+    await req.json();
 
   if (!Array.isArray(instructorIds) || instructorIds.length === 0) {
     return NextResponse.json({ error: "instructorIds required" }, { status: 400 });
@@ -22,6 +26,11 @@ export async function POST(req: Request) {
   if (![1, 2, 3].includes(waveNumber)) {
     return NextResponse.json({ error: "waveNumber must be 1|2|3" }, { status: 400 });
   }
+
+  // 직접 수정값은 발송 대상이 정확히 1명일 때만 신뢰 (여러 명이면 개인화가 깨지므로 무시)
+  const useOverride =
+    instructorIds.length === 1 &&
+    (typeof overrideSubject === "string" || typeof overrideBody === "string");
 
   const sb = getSupabase();
 
@@ -127,9 +136,13 @@ export async function POST(req: Request) {
       continue;
     }
 
-    // 템플릿 치환
-    const subject = renderTemplate(template.subject || "", { name: inst.name, field: inst.field });
-    const body = renderTemplate(template.body || "", { name: inst.name, field: inst.field });
+    // 템플릿 치환 (1명 발송 + 직접 수정 시에는 수정값을 그대로 사용)
+    const subject = useOverride && typeof overrideSubject === "string"
+      ? overrideSubject
+      : renderTemplate(template.subject || "", { name: inst.name, field: inst.field });
+    const body = useOverride && typeof overrideBody === "string"
+      ? overrideBody
+      : renderTemplate(template.body || "", { name: inst.name, field: inst.field });
 
     try {
       // Gmail API 발송 — 수신자에게 "강사명 대표님"으로 표시

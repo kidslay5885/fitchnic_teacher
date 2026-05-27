@@ -4,6 +4,8 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import { toast } from "sonner";
@@ -54,6 +56,9 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
   const [accounts, setAccounts] = useState<GmailAccountListItem[]>([]);
   const [senderAccountId, setSenderAccountId] = useState<string | null>(null);
   const [accountsLoading, setAccountsLoading] = useState(false);
+  // 미리보기 직접 편집값 (null = 미편집, 템플릿 기본값 사용). 1명 발송일 때만 사용
+  const [editedSubject, setEditedSubject] = useState<string | null>(null);
+  const [editedBody, setEditedBody] = useState<string | null>(null);
 
   // gmail 계정 목록 로드
   const loadAccounts = useCallback(async () => {
@@ -99,6 +104,8 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     if (!open) {
       setResult(null);
       setWave(1);
+      setEditedSubject(null);
+      setEditedBody(null);
     }
   }, [open]);
 
@@ -173,6 +180,18 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     ? renderTemplate(template.body, { name: previewInst.name, field: previewInst.field })
     : "";
 
+  // 편집 허용: 실제 발송 대상이 정확히 1명일 때만 (편집값이 그 1명에게 그대로 적용됨)
+  const canEdit = !!template && categorized.toSend.length === 1;
+  // 입력창에 표시할 값 — 편집값 우선, 없으면 템플릿 치환 결과
+  const subjectValue = editedSubject ?? previewSubject;
+  const bodyValue = editedBody ?? previewBody;
+
+  // 차수·계정·대상 강사가 바뀌면 편집값 초기화 (stale 방지)
+  useEffect(() => {
+    setEditedSubject(null);
+    setEditedBody(null);
+  }, [wave, senderAccountId, previewInst?.id]);
+
   const openReauth = (email: string) => {
     const url = `/api/gmail-oauth/start?account=${encodeURIComponent(email)}`;
     window.open(url, "gmail-oauth", "width=520,height=640");
@@ -205,6 +224,10 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
           instructorIds: categorized.toSend.map((i) => i.id),
           waveNumber: wave,
           senderAccountId: selectedAccount.id,
+          // 1명 발송 + 편집된 경우만 최종 제목·본문을 그대로 전달 (서버에서 재치환 안 함)
+          ...(canEdit && (editedSubject !== null || editedBody !== null)
+            ? { overrideSubject: subjectValue, overrideBody: bodyValue }
+            : {}),
         }),
       });
       const data = await res.json();
@@ -389,17 +412,45 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
             ) : previewInst ? (
               <div>
                 <Label className="text-xs">
-                  미리보기 — <span className="font-normal text-muted-foreground">{previewInst.name} ({previewInst.field})</span>
+                  {canEdit ? "미리보기 (수정 가능)" : "미리보기"} — <span className="font-normal text-muted-foreground">{previewInst.name} ({previewInst.field})</span>
                 </Label>
-                <div className="mt-1.5 border rounded-md divide-y">
-                  <div className="px-3 py-2 text-xs">
-                    <span className="text-muted-foreground">제목 · </span>
-                    <span className="font-medium">{previewSubject}</span>
+                {canEdit ? (
+                  <div className="mt-1.5 space-y-1.5">
+                    <Input
+                      value={subjectValue}
+                      onChange={(e) => setEditedSubject(e.target.value)}
+                      className="text-xs h-auto py-2"
+                      placeholder="제목"
+                    />
+                    <Textarea
+                      value={bodyValue}
+                      onChange={(e) => setEditedBody(e.target.value)}
+                      className="text-xs leading-relaxed min-h-64 max-h-80 overflow-y-auto font-mono"
+                    />
+                    <div className="text-[11px] text-muted-foreground">
+                      {(editedSubject !== null || editedBody !== null)
+                        ? "수정한 내용으로 발송됩니다 — 이 강사 1명에게만 적용됩니다."
+                        : "이 강사 1명에게만 발송되므로 제목·내용을 직접 수정할 수 있습니다."}
+                    </div>
                   </div>
-                  <pre className="px-3 py-2 text-xs whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed bg-muted/20">
-                    {previewBody}
-                  </pre>
-                </div>
+                ) : (
+                  <>
+                    <div className="mt-1.5 border rounded-md divide-y">
+                      <div className="px-3 py-2 text-xs">
+                        <span className="text-muted-foreground">제목 · </span>
+                        <span className="font-medium">{previewSubject}</span>
+                      </div>
+                      <pre className="px-3 py-2 text-xs whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed bg-muted/20">
+                        {previewBody}
+                      </pre>
+                    </div>
+                    {categorized.toSend.length > 1 && (
+                      <div className="mt-1.5 text-[11px] text-muted-foreground">
+                        여러 명 발송 시에는 강사별 개인화를 위해 미리보기만 제공됩니다(수정 불가).
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ) : null}
 
