@@ -79,7 +79,7 @@ export default function ResponseRateChart({ weekly, monthly }: Props) {
           {" · "}
           {mode === "week" ? "지난주" : "지난달"} {fmt(lastRate)}
           {diff != null && diff !== 0 && (
-            <span className={`ml-1 ${diff > 0 ? "text-emerald-600" : "text-red-500"}`}>
+            <span className={`ml-1 ${diff > 0 ? "text-red-500" : "text-blue-600"}`}>
               ({diff > 0 ? "+" : ""}
               {diff.toFixed(1)}%p)
             </span>

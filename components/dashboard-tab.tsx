@@ -119,7 +119,7 @@ function ChangeIndicator({ thisVal, lastVal }: { thisVal: number; lastVal: numbe
   const pct = Math.round((diff / lastVal) * 100);
   const isUp = diff > 0;
   return (
-    <span className={`text-sm font-medium ${isUp ? "text-emerald-600" : "text-red-500"}`}>
+    <span className={`text-sm font-medium ${isUp ? "text-red-500" : "text-blue-600"}`}>
       {isUp ? "▲" : "▼"}
       {Math.abs(diff)} ({isUp ? "+" : ""}
       {pct}%)

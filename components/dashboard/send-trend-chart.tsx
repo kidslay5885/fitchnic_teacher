@@ -78,7 +78,7 @@ export default function SendTrendChart({ weekly, monthly }: Props) {
           {" · "}
           {mode === "week" ? "같은 시점 지난주" : "같은 시점 지난달"} {lastSamePeriod}건
           {diff !== 0 && (
-            <span className={`ml-1 ${diff > 0 ? "text-emerald-600" : "text-red-500"}`}>
+            <span className={`ml-1 ${diff > 0 ? "text-red-500" : "text-blue-600"}`}>
               ({diff > 0 ? "+" : ""}
               {diff}건)
             </span>
