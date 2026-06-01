@@ -40,6 +40,7 @@ interface AppState {
   filters: FilterState;
   stats: DashboardStats | null;
   unackedFailureCount: number;
+  unreviewedApplicationCount: number;
   gmailHealth: GmailHealth | null;
 }
 
@@ -83,6 +84,7 @@ const initialState: AppState = {
   },
   stats: null,
   unackedFailureCount: 0,
+  unreviewedApplicationCount: 0,
   gmailHealth: null,
 };
 
@@ -106,6 +108,7 @@ type Action =
   | { type: "SET_FILTER"; filters: Partial<FilterState> }
   | { type: "SET_STATS"; stats: DashboardStats }
   | { type: "SET_UNACKED_FAILURE_COUNT"; count: number }
+  | { type: "SET_UNREVIEWED_APPLICATION_COUNT"; count: number }
   | { type: "SET_GMAIL_HEALTH"; health: GmailHealth | null };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -168,6 +171,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, stats: action.stats };
     case "SET_UNACKED_FAILURE_COUNT":
       return { ...state, unackedFailureCount: action.count };
+    case "SET_UNREVIEWED_APPLICATION_COUNT":
+      return { ...state, unreviewedApplicationCount: action.count };
     case "SET_GMAIL_HEALTH":
       return { ...state, gmailHealth: action.health };
     default:
@@ -188,6 +193,7 @@ interface StoreCtx {
   loadBannedPlatforms: () => Promise<void>;
   loadYoutubeChannels: () => Promise<void>;
   loadUnackedFailureCount: () => Promise<void>;
+  loadUnreviewedApplicationCount: () => Promise<void>;
   loadGmailHealth: () => Promise<void>;
 }
 
@@ -285,6 +291,15 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
+  const loadUnreviewedApplicationCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/applications/unreviewed-count");
+      if (!res.ok) return;
+      const data = await res.json();
+      dispatch({ type: "SET_UNREVIEWED_APPLICATION_COUNT", count: data.total || 0 });
+    } catch {}
+  }, []);
+
   const loadGmailHealth = useCallback(async () => {
     try {
       const res = await fetch("/api/gmail/health");
@@ -363,6 +378,22 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     };
   }, [loadUnackedFailureCount]);
 
+  // 미확인 지원서 카운트 폴링 (초기 1회 + 60초 + 탭 가시화 시)
+  useEffect(() => {
+    loadUnreviewedApplicationCount();
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") loadUnreviewedApplicationCount();
+    }, 60000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") loadUnreviewedApplicationCount();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [loadUnreviewedApplicationCount]);
+
   // Gmail 토큰 헬스 폴링 (초기 1회 + 5분 + 탭 가시화 시)
   useEffect(() => {
     loadGmailHealth();
@@ -395,6 +426,7 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
         loadBannedPlatforms,
         loadYoutubeChannels,
         loadUnackedFailureCount,
+        loadUnreviewedApplicationCount,
         loadGmailHealth,
       },
     },

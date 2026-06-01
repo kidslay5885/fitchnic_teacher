@@ -22,6 +22,11 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
 export default function NavHeader({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const { state, dispatch } = useOutreach();
 
+  // 미확인 지원서 카운트: 지원서 탭 진입 후엔 로컬 상태로 실시간 반영, 진입 전엔 폴링값 사용
+  const unreviewedCount = state.applications.length > 0
+    ? state.applications.filter((a) => a.review_status === "미확인").length
+    : state.unreviewedApplicationCount;
+
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-40 border-r bg-card flex flex-col transition-[width] duration-200 ${
@@ -44,11 +49,13 @@ export default function NavHeader({ collapsed, onToggle }: { collapsed: boolean;
           const Icon = t.icon;
           const active = state.tab === t.id;
           const showAlert = t.id === "dashboard" && !!(state.gmailHealth && !state.gmailHealth.ok);
+          const badgeCount = t.id === "applications" ? unreviewedCount : 0;
+          const badgeColor = active ? "bg-primary-foreground text-primary" : "bg-primary text-primary-foreground";
           return (
             <button
               key={t.id}
               onClick={() => dispatch({ type: "SET_TAB", tab: t.id })}
-              title={collapsed ? `${t.label}${showAlert ? " · Gmail 연결 만료" : ""}` : undefined}
+              title={collapsed ? `${t.label}${showAlert ? " · Gmail 연결 만료" : ""}${badgeCount > 0 ? ` · 미확인 ${badgeCount}` : ""}` : undefined}
               className={`relative w-full flex items-center gap-3 rounded-md text-sm font-medium transition-colors ${
                 collapsed ? "justify-center px-0 py-2" : "px-3 py-2"
               } ${
@@ -62,8 +69,18 @@ export default function NavHeader({ collapsed, onToggle }: { collapsed: boolean;
                 {showAlert && (
                   <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-card" />
                 )}
+                {collapsed && badgeCount > 0 && (
+                  <span className={`absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] px-1 flex items-center justify-center rounded-full text-[9px] font-bold leading-none ring-2 ring-card ${badgeColor}`}>
+                    {badgeCount > 99 ? "99+" : badgeCount}
+                  </span>
+                )}
               </span>
               {!collapsed && t.label}
+              {!collapsed && badgeCount > 0 && (
+                <span className={`ml-auto min-w-[18px] h-[18px] px-1.5 flex items-center justify-center rounded-full text-[10px] font-bold leading-none ${badgeColor}`}>
+                  {badgeCount > 99 ? "99+" : badgeCount}
+                </span>
+              )}
             </button>
           );
         })}
