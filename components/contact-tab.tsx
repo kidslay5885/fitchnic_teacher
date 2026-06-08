@@ -37,6 +37,7 @@ const ROW_BG: Record<string, string> = {
   "컨펌 필요": "bg-yellow-50/60 hover:bg-yellow-100/50",
   "발송 예정": "bg-blue-50/70 hover:bg-blue-100/50",
   "진행 중": "bg-indigo-50/60 hover:bg-indigo-100/50",
+  "미팅 완료": "bg-cyan-50/60 hover:bg-cyan-100/50",
   "계약 완료": "bg-green-50/60 hover:bg-green-100/50",
   제외: "bg-red-50/50 hover:bg-red-100/40",
   보류: "bg-orange-50/60 hover:bg-orange-100/50",
@@ -1553,7 +1554,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
 /* ── 최종 상태 팝오버 ── */
 const FINAL_COLORS: Record<string, string> = {
   "진행 중": "bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
-  "미팅 완료": "bg-purple-50 text-purple-700 hover:bg-purple-100",
+  "미팅 완료": "bg-cyan-50 text-cyan-700 hover:bg-cyan-100",
   "계약 완료": "bg-green-50 text-green-700 hover:bg-green-100",
   보류: "bg-orange-50 text-orange-700 hover:bg-orange-100",
   거절: "bg-red-50 text-red-700 hover:bg-red-100",

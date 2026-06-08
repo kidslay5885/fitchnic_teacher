@@ -39,6 +39,7 @@ const ROW_BG: Record<string, string> = {
   "컨펌 필요": "bg-yellow-50",
   "발송 예정": "bg-blue-50",
   "진행 중": "bg-indigo-50",
+  "미팅 완료": "bg-cyan-50",
   "계약 완료": "bg-green-50",
   제외: "bg-red-50",
   보류: "bg-orange-50",
