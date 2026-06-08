@@ -12,6 +12,7 @@ import BannedTab from "@/components/banned-tab";
 import MessagesTab from "@/components/messages-tab";
 import ActivityTab from "@/components/activity-tab";
 import ScheduleTab from "@/components/schedule-tab";
+import TimelineTab from "@/components/timeline-tab";
 
 function MainContent() {
   const { state } = useOutreach();
@@ -32,7 +33,7 @@ function MainContent() {
     <div className="min-h-screen bg-background">
       <NavHeader collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
       <main className={`p-6 transition-[margin] duration-200 ${sidebarCollapsed ? "ml-14" : "ml-52"}`}>
-        <div className={state.tab === "meeting" || state.tab === "schedule" || state.tab === "contact" || state.tab === "dashboard" ? "" : "max-w-7xl"}>
+        <div className={state.tab === "meeting" || state.tab === "schedule" || state.tab === "timeline" || state.tab === "contact" || state.tab === "dashboard" ? "" : "max-w-7xl"}>
           {state.tab === "dashboard" && <DashboardTab />}
           {state.tab === "instructors" && <InstructorsTab />}
           {state.tab === "contact" && <ContactTab />}
@@ -41,6 +42,7 @@ function MainContent() {
           {state.tab === "banned" && <BannedTab />}
           {state.tab === "messages" && <MessagesTab />}
           {state.tab === "schedule" && <ScheduleTab />}
+          {state.tab === "timeline" && <TimelineTab />}
           {state.tab === "activity" && <ActivityTab />}
         </div>
       </main>

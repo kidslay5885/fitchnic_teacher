@@ -73,6 +73,7 @@ export interface Instructor {
   lecture_appeal: string;
   sns_over_10k: string;
   meeting_type_override: boolean;
+  free_lecture_date: string;   // 무료강의일 (촬영/리허설/킥오프 등 모든 마일스톤 기준)
   created_at: string;
   updated_at: string;
 }
@@ -164,7 +165,8 @@ export type TabId =
   | "banned"
   | "messages"
   | "activity"
-  | "schedule";
+  | "schedule"
+  | "timeline";
 
 export interface InstructorWithWaves extends Instructor {
   waves: OutreachWave[];
