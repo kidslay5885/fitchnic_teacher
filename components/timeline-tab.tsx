@@ -91,11 +91,10 @@ export default function TimelineTab() {
   // 강사 변경 시 달력 위치 초기화
   useEffect(() => { setMonthOffset(0); }, [selectedId]);
 
-  // 선택 강사의 일정 → ISO별 이벤트 맵 + 킥오프 주간
-  const { eventsByIso, kickoffWeek, kickoffMonday } = useMemo(() => {
+  // 선택 강사의 일정 → ISO별 이벤트 맵 + 킥오프 주간(월~토)
+  const { eventsByIso, kickoffWeek } = useMemo(() => {
     const map: Record<string, DayEvent[]> = {};
     const week = new Set<string>();
-    let monday: string | null = null;
     if (selected) {
       const lecture = parseIso(selected.free_lecture_date);
       if (lecture) {
@@ -104,13 +103,12 @@ export default function TimelineTab() {
         };
         push(toIso(lecture), "무료강의", "강의");
         for (const m of MILESTONES) push(toIso(addDays(lecture, m.offsetDays)), m.label, m.kind);
-        // 킥오프 미팅 예정 주간: 무료강의일 8주 전이 속한 주(월~일)
+        // 킥오프 미팅 예정 주간: 무료강의일 8주 전이 속한 주의 월~토
         const mon = mondayOf(addDays(lecture, -56));
-        monday = toIso(mon);
-        for (let i = 0; i < 7; i++) week.add(toIso(addDays(mon, i)));
+        for (let i = 0; i < 6; i++) week.add(toIso(addDays(mon, i)));
       }
     }
-    return { eventsByIso: map, kickoffWeek: week, kickoffMonday: monday };
+    return { eventsByIso: map, kickoffWeek: week };
   }, [selected]);
 
   // 달력 기준월: 무료강의일이 있으면 강의월 -1 (전 일정 + 강의일이 함께 보이도록)
@@ -161,15 +159,16 @@ export default function TimelineTab() {
   };
 
   // 한 달 달력 렌더링
-  const renderCalendar = (monthDate: Date) => {
+  // fillLeading: 첫 주의 이전 달 날짜 채움 / fillTrailing: 마지막 주의 다음 달 날짜 채움
+  const renderCalendar = (monthDate: Date, fillLeading: boolean, fillTrailing: boolean) => {
     const year = monthDate.getFullYear();
     const month = monthDate.getMonth();
     const firstOffset = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const cells: (Date | null)[] = [];
-    for (let i = 0; i < firstOffset; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
-    while (cells.length < 42) cells.push(null);
+    // 표준 6주 그리드: 첫 주의 이전 달 날짜부터 채움 (킥오프 주간이 잘리지 않도록)
+    const firstCell = new Date(year, month, 1 - firstOffset);
+    const cells: Date[] = Array.from({ length: 42 }, (_, i) => addDays(firstCell, i));
+    const monthStart = new Date(year, month, 1).getTime();
+    const monthEnd = new Date(year, month + 1, 0).getTime();
 
     return (
       <div className="flex-1 min-w-0 border rounded-lg overflow-hidden flex flex-col">
@@ -187,41 +186,46 @@ export default function TimelineTab() {
           {Array.from({ length: 6 }, (_, week) => (
             <div key={week} className={`grid grid-cols-7 ${week < 5 ? "border-b" : ""}`}>
               {cells.slice(week * 7, week * 7 + 7).map((date, ci) => {
-                const iso = date ? toIso(date) : "";
-                const isToday = date?.toDateString() === now.toDateString();
-                const inKickoff = iso && kickoffWeek.has(iso);
-                const dayEvents = iso ? eventsByIso[iso] || [] : [];
+                const iso = toIso(date);
+                const t = date.getTime();
+                const inMonth = t >= monthStart && t <= monthEnd;
+                // 채우지 않을 인접 달 칸은 빈 칸으로 (두 달력 사이 중복 방지)
+                const hidden = (t < monthStart && !fillLeading) || (t > monthEnd && !fillTrailing);
+                const isToday = date.toDateString() === now.toDateString();
+                const inKickoff = !hidden && kickoffWeek.has(iso);
+                const dayEvents = hidden ? [] : eventsByIso[iso] || [];
+                if (hidden) {
+                  return <div key={ci} className={`p-1 overflow-hidden min-h-[64px] bg-gray-50/50 ${ci < 6 ? "border-r border-gray-200" : ""}`} />;
+                }
                 return (
                   <div
                     key={ci}
                     className={`p-1 overflow-hidden min-h-[64px] ${ci < 6 ? "border-r border-gray-200" : ""} ${
-                      !date ? "bg-gray-50/50" : inKickoff ? "bg-amber-50" : isToday ? "bg-primary/5" : "bg-white"
+                      inKickoff ? "bg-amber-50" : !inMonth ? "bg-gray-50/50" : isToday ? "bg-primary/5" : "bg-white"
                     }`}
                   >
-                    {date && (
-                      <>
-                        <div className={`text-[11px] mb-0.5 ${isToday ? "text-primary font-bold" : ci === 0 ? "text-red-400" : ci === 6 ? "text-blue-400" : "text-muted-foreground"}`}>
-                          {date.getDate()}
+                    <div className={`text-[11px] mb-0.5 ${
+                      !inMonth ? "text-gray-300" : isToday ? "text-primary font-bold" : ci === 0 ? "text-red-400" : ci === 6 ? "text-blue-400" : "text-muted-foreground"
+                    }`}>
+                      {date.getDate()}
+                    </div>
+                    <div className="space-y-0.5">
+                      {inKickoff && date.getDay() === 1 && (
+                        <div className="rounded px-1 py-0.5 text-[10px] border bg-amber-100 border-amber-300 text-amber-900 font-medium truncate" title="킥오프 미팅 예정 주간">
+                          킥오프 미팅 주간
                         </div>
-                        <div className="space-y-0.5">
-                          {iso === kickoffMonday && (
-                            <div className="rounded px-1 py-0.5 text-[10px] border bg-amber-100 border-amber-300 text-amber-900 font-medium truncate" title="킥오프 미팅 예정 주간">
-                              킥오프 미팅 주간
-                            </div>
-                          )}
-                          {dayEvents.map((ev, i) => (
-                            <div
-                              key={i}
-                              className={`rounded px-1 py-0.5 text-[10px] border truncate ${KIND_STYLE[ev.kind]}`}
-                              title={`${ev.label}${ev.kind !== "강의" ? ` ${ev.kind}` : ""}`}
-                            >
-                              {ev.kind === "강의" ? "🎤 " : ""}{ev.label}
-                              {ev.kind === "완료" && <span className="opacity-70"> 완료</span>}
-                            </div>
-                          ))}
+                      )}
+                      {dayEvents.map((ev, i) => (
+                        <div
+                          key={i}
+                          className={`rounded px-1 py-0.5 text-[10px] border truncate ${KIND_STYLE[ev.kind]}`}
+                          title={`${ev.label}${ev.kind !== "강의" ? ` ${ev.kind}` : ""}`}
+                        >
+                          {ev.kind === "강의" ? "🎤 " : ""}{ev.label}
+                          {ev.kind === "완료" && <span className="opacity-70"> 완료</span>}
                         </div>
-                      </>
-                    )}
+                      ))}
+                    </div>
                   </div>
                 );
               })}
@@ -335,8 +339,8 @@ export default function TimelineTab() {
         </div>
 
         <div className="flex-1 flex gap-3 min-h-0">
-          {renderCalendar(leftMonth)}
-          {renderCalendar(rightMonth)}
+          {renderCalendar(leftMonth, true, false)}
+          {renderCalendar(rightMonth, false, true)}
         </div>
       </div>
 
@@ -365,7 +369,11 @@ export default function TimelineTab() {
                   <p className="font-semibold text-muted-foreground mb-1.5">자동 계산 일정</p>
                   <div className="flex justify-between">
                     <span className="text-amber-700">킥오프 미팅 주간 (8주 전)</span>
-                    <span className="text-muted-foreground">{formatDate(toIso(mondayOf(addDays(parseIso(editing.lectureDate)!, -56))))} ~</span>
+                    <span className="text-muted-foreground">
+                      {formatDate(toIso(mondayOf(addDays(parseIso(editing.lectureDate)!, -56))))}
+                      {" ~ "}
+                      {formatDate(toIso(addDays(mondayOf(addDays(parseIso(editing.lectureDate)!, -56)), 5)))}
+                    </span>
                   </div>
                   {MILESTONES.map((m) => {
                     const d = addDays(parseIso(editing.lectureDate)!, m.offsetDays);
