@@ -278,7 +278,7 @@ function MonthlySummaryPanel({
                               : "bg-gray-100 text-gray-600",
                           )}
                         >
-                          {r.kind} 사람
+                          {r.kind === "할" ? "미팅예정" : "미팅완료"}
                         </span>
                       </td>
                       <td className="py-1.5 pr-3 font-medium text-primary hover:underline">{r.name}</td>
