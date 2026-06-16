@@ -179,7 +179,7 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
         이번 달 {summary.monthLabel}월 ({formatMdShort(summary.rangeStart)} ~{" "}
         {formatMdShort(summary.rangeEnd)})
       </p>
-      <div className="grid grid-cols-[200px_1fr] gap-3 items-start">
+      <div className="grid grid-cols-[200px_1fr] gap-3 items-stretch">
         {/* 좌측 메뉴 */}
         <div className="flex flex-col gap-2">
           {items.map((it) => {
@@ -203,8 +203,9 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
           })}
         </div>
 
-        {/* 우측 강사 리스트 */}
-        <div className="bg-white border rounded-xl p-4 min-h-[220px]">
+        {/* 우측 강사 리스트 — 좌측 메뉴 높이에 맞추고 넘치면 내부 스크롤 */}
+        <div className="relative bg-white border rounded-xl overflow-hidden">
+          <div className="absolute inset-0 overflow-y-auto p-4">
           {tab === "contacts" && (
             <table className="w-full text-sm">
               <thead>
@@ -290,6 +291,7 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
               </tbody>
             </table>
           )}
+          </div>
         </div>
       </div>
     </section>
