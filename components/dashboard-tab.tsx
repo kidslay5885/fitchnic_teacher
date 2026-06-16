@@ -38,18 +38,21 @@ interface MonthlyTrend {
 }
 
 interface ContactRow {
+  id: string;
   name: string;
   field: string;
   sentDate: string;
 }
 
 interface MeetingRow {
+  id: string;
   name: string;
   field: string;
   meetingDate: string;
 }
 
 interface ContractRow {
+  id: string;
   name: string;
   field: string;
 }
@@ -158,7 +161,15 @@ function EmptyRow({ colSpan }: { colSpan: number }) {
 }
 
 // 이번 달 요약: 좌측 메뉴(컨택/미팅/계약) + 우측 강사 리스트
-function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
+function MonthlySummaryPanel({
+  summary,
+  onContactClick,
+  onMeetingClick,
+}: {
+  summary: MonthlySummary;
+  onContactClick: (id: string) => void;
+  onMeetingClick: (id: string) => void;
+}) {
   const [tab, setTab] = useState<SummaryTab>("contacts");
 
   const meetingCount = summary.meetings.willMeet.length + summary.meetings.met.length;
@@ -221,8 +232,13 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
                   <EmptyRow colSpan={3} />
                 ) : (
                   summary.contacts.map((r, idx) => (
-                    <tr key={idx}>
-                      <td className="py-1.5 pr-3 font-medium">{r.name}</td>
+                    <tr
+                      key={idx}
+                      onClick={() => onContactClick(r.id)}
+                      className="cursor-pointer hover:bg-gray-50"
+                      title="컨택관리에서 보기"
+                    >
+                      <td className="py-1.5 pr-3 font-medium text-primary hover:underline">{r.name}</td>
                       <td className="py-1.5 pr-3"><FieldCell field={r.field} /></td>
                       <td className="py-1.5 text-muted-foreground">{formatMdShort(r.sentDate)}</td>
                     </tr>
@@ -247,7 +263,12 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
                   <EmptyRow colSpan={4} />
                 ) : (
                   meetingRows.map((r, idx) => (
-                    <tr key={idx}>
+                    <tr
+                      key={idx}
+                      onClick={() => onMeetingClick(r.id)}
+                      className="cursor-pointer hover:bg-gray-50"
+                      title="미팅관리에서 보기"
+                    >
                       <td className="py-1.5 pr-3">
                         <span
                           className={cn(
@@ -260,7 +281,7 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
                           {r.kind} 사람
                         </span>
                       </td>
-                      <td className="py-1.5 pr-3 font-medium">{r.name}</td>
+                      <td className="py-1.5 pr-3 font-medium text-primary hover:underline">{r.name}</td>
                       <td className="py-1.5 pr-3"><FieldCell field={r.field} /></td>
                       <td className="py-1.5 text-muted-foreground">{formatMdShort(r.meetingDate)}</td>
                     </tr>
@@ -283,8 +304,13 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
                   <EmptyRow colSpan={2} />
                 ) : (
                   summary.contracts.map((r, idx) => (
-                    <tr key={idx}>
-                      <td className="py-1.5 pr-3 font-medium">{r.name}</td>
+                    <tr
+                      key={idx}
+                      onClick={() => onMeetingClick(r.id)}
+                      className="cursor-pointer hover:bg-gray-50"
+                      title="미팅관리에서 보기"
+                    >
+                      <td className="py-1.5 pr-3 font-medium text-primary hover:underline">{r.name}</td>
                       <td className="py-1.5"><FieldCell field={r.field} /></td>
                     </tr>
                   ))
@@ -319,9 +345,19 @@ function ChangeIndicator({ thisVal, lastVal }: { thisVal: number; lastVal: numbe
 }
 
 export default function DashboardTab() {
-  const { state: { gmailHealth }, loadGmailHealth } = useOutreach();
+  const { state: { gmailHealth }, loadGmailHealth, dispatch } = useOutreach();
   const [data, setData] = useState<Overview | null>(null);
   const [reAuthing, setReAuthing] = useState(false);
+
+  // 리스트에서 강사 클릭 → 해당 관리 탭으로 이동 + 강사 행 스크롤·하이라이트
+  const goToContact = (id: string) => {
+    dispatch({ type: "SET_TAB", tab: "contact" });
+    dispatch({ type: "FOCUS_INSTRUCTOR", id });
+  };
+  const goToMeeting = (id: string) => {
+    dispatch({ type: "SET_TAB", tab: "meeting" });
+    dispatch({ type: "FOCUS_INSTRUCTOR", id });
+  };
 
   useEffect(() => {
     fetch("/api/dashboard/overview")
@@ -411,7 +447,13 @@ export default function DashboardTab() {
       </div>
 
       {/* 이번 달 요약: 컨택 / 미팅 / 계약 (1일 ~ 오늘) */}
-      {data && <MonthlySummaryPanel summary={data.monthlySummary} />}
+      {data && (
+        <MonthlySummaryPanel
+          summary={data.monthlySummary}
+          onContactClick={goToContact}
+          onMeetingClick={goToMeeting}
+        />
+      )}
 
       {/* 활동량: 오늘 / 이번 주 / 이번 달 / 누적 */}
       {data && (

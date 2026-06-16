@@ -82,6 +82,9 @@ export default function MeetingTab() {
   const [remindDone, setRemindDone] = useState(false);
   const [search, setSearch] = useState("");
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
+  // 대시보드 등 다른 탭에서 진입 시 특정 강사 행 스크롤·하이라이트
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
   // 강의현황(구글시트)에 있는 강사명 Set
   const [scheduleNames, setScheduleNames] = useState<Set<string>>(new Set());
@@ -140,6 +143,33 @@ export default function MeetingTab() {
       return i.has_response;
     });
   }, [state.instructors]);
+
+  // 다른 탭(대시보드 등)에서 강사 진입 시: 검색 초기화 → 해당 행 스크롤·하이라이트
+  useEffect(() => {
+    const focusId = state.focusInstructorId;
+    if (!focusId) return;
+    // 미팅관리 목록(respondedInstructors)에 없는 강사는 노출 불가 — 포커스만 해제
+    const exists = respondedInstructors.some((i) => i.id === focusId);
+    if (!exists) {
+      dispatch({ type: "FOCUS_INSTRUCTOR", id: null });
+      return;
+    }
+    // 검색으로 가려져 있으면 먼저 검색을 비우고 다음 렌더에서 다시 처리
+    if (search) {
+      setSearch("");
+      return;
+    }
+    rowRefs.current[focusId]?.scrollIntoView({ block: "center", behavior: "smooth" });
+    setHighlightedId(focusId);
+    dispatch({ type: "FOCUS_INSTRUCTOR", id: null });
+  }, [state.focusInstructorId, respondedInstructors, search, dispatch]);
+
+  // 하이라이트는 잠깐만 보였다가 사라지도록 자동 해제
+  useEffect(() => {
+    if (!highlightedId) return;
+    const t = setTimeout(() => setHighlightedId(null), 2500);
+    return () => clearTimeout(t);
+  }, [highlightedId]);
 
   // 검색 필터
   const filteredList = useMemo(() => {
@@ -378,7 +408,12 @@ export default function MeetingTab() {
 
   const renderRows = (list: Instructor[], showDate: boolean) =>
     list.map((i, idx) => (
-      <tr key={i.id} className={`border-b hover:bg-blue-50/40 cursor-pointer ${scheduleNames.has(i.name.trim()) ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`} onClick={() => openEdit(i)}>
+      <tr
+        key={i.id}
+        ref={(el) => { rowRefs.current[i.id] = el; }}
+        className={`border-b hover:bg-blue-50/40 cursor-pointer transition-colors ${highlightedId === i.id ? "bg-amber-100" : scheduleNames.has(i.name.trim()) ? "bg-red-50" : idx % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}
+        onClick={() => openEdit(i)}
+      >
         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">
           <span className="flex items-center gap-1">
             {i.name}
