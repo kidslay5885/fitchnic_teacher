@@ -5,6 +5,11 @@ function todayInKST(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 }
 
+// timestamptz → KST 기준 YYYY-MM-DD
+function kstDateStr(ts: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(ts));
+}
+
 function dateStrToDate(s: string): Date {
   return new Date(s + "T00:00:00Z");
 }
@@ -46,7 +51,7 @@ const PAGE = 1000;
 type SB = ReturnType<typeof getSupabase>;
 
 async function fetchAllInstructors(sb: SB) {
-  const cols = "id, status, source, meeting_date, meeting_confirmed, send_method";
+  const cols = "id, name, status, source, meeting_date, meeting_confirmed, send_method";
   const { data: firstPage, count, error } = await sb
     .from("instructors")
     .select(cols, { count: "exact" })
@@ -98,14 +103,28 @@ async function fetchAllWaves(sb: SB) {
   return all;
 }
 
+// 상태가 '계약 완료'로 바뀐 이력 (계약 완료 날짜 산출용)
+async function fetchContractHistory(sb: SB) {
+  const cols = "instructor_id, created_at";
+  const { data, error } = await sb
+    .from("status_history")
+    .select(cols)
+    .eq("to_status", "계약 완료")
+    .order("created_at", { ascending: true })
+    .range(0, PAGE - 1);
+  if (error) throw error;
+  return (data ?? []) as { instructor_id: string; created_at: string }[];
+}
+
 export async function GET() {
   const sb = getSupabase();
 
-  const [wavesData, ytRes, appRes, instructors] = await Promise.all([
+  const [wavesData, ytRes, appRes, instructors, contractHistory] = await Promise.all([
     fetchAllWaves(sb),
     sb.from("youtube_channels").select("status"),
     sb.from("applications").select("review_status"),
     fetchAllInstructors(sb),
+    fetchContractHistory(sb),
   ]);
 
   if (ytRes.error) return NextResponse.json({ error: ytRes.error.message }, { status: 500 });
@@ -121,6 +140,7 @@ export async function GET() {
   const appList = (appRes.data ?? []) as { review_status: string }[];
   const instrList = instructors as {
     id: string;
+    name: string;
     status: string;
     source: string;
     meeting_date: string | null;
@@ -404,7 +424,50 @@ export async function GET() {
     other: buildChannelWaves(channelStats.other, false),
   };
 
+  // === 이번 달 요약 (1일 ~ 오늘) ===
+  const thisMonthLastStr = dateToStr(addDays(thisMonthFirst, daysInMonth(thisMonthFirst) - 1));
+
+  // 컨택인원: 1차 발송(sent_date)이 이번 달 1일~오늘인 강사 수 (이번 달 첫 컨택)
+  let monthlyContacts = 0;
+  for (const w of waves) {
+    if (
+      w.wave_number === 1 &&
+      w.sent_date &&
+      w.sent_date >= thisMonthFirstStr &&
+      w.sent_date <= todayStr
+    ) {
+      monthlyContacts++;
+    }
+  }
+
+  // 미팅인원: meeting_date가 이번 달인 강사. 할 사람(미팅일 ≥ 오늘) / 한 사람(미팅일 < 오늘)
+  const meetingWillMeet: string[] = [];
+  const meetingMet: string[] = [];
+  for (const i of instrList) {
+    const md = (i.meeting_date || "").trim().slice(0, 10);
+    if (md && md >= thisMonthFirstStr && md <= thisMonthLastStr) {
+      if (md >= todayStr) meetingWillMeet.push(i.name);
+      else meetingMet.push(i.name);
+    }
+  }
+
+  // 계약인원: '계약 완료'로 전환된 created_at(KST)이 이번 달 1일~오늘인 강사 (중복 제거)
+  const monthlyContractedIds = new Set<string>();
+  for (const h of contractHistory) {
+    const d = kstDateStr(h.created_at);
+    if (d >= thisMonthFirstStr && d <= todayStr) monthlyContractedIds.add(h.instructor_id);
+  }
+  const monthlyContracts = monthlyContractedIds.size;
+
   return NextResponse.json({
+    monthlySummary: {
+      monthLabel: today.getUTCMonth() + 1,
+      rangeStart: thisMonthFirstStr,
+      rangeEnd: todayStr,
+      contacts: monthlyContacts,
+      meetings: { willMeet: meetingWillMeet, met: meetingMet },
+      contracts: monthlyContracts,
+    },
     firstSentDate,
     wavesSent,
     totalSent,

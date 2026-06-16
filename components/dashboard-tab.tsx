@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import WaveCumulativeAnalysis from "@/components/dashboard/wave-cumulative-analysis";
 import SendTrendChart from "@/components/dashboard/send-trend-chart";
 import ResponseRateChart from "@/components/dashboard/response-rate-chart";
-import { AlertTriangle, LogIn } from "lucide-react";
+import { AlertTriangle, LogIn, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useOutreach } from "@/hooks/use-outreach-store";
 
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
@@ -36,7 +37,17 @@ interface MonthlyTrend {
   monthLabel: number;
 }
 
+interface MonthlySummary {
+  monthLabel: number;
+  rangeStart: string;
+  rangeEnd: string;
+  contacts: number;
+  meetings: { willMeet: string[]; met: string[] };
+  contracts: number;
+}
+
 interface Overview {
+  monthlySummary: MonthlySummary;
   firstSentDate: string | null;
   wavesSent: Record<number, number>;
   totalSent: number;
@@ -106,6 +117,59 @@ function formatStartDate(iso: string) {
 function formatStartShort(iso: string) {
   const [, m, day] = iso.split("-");
   return `${parseInt(m, 10)}/${parseInt(day, 10)}`;
+}
+
+function formatMdShort(iso: string) {
+  const [, m, day] = iso.split("-");
+  return `${parseInt(m, 10)}/${parseInt(day, 10)}`;
+}
+
+// 미팅 강사명 리스트 팝오버 (할 사람 / 한 사람)
+function MeetingNamesPopover({ willMeet, met }: { willMeet: string[]; met: string[] }) {
+  const total = willMeet.length + met.length;
+  return (
+    <Popover>
+      <PopoverTrigger
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-default"
+        disabled={total === 0}
+      >
+        <Users className="h-3.5 w-3.5" />
+        강사명 보기
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64">
+        <div className="grid grid-cols-2 gap-3 divide-x">
+          <div>
+            <p className="text-xs font-semibold text-foreground mb-1.5">
+              할 사람 <span className="text-muted-foreground">({willMeet.length})</span>
+            </p>
+            {willMeet.length > 0 ? (
+              <ul className="space-y-0.5 text-sm max-h-60 overflow-y-auto">
+                {willMeet.map((n, idx) => (
+                  <li key={`w-${idx}`}>{n}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">없음</p>
+            )}
+          </div>
+          <div className="pl-3">
+            <p className="text-xs font-semibold text-foreground mb-1.5">
+              한 사람 <span className="text-muted-foreground">({met.length})</span>
+            </p>
+            {met.length > 0 ? (
+              <ul className="space-y-0.5 text-sm max-h-60 overflow-y-auto">
+                {met.map((n, idx) => (
+                  <li key={`m-${idx}`}>{n}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">없음</p>
+            )}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function ChangeIndicator({ thisVal, lastVal }: { thisVal: number; lastVal: number }) {
@@ -218,6 +282,57 @@ export default function DashboardTab() {
           </span>
         )}
       </div>
+
+      {/* 이번 달 요약: 컨택 / 미팅 / 계약 (1일 ~ 오늘) */}
+      {data && (
+        <section>
+          <p className="text-xs font-semibold text-muted-foreground mb-2 px-1">
+            이번 달 {data.monthlySummary.monthLabel}월 (
+            {formatMdShort(data.monthlySummary.rangeStart)} ~ {formatMdShort(data.monthlySummary.rangeEnd)})
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            {/* 컨택인원 */}
+            <div className="bg-white border rounded-xl p-4">
+              <p className="text-xs font-semibold text-foreground mb-2">컨택인원</p>
+              <p className="text-3xl font-bold leading-none mb-1.5">
+                {data.monthlySummary.contacts.toLocaleString()}
+                <span className="text-base font-medium text-muted-foreground ml-1">명</span>
+              </p>
+              <p className="text-xs text-muted-foreground">이번 달 첫 발송 기준</p>
+            </div>
+
+            {/* 미팅인원 */}
+            <div className="bg-white border rounded-xl p-4">
+              <p className="text-xs font-semibold text-foreground mb-2">미팅인원</p>
+              <p className="text-3xl font-bold leading-none mb-1.5">
+                {(data.monthlySummary.meetings.willMeet.length +
+                  data.monthlySummary.meetings.met.length).toLocaleString()}
+                <span className="text-base font-medium text-muted-foreground ml-1">명</span>
+              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  할 {data.monthlySummary.meetings.willMeet.length} · 한{" "}
+                  {data.monthlySummary.meetings.met.length}
+                </p>
+                <MeetingNamesPopover
+                  willMeet={data.monthlySummary.meetings.willMeet}
+                  met={data.monthlySummary.meetings.met}
+                />
+              </div>
+            </div>
+
+            {/* 계약인원 */}
+            <div className="bg-white border rounded-xl p-4">
+              <p className="text-xs font-semibold text-foreground mb-2">계약인원</p>
+              <p className="text-3xl font-bold leading-none mb-1.5 text-emerald-600">
+                {data.monthlySummary.contracts.toLocaleString()}
+                <span className="text-base font-medium text-muted-foreground ml-1">명</span>
+              </p>
+              <p className="text-xs text-muted-foreground">계약 완료 전환일 기준</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 활동량: 오늘 / 이번 주 / 이번 달 / 누적 */}
       {data && (
