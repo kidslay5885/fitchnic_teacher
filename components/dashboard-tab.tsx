@@ -179,9 +179,10 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
         이번 달 {summary.monthLabel}월 ({formatMdShort(summary.rangeStart)} ~{" "}
         {formatMdShort(summary.rangeEnd)})
       </p>
-      <div className="grid grid-cols-[200px_1fr] gap-3 items-stretch">
+      {/* 좌측 메뉴 + 우측 리스트를 하나의 카드로 묶음 */}
+      <div className="grid grid-cols-[200px_1fr] items-stretch divide-x bg-white border rounded-xl overflow-hidden">
         {/* 좌측 메뉴 */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col divide-y">
           {items.map((it) => {
             const active = tab === it.key;
             return (
@@ -189,8 +190,8 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
                 key={it.key}
                 onClick={() => setTab(it.key)}
                 className={cn(
-                  "text-left bg-white border rounded-xl p-4 transition-colors",
-                  active ? "border-foreground ring-1 ring-foreground" : "hover:border-foreground/40",
+                  "text-left p-4 transition-colors",
+                  active ? "bg-gray-100" : "hover:bg-gray-50",
                 )}
               >
                 <p className="text-xs font-semibold text-foreground mb-1.5">{it.label}</p>
@@ -204,7 +205,7 @@ function MonthlySummaryPanel({ summary }: { summary: MonthlySummary }) {
         </div>
 
         {/* 우측 강사 리스트 — 좌측 메뉴 높이에 맞추고 넘치면 내부 스크롤 */}
-        <div className="relative bg-white border rounded-xl overflow-hidden">
+        <div className="relative">
           <div className="absolute inset-0 overflow-y-auto p-4">
           {tab === "contacts" && (
             <table className="w-full text-sm">
