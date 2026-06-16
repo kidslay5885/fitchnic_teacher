@@ -51,7 +51,7 @@ const PAGE = 1000;
 type SB = ReturnType<typeof getSupabase>;
 
 async function fetchAllInstructors(sb: SB) {
-  const cols = "id, name, status, source, meeting_date, meeting_confirmed, send_method";
+  const cols = "id, name, field, status, source, meeting_date, meeting_confirmed, send_method";
   const { data: firstPage, count, error } = await sb
     .from("instructors")
     .select(cols, { count: "exact" })
@@ -141,6 +141,7 @@ export async function GET() {
   const instrList = instructors as {
     id: string;
     name: string;
+    field: string;
     status: string;
     source: string;
     meeting_date: string | null;
@@ -427,8 +428,12 @@ export async function GET() {
   // === 이번 달 요약 (1일 ~ 오늘) ===
   const thisMonthLastStr = dateToStr(addDays(thisMonthFirst, daysInMonth(thisMonthFirst) - 1));
 
-  // 컨택인원: 1차 발송(sent_date)이 이번 달 1일~오늘인 강사 수 (이번 달 첫 컨택)
-  let monthlyContacts = 0;
+  // 강사 ID → 이름/분야 매핑
+  const instrInfo = new Map<string, { name: string; field: string }>();
+  for (const i of instrList) instrInfo.set(i.id, { name: i.name, field: i.field || "" });
+
+  // 컨택인원: 1차 발송(sent_date)이 이번 달 1일~오늘인 강사 (이번 달 첫 컨택)
+  const monthlyContacts: { name: string; field: string; sentDate: string }[] = [];
   for (const w of waves) {
     if (
       w.wave_number === 1 &&
@@ -436,28 +441,37 @@ export async function GET() {
       w.sent_date >= thisMonthFirstStr &&
       w.sent_date <= todayStr
     ) {
-      monthlyContacts++;
+      const info = instrInfo.get(w.instructor_id);
+      if (info) monthlyContacts.push({ name: info.name, field: info.field, sentDate: w.sent_date });
     }
   }
+  monthlyContacts.sort((a, b) => a.sentDate.localeCompare(b.sentDate));
 
   // 미팅인원: meeting_date가 이번 달인 강사. 할 사람(미팅일 ≥ 오늘) / 한 사람(미팅일 < 오늘)
-  const meetingWillMeet: string[] = [];
-  const meetingMet: string[] = [];
+  const meetingWillMeet: { name: string; field: string; meetingDate: string }[] = [];
+  const meetingMet: { name: string; field: string; meetingDate: string }[] = [];
   for (const i of instrList) {
     const md = (i.meeting_date || "").trim().slice(0, 10);
     if (md && md >= thisMonthFirstStr && md <= thisMonthLastStr) {
-      if (md >= todayStr) meetingWillMeet.push(i.name);
-      else meetingMet.push(i.name);
+      const row = { name: i.name, field: i.field || "", meetingDate: md };
+      if (md >= todayStr) meetingWillMeet.push(row);
+      else meetingMet.push(row);
     }
   }
+  meetingWillMeet.sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
+  meetingMet.sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
 
   // 계약인원: '계약 완료'로 전환된 created_at(KST)이 이번 달 1일~오늘인 강사 (중복 제거)
   const monthlyContractedIds = new Set<string>();
+  const monthlyContracts: { name: string; field: string }[] = [];
   for (const h of contractHistory) {
     const d = kstDateStr(h.created_at);
-    if (d >= thisMonthFirstStr && d <= todayStr) monthlyContractedIds.add(h.instructor_id);
+    if (d >= thisMonthFirstStr && d <= todayStr && !monthlyContractedIds.has(h.instructor_id)) {
+      monthlyContractedIds.add(h.instructor_id);
+      const info = instrInfo.get(h.instructor_id);
+      if (info) monthlyContracts.push({ name: info.name, field: info.field });
+    }
   }
-  const monthlyContracts = monthlyContractedIds.size;
 
   return NextResponse.json({
     monthlySummary: {
