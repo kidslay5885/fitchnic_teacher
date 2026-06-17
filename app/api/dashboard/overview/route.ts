@@ -116,8 +116,13 @@ async function fetchContractHistory(sb: SB) {
   return (data ?? []) as { instructor_id: string; created_at: string }[];
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const sb = getSupabase();
+
+  // 이번 달 요약 기간(from/to) 쿼리 파라미터 — 없으면 이번 달 전체
+  const { searchParams } = new URL(request.url);
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
 
   const [wavesData, ytRes, appRes, instructors, contractHistory] = await Promise.all([
     fetchAllWaves(sb),
@@ -425,21 +430,27 @@ export async function GET() {
     other: buildChannelWaves(channelStats.other, false),
   };
 
-  // === 이번 달 요약 (1일 ~ 오늘) ===
+  // === 이번 달 요약 ===
   const thisMonthLastStr = dateToStr(addDays(thisMonthFirst, daysInMonth(thisMonthFirst) - 1));
+
+  // 요약 기간: from/to 파라미터 우선, 없으면 이번 달 전체(1일~말일)
+  const isIso = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  let sumFromStr = isIso(fromParam) ? fromParam : thisMonthFirstStr;
+  let sumToStr = isIso(toParam) ? toParam : thisMonthLastStr;
+  if (sumFromStr > sumToStr) [sumFromStr, sumToStr] = [sumToStr, sumFromStr];
 
   // 강사 ID → 이름/분야 매핑
   const instrInfo = new Map<string, { name: string; field: string }>();
   for (const i of instrList) instrInfo.set(i.id, { name: i.name, field: i.field || "" });
 
-  // 컨택인원: 1차 발송(sent_date)이 이번 달 1일~오늘인 강사 (이번 달 첫 컨택)
+  // 컨택인원: 1차 발송(sent_date)이 기간 내인 강사 (해당 기간 첫 컨택)
   const monthlyContacts: { id: string; name: string; field: string; sentDate: string }[] = [];
   for (const w of waves) {
     if (
       w.wave_number === 1 &&
       w.sent_date &&
-      w.sent_date >= thisMonthFirstStr &&
-      w.sent_date <= todayStr
+      w.sent_date >= sumFromStr &&
+      w.sent_date <= sumToStr
     ) {
       const info = instrInfo.get(w.instructor_id);
       if (info)
@@ -453,12 +464,12 @@ export async function GET() {
   }
   monthlyContacts.sort((a, b) => a.sentDate.localeCompare(b.sentDate));
 
-  // 미팅인원: meeting_date가 이번 달인 강사. 할 사람(미팅일 ≥ 오늘) / 한 사람(미팅일 < 오늘)
+  // 미팅인원: meeting_date가 기간 내인 강사. 미팅예정(미팅일 ≥ 오늘) / 미팅완료(미팅일 < 오늘)
   const meetingWillMeet: { id: string; name: string; field: string; meetingDate: string }[] = [];
   const meetingMet: { id: string; name: string; field: string; meetingDate: string }[] = [];
   for (const i of instrList) {
     const md = (i.meeting_date || "").trim().slice(0, 10);
-    if (md && md >= thisMonthFirstStr && md <= thisMonthLastStr) {
+    if (md && md >= sumFromStr && md <= sumToStr) {
       const row = { id: i.id, name: i.name, field: i.field || "", meetingDate: md };
       if (md >= todayStr) meetingWillMeet.push(row);
       else meetingMet.push(row);
@@ -472,7 +483,7 @@ export async function GET() {
   const monthlyContracts: { id: string; name: string; field: string }[] = [];
   for (const h of contractHistory) {
     const d = kstDateStr(h.created_at);
-    if (d >= thisMonthFirstStr && d <= todayStr && !monthlyContractedIds.has(h.instructor_id)) {
+    if (d >= sumFromStr && d <= sumToStr && !monthlyContractedIds.has(h.instructor_id)) {
       monthlyContractedIds.add(h.instructor_id);
       const info = instrInfo.get(h.instructor_id);
       if (info) monthlyContracts.push({ id: h.instructor_id, name: info.name, field: info.field });
@@ -481,9 +492,9 @@ export async function GET() {
 
   return NextResponse.json({
     monthlySummary: {
-      monthLabel: today.getUTCMonth() + 1,
-      rangeStart: thisMonthFirstStr,
-      rangeEnd: todayStr,
+      monthLabel: parseInt(sumFromStr.slice(5, 7), 10),
+      rangeStart: sumFromStr,
+      rangeEnd: sumToStr,
       contacts: monthlyContacts,
       meetings: { willMeet: meetingWillMeet, met: meetingMet },
       contracts: monthlyContracts,

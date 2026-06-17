@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import WaveCumulativeAnalysis from "@/components/dashboard/wave-cumulative-analysis";
 import SendTrendChart from "@/components/dashboard/send-trend-chart";
 import ResponseRateChart from "@/components/dashboard/response-rate-chart";
-import { AlertTriangle, LogIn } from "lucide-react";
+import { AlertTriangle, LogIn, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useOutreach } from "@/hooks/use-outreach-store";
@@ -144,6 +144,32 @@ function formatMdShort(iso: string) {
   return `${parseInt(m, 10)}/${parseInt(day, 10)}`;
 }
 
+// 기간(range) 헬퍼
+interface DateRange {
+  from: string; // YYYY-MM-DD
+  to: string; // YYYY-MM-DD
+}
+const pad2 = (n: number) => String(n).padStart(2, "0");
+function monthRangeOf(year: number, month0: number): DateRange {
+  const last = new Date(year, month0 + 1, 0).getDate();
+  return { from: `${year}-${pad2(month0 + 1)}-01`, to: `${year}-${pad2(month0 + 1)}-${pad2(last)}` };
+}
+function currentMonthRange(): DateRange {
+  const d = new Date();
+  return monthRangeOf(d.getFullYear(), d.getMonth());
+}
+// from이 1일이고 to가 같은 달 말일이면 "월 단위" 모드
+function isFullMonth({ from, to }: DateRange): boolean {
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const [ty, tm, td] = to.split("-").map(Number);
+  if (fd !== 1 || fy !== ty || fm !== tm) return false;
+  return td === new Date(ty, tm, 0).getDate();
+}
+function formatYmd(iso: string) {
+  const [y, m, d] = iso.split("-");
+  return `${y}/${parseInt(m, 10)}/${parseInt(d, 10)}`;
+}
+
 type SummaryTab = "contacts" | "meetings" | "contracts";
 
 function FieldCell({ field }: { field: string }) {
@@ -163,10 +189,14 @@ function EmptyRow({ colSpan }: { colSpan: number }) {
 // 이번 달 요약: 좌측 메뉴(컨택/미팅/계약) + 우측 강사 리스트
 function MonthlySummaryPanel({
   summary,
+  range,
+  onRangeChange,
   onContactClick,
   onMeetingClick,
 }: {
   summary: MonthlySummary;
+  range: DateRange;
+  onRangeChange: (r: DateRange) => void;
   onContactClick: (id: string) => void;
   onMeetingClick: (id: string) => void;
 }) {
@@ -184,12 +214,67 @@ function MonthlySummaryPanel({
     { key: "contracts", label: "계약인원", count: summary.contracts.length, accent: "text-emerald-600" },
   ];
 
+  // 기간 표시·이동
+  const monthMode = isFullMonth(range);
+  const [fy, fm] = range.from.split("-").map(Number); // 표시 기준 연·월(1-based)
+  const cur = currentMonthRange();
+  const isCurrentMonthOrLater = range.from >= cur.from; // 다음 달 이동 제한용
+  const shiftMonth = (delta: number) => {
+    const d = new Date(fy, fm - 1 + delta, 1);
+    onRangeChange(monthRangeOf(d.getFullYear(), d.getMonth()));
+  };
+
   return (
     <section>
-      <p className="text-xs font-semibold text-muted-foreground mb-2 px-1">
-        이번 달 {summary.monthLabel}월 ({formatMdShort(summary.rangeStart)} ~{" "}
-        {formatMdShort(summary.rangeEnd)})
-      </p>
+      {/* 기간 선택: 월 이동 + 커스텀 날짜 범위 */}
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2 px-1">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => shiftMonth(-1)}
+            className="p-1 rounded hover:bg-gray-100 text-muted-foreground"
+            title="이전 달"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-semibold min-w-[120px] text-center">
+            {monthMode ? `${fy}년 ${fm}월` : `${formatYmd(range.from)} ~ ${formatYmd(range.to)}`}
+          </span>
+          <button
+            onClick={() => shiftMonth(1)}
+            disabled={isCurrentMonthOrLater}
+            className="p-1 rounded hover:bg-gray-100 text-muted-foreground disabled:opacity-30 disabled:hover:bg-transparent"
+            title="다음 달"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          {!monthMode && (
+            <button
+              onClick={() => onRangeChange(currentMonthRange())}
+              className="ml-1 text-xs text-primary hover:underline"
+            >
+              이번 달
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <CalendarDays className="h-3.5 w-3.5" />
+          <input
+            type="date"
+            value={range.from}
+            max={range.to}
+            onChange={(e) => e.target.value && onRangeChange({ from: e.target.value, to: range.to })}
+            className="border rounded px-1.5 py-0.5 text-foreground"
+          />
+          <span>~</span>
+          <input
+            type="date"
+            value={range.to}
+            min={range.from}
+            onChange={(e) => e.target.value && onRangeChange({ from: range.from, to: e.target.value })}
+            className="border rounded px-1.5 py-0.5 text-foreground"
+          />
+        </div>
+      </div>
       {/* 좌측 메뉴 + 우측 리스트를 하나의 카드로 묶음 */}
       <div className="grid grid-cols-[200px_1fr] items-stretch divide-x bg-white border rounded-xl overflow-hidden">
         {/* 좌측 메뉴 */}
@@ -348,6 +433,8 @@ export default function DashboardTab() {
   const { state: { gmailHealth }, loadGmailHealth, dispatch } = useOutreach();
   const [data, setData] = useState<Overview | null>(null);
   const [reAuthing, setReAuthing] = useState(false);
+  // 이번 달 요약 기간 (기본: 이번 달 전체)
+  const [range, setRange] = useState<DateRange>(() => currentMonthRange());
 
   // 리스트에서 강사 클릭 → 해당 관리 탭으로 이동 + 강사 행 스크롤·하이라이트
   const goToContact = (id: string) => {
@@ -360,11 +447,11 @@ export default function DashboardTab() {
   };
 
   useEffect(() => {
-    fetch("/api/dashboard/overview")
+    fetch(`/api/dashboard/overview?from=${range.from}&to=${range.to}`)
       .then((r) => r.json())
       .then((d) => setData(d))
       .catch(() => {});
-  }, []);
+  }, [range]);
 
   // Gmail 재인증 콜백에서 ?gmail_reauthed=1 로 돌아온 직후 즉시 재핑 + URL 정리
   useEffect(() => {
@@ -450,6 +537,8 @@ export default function DashboardTab() {
       {data && (
         <MonthlySummaryPanel
           summary={data.monthlySummary}
+          range={range}
+          onRangeChange={setRange}
           onContactClick={goToContact}
           onMeetingClick={goToMeeting}
         />
