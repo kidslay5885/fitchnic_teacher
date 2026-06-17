@@ -103,17 +103,22 @@ async function fetchAllWaves(sb: SB) {
   return all;
 }
 
-// 상태가 '계약 완료'로 바뀐 이력 (계약 완료 날짜 산출용)
+// '계약 완료'로 진입(to)하거나 이탈(from)한 상태 이력 (계약 완료 날짜·되돌림 판정용)
 async function fetchContractHistory(sb: SB) {
-  const cols = "instructor_id, created_at";
+  const cols = "instructor_id, from_status, to_status, created_at";
   const { data, error } = await sb
     .from("status_history")
     .select(cols)
-    .eq("to_status", "계약 완료")
+    .or("to_status.eq.계약 완료,from_status.eq.계약 완료")
     .order("created_at", { ascending: true })
     .range(0, PAGE - 1);
   if (error) throw error;
-  return (data ?? []) as { instructor_id: string; created_at: string }[];
+  return (data ?? []) as {
+    instructor_id: string;
+    from_status: string;
+    to_status: string;
+    created_at: string;
+  }[];
 }
 
 export async function GET(request: Request) {
@@ -478,16 +483,21 @@ export async function GET(request: Request) {
   meetingWillMeet.sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
   meetingMet.sort((a, b) => a.meetingDate.localeCompare(b.meetingDate));
 
-  // 계약인원: '계약 완료'로 전환된 created_at(KST)이 이번 달 1일~오늘인 강사 (중복 제거)
-  const monthlyContractedIds = new Set<string>();
-  const monthlyContracts: { id: string; name: string; field: string }[] = [];
+  // 계약인원: 기간 내 '계약 완료'로 전환됐고, 같은 기간 내에 '계약 완료'에서 빠져나간 이력이 없는 강사
+  // (같은 기간에 계약완료 진입+이탈이 모두 있으면 오클릭 등으로 보고 제외)
+  const enteredContractIds = new Set<string>(); // 기간 내 → 계약 완료
+  const leftContractIds = new Set<string>(); // 기간 내 계약 완료 →
   for (const h of contractHistory) {
     const d = kstDateStr(h.created_at);
-    if (d >= sumFromStr && d <= sumToStr && !monthlyContractedIds.has(h.instructor_id)) {
-      monthlyContractedIds.add(h.instructor_id);
-      const info = instrInfo.get(h.instructor_id);
-      if (info) monthlyContracts.push({ id: h.instructor_id, name: info.name, field: info.field });
-    }
+    if (d < sumFromStr || d > sumToStr) continue;
+    if (h.to_status === "계약 완료") enteredContractIds.add(h.instructor_id);
+    if (h.from_status === "계약 완료") leftContractIds.add(h.instructor_id);
+  }
+  const monthlyContracts: { id: string; name: string; field: string }[] = [];
+  for (const id of enteredContractIds) {
+    if (leftContractIds.has(id)) continue; // 같은 기간 내 이탈 → 제외
+    const info = instrInfo.get(id);
+    if (info) monthlyContracts.push({ id, name: info.name, field: info.field });
   }
 
   return NextResponse.json({
