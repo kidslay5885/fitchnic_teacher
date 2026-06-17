@@ -613,10 +613,10 @@ export default function MeetingTab() {
                                 className={`w-full text-left rounded px-1.5 py-0.5 text-[11px] transition-colors truncate border ${
                                   mt.remind_done
                                     ? "bg-green-50 border-green-200 hover:bg-green-100"
-                                    : "bg-orange-100 border-orange-200 hover:bg-orange-200"
+                                    : "bg-slate-200 border-slate-400 hover:bg-slate-300"
                                 }`}
                               >
-                                <span className={`font-medium ${mt.remind_done ? "text-green-700 line-through" : "text-orange-800"}`}>
+                                <span className={`font-medium ${mt.remind_done ? "text-green-700 line-through" : "text-slate-700"}`}>
                                   {mt.remind_done ? "✓" : "📞"} {mt.name}
                                 </span>
                               </button>
