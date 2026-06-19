@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { Search, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Pencil, Mail, Calendar as CalendarIcon } from "lucide-react";
 import * as XLSX from "xlsx";
 
-const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "계약 완료"];
+const CONTACT_STATUSES: InstructorStatus[] = ["발송 예정", "진행 중", "보류", "미팅 완료", "계약 완료"];
 const FINAL_STATUSES = ["진행 중", "미팅 완료", "계약 완료", "보류", "거절"] as const;
 type ViewFilter = "all" | "no_preinfo" | "check_needed" | InstructorStatus;
 type SortKey = "name" | "status" | "field" | "email" | "wave1_date" | "wave2_date" | "wave3_date";
@@ -620,6 +620,7 @@ export default function ContactTab() {
             { key: "발송 예정" as ViewFilter, label: `발송 예정 (${cnt("발송 예정")})`, active: "bg-blue-200 text-blue-900 border-blue-400", idle: "bg-blue-50 text-blue-700 border-blue-200" },
             { key: "진행 중" as ViewFilter, label: `진행 중 (${cnt("진행 중")})`, active: "bg-indigo-200 text-indigo-900 border-indigo-400", idle: "bg-indigo-50 text-indigo-700 border-indigo-200" },
             { key: "보류" as ViewFilter, label: `보류 (${cnt("보류")})`, active: "bg-orange-200 text-orange-900 border-orange-400", idle: "bg-orange-50 text-orange-700 border-orange-200" },
+            { key: "미팅 완료" as ViewFilter, label: `미팅 완료 (${cnt("미팅 완료")})`, active: "bg-cyan-200 text-cyan-900 border-cyan-400", idle: "bg-cyan-50 text-cyan-700 border-cyan-200" },
             { key: "계약 완료" as ViewFilter, label: `계약 완료 (${cnt("계약 완료")})`, active: "bg-green-200 text-green-900 border-green-400", idle: "bg-green-50 text-green-700 border-green-200" },
             ...(checkNeededIds.size > 0 ? [{ key: "check_needed" as ViewFilter, label: `체크필요 (${checkNeededIds.size})`, active: "bg-amber-200 text-amber-900 border-amber-400", idle: "bg-amber-50 text-amber-700 border-amber-200" }] : []),
             ...(noPreInfoCount > 0 ? [{ key: "no_preinfo" as ViewFilter, label: `사전 정보 미입력 (${noPreInfoCount})`, active: "bg-red-200 text-red-900 border-red-400", idle: "bg-red-50 text-red-700 border-red-200" }] : []),
