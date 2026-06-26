@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { getSupabase } from "@/lib/supabase";
+import { BUSINESS_CARD_ATTACHMENT } from "@/lib/business-card";
 
 // Gmail API 발송 헬퍼 (다중 계정 지원)
 // gmail_accounts 테이블에서 계정별 refresh_token 을 불러와 OAuth 클라이언트를 만든다.
@@ -119,6 +120,23 @@ function formatAddress(email: string, name?: string) {
   return `${encodeHeader(name)} <${email}>`;
 }
 
+// 첨부파일. base64 는 줄바꿈 없는 원본 base64 (인코딩은 buildRawMessage 가 처리).
+export interface EmailAttachment {
+  filename: string;
+  mimeType: string;
+  base64: string;
+}
+
+// MIME 본문 규격(RFC 2045)상 base64 는 76자마다 줄바꿈. 첨부 파트용.
+function wrapBase64(b64: string) {
+  return b64.replace(/.{76}/g, "$&\r\n");
+}
+
+// 한글 파일명을 RFC 2231 형식으로 인코딩 (filename*=UTF-8''...)
+function encodeFilename(name: string) {
+  return `UTF-8''${encodeURIComponent(name)}`;
+}
+
 function buildRawMessage(
   fromEmail: string,
   fromName: string,
@@ -127,8 +145,9 @@ function buildRawMessage(
   body: string,
   toName?: string,
   bcc?: string[],
+  attachments?: EmailAttachment[],
 ) {
-  const boundary = `fitchnic_${Math.random().toString(36).slice(2)}`;
+  const altBoundary = `fitchnic_alt_${Math.random().toString(36).slice(2)}`;
   const headers = [
     `From: ${formatAddress(fromEmail, fromName)}`,
     `To: ${formatAddress(to, toName)}`,
@@ -137,25 +156,54 @@ function buildRawMessage(
     headers.push(`Bcc: ${bcc.join(", ")}`);
   }
   headers.push(`Subject: ${encodeHeader(subject)}`);
-  const lines = [
-    ...headers,
-    "MIME-Version: 1.0",
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+
+  // 본문(plain + html)을 묶는 multipart/alternative 블록
+  const altPart = [
+    `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
     "",
-    `--${boundary}`,
+    `--${altBoundary}`,
     "Content-Type: text/plain; charset=UTF-8",
     "Content-Transfer-Encoding: base64",
     "",
     Buffer.from(body, "utf8").toString("base64"),
     "",
-    `--${boundary}`,
+    `--${altBoundary}`,
     "Content-Type: text/html; charset=UTF-8",
     "Content-Transfer-Encoding: base64",
     "",
     Buffer.from(`<div style="white-space:pre-wrap;font-family:Malgun Gothic,Apple SD Gothic Neo,sans-serif;font-size:14px;line-height:1.7;color:#222">${toHtml(body)}</div>`, "utf8").toString("base64"),
     "",
-    `--${boundary}--`,
+    `--${altBoundary}--`,
   ];
+
+  let lines: string[];
+  if (attachments && attachments.length > 0) {
+    // 첨부가 있으면 multipart/mixed 로 본문 블록 + 첨부 파트를 감싼다
+    const mixedBoundary = `fitchnic_mix_${Math.random().toString(36).slice(2)}`;
+    lines = [
+      ...headers,
+      "MIME-Version: 1.0",
+      `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
+      "",
+      `--${mixedBoundary}`,
+      ...altPart,
+    ];
+    for (const att of attachments) {
+      lines.push(
+        `--${mixedBoundary}`,
+        `Content-Type: ${att.mimeType}; name="${encodeHeader(att.filename)}"`,
+        "Content-Transfer-Encoding: base64",
+        `Content-Disposition: attachment; filename*=${encodeFilename(att.filename)}`,
+        "",
+        wrapBase64(att.base64),
+        "",
+      );
+    }
+    lines.push(`--${mixedBoundary}--`);
+  } else {
+    lines = [...headers, "MIME-Version: 1.0", ...altPart];
+  }
+
   const raw = lines.join("\r\n");
   // base64url
   return Buffer.from(raw, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -177,6 +225,12 @@ export interface SendEmailResult {
   senderEmail: string;
 }
 
+// 콘텐츠개발팀 이메일(팀메일) 계정 판별 — local part 가 business.center
+// (messages-tab.tsx 의 발신 계정 색 분기와 동일 기준)
+function isTeamAccount(email: string) {
+  return email.split("@")[0] === "business.center";
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -188,6 +242,8 @@ export async function sendEmail({
   const account = senderAccount ?? (await getAccount(senderAccountId));
   const auth = await getClient(account);
   const gmail = google.gmail({ version: "v1", auth });
+  // 팀메일 계정으로 나가는 메일에는 명함을 자동 첨부 (크론·수동 발송 공통)
+  const attachments = isTeamAccount(account.email) ? [BUSINESS_CARD_ATTACHMENT] : undefined;
   const raw = buildRawMessage(
     account.email,
     account.label,
@@ -196,6 +252,7 @@ export async function sendEmail({
     body,
     toName,
     account.bcc,
+    attachments,
   );
   const res = await gmail.users.messages.send({
     userId: "me",
