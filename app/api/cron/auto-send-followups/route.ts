@@ -80,7 +80,7 @@ async function isHolidayKST(date: Date): Promise<boolean> {
 // 자동 발송 조건:
 //  - 직전 차수 result='체크필요' & sent_date ≤ 7일 전
 //  - 직전 차수 sender_account_id = is_cron_sender 계정 (대표·팀메일 등 자동 발송 계정)
-//  - 강사 status='진행 중', send_method='이메일', email 존재, is_banned=false
+//  - 강사 status='진행 중', send_method='이메일', email 존재 (연락 금지 강사도 발송, 로그에 [금지] 표기)
 //  - 현재 차수 발송 기록 없음
 //  - 3차의 경우, 1차 기록이 존재하면 1차 result='무응답'이어야 함
 //  - 한국 공휴일(빨간날)에는 발송 스킵 (다음 평일에 자동 회수됨)
@@ -228,10 +228,7 @@ export async function GET(req: Request) {
       };
 
       for (const inst of instructors) {
-        if (inst.is_banned) {
-          await recordSkip(inst, "연락 금지");
-          continue;
-        }
+        // 연락 금지 강사도 상태/조건이 맞으면 자동 발송 (추적용으로 로그에 [금지] 표기)
         if (inst.status !== "진행 중") {
           await recordSkip(inst, `상태 ${inst.status ?? "(없음)"}`);
           continue;
@@ -297,7 +294,7 @@ export async function GET(req: Request) {
             targetType: "instructor",
             targetId: inst.id,
             targetName: inst.name,
-            detail: `${waveNumber}차 자동발송(크론) → ${inst.email} (${cronSender.email})`,
+            detail: `${waveNumber}차 자동발송(크론)${inst.is_banned ? " [금지]" : ""} → ${inst.email} (${cronSender.email})`,
             performedBy: "system:cron",
           });
 
