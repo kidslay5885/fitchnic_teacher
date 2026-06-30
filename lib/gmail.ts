@@ -225,6 +225,11 @@ export interface SendEmailResult {
   senderEmail: string;
 }
 
+// 팀메일 명함 자동 첨부 ON/OFF 토글.
+// 현재 명함 이미지가 교체 예정(잘못된 이미지)이라 false 로 비활성화.
+// 새 이미지로 business-card.ts 교체 후 true 로 바꾸면 다시 첨부된다.
+const ATTACH_BUSINESS_CARD = false;
+
 // 콘텐츠개발팀 이메일(팀메일) 계정 판별 — local part 가 business.center
 // (messages-tab.tsx 의 발신 계정 색 분기와 동일 기준)
 function isTeamAccount(email: string) {
@@ -243,7 +248,9 @@ export async function sendEmail({
   const auth = await getClient(account);
   const gmail = google.gmail({ version: "v1", auth });
   // 팀메일 계정으로 나가는 메일에는 명함을 자동 첨부 (크론·수동 발송 공통)
-  const attachments = isTeamAccount(account.email) ? [BUSINESS_CARD_ATTACHMENT] : undefined;
+  // ATTACH_BUSINESS_CARD 가 false 면 첨부 비활성화
+  const attachments =
+    ATTACH_BUSINESS_CARD && isTeamAccount(account.email) ? [BUSINESS_CARD_ATTACHMENT] : undefined;
   const raw = buildRawMessage(
     account.email,
     account.label,
