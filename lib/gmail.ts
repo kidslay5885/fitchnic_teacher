@@ -75,16 +75,21 @@ async function getAccount(accountId?: string | null): Promise<GmailAccount> {
   return normalizeAccount(data);
 }
 
-export async function getCronSenderAccount(): Promise<GmailAccount> {
+// 자동 후속 발송(2·3차) 대상 계정 전부 조회.
+// is_cron_sender=true 인 계정이 여러 개일 수 있으며(대표·팀메일 등),
+// 각 계정은 자기 계정으로 1차를 보낸 강사에게만 후속 발송한다.
+export async function getCronSenderAccounts(): Promise<GmailAccount[]> {
   const sb = getSupabase();
   const { data, error } = await sb
     .from("gmail_accounts")
     .select(ACCOUNT_COLUMNS)
     .eq("is_cron_sender", true)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
   if (error) throw new Error(`크론 발송 계정 조회 실패: ${error.message}`);
-  if (!data) throw new Error("is_cron_sender=true 인 Gmail 계정이 없습니다.");
-  return normalizeAccount(data);
+  if (!data || data.length === 0) {
+    throw new Error("is_cron_sender=true 인 Gmail 계정이 없습니다.");
+  }
+  return data.map(normalizeAccount);
 }
 
 async function getClient(account: GmailAccount) {

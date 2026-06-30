@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
-import { renderTemplate, sendEmail, getCronSenderAccount } from "@/lib/gmail";
+import { renderTemplate, sendEmail, getCronSenderAccounts, type GmailAccount } from "@/lib/gmail";
 import { classifyGmailError, sendDiscordAlert } from "@/lib/discord";
 
 export const runtime = "nodejs";
@@ -14,12 +14,16 @@ type WaveSummary = {
   error?: string;
 };
 
-type Summary = {
-  scheduled_at: string;
+type AccountSummary = {
   sender_email: string;
   wave2: WaveSummary;
   wave3: WaveSummary;
   aborted?: string;
+};
+
+type Summary = {
+  scheduled_at: string;
+  accounts: AccountSummary[];
 };
 
 // 한국 공휴일(빨간날) 판별 — 한국천문연구원 특일정보 API
@@ -75,11 +79,14 @@ async function isHolidayKST(date: Date): Promise<boolean> {
 // Cron: 매일 KST 10:06 (UTC 01:06)
 // 자동 발송 조건:
 //  - 직전 차수 result='체크필요' & sent_date ≤ 7일 전
-//  - 직전 차수 sender_account_id = is_cron_sender 계정 (= ceo)
+//  - 직전 차수 sender_account_id = is_cron_sender 계정 (대표·팀메일 등 자동 발송 계정)
 //  - 강사 status='진행 중', send_method='이메일', email 존재, is_banned=false
 //  - 현재 차수 발송 기록 없음
 //  - 3차의 경우, 1차 기록이 존재하면 1차 result='무응답'이어야 함
 //  - 한국 공휴일(빨간날)에는 발송 스킵 (다음 평일에 자동 회수됨)
+//
+// is_cron_sender 계정이 여러 개일 수 있다(대표·팀메일 등). 계정별로 독립 처리하며,
+// 각 계정은 "자기 계정으로 1차를 보낸 강사"에게만 후속(2·3차)을 발송한다.
 export async function GET(req: Request) {
   const auth = req.headers.get("authorization");
   if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -89,10 +96,10 @@ export async function GET(req: Request) {
   const sb = getSupabase();
   const now = new Date();
 
-  // 크론 전용 발송 계정 (is_cron_sender=true) — 없으면 즉시 중단
-  let cronSender;
+  // 자동 후속 발송 대상 계정 전부 (is_cron_sender=true) — 없으면 즉시 중단
+  let cronSenders: GmailAccount[];
   try {
-    cronSender = await getCronSenderAccount();
+    cronSenders = await getCronSenderAccounts();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await sendDiscordAlert({
@@ -101,15 +108,6 @@ export async function GET(req: Request) {
       description: msg,
     });
     return NextResponse.json({ error: msg }, { status: 500 });
-  }
-
-  if (!cronSender.refresh_token) {
-    await sendDiscordAlert({
-      title: "크론 발송 계정 인증 만료",
-      level: "error",
-      description: `${cronSender.email} 의 refresh_token 이 비어 있습니다 — 발송 모달에서 재인증하세요.`,
-    });
-    return NextResponse.json({ error: `${cronSender.email} 인증 필요` }, { status: 500 });
   }
 
   if (await isHolidayKST(now)) {
@@ -130,210 +128,242 @@ export async function GET(req: Request) {
 
   const summary: Summary = {
     scheduled_at: now.toISOString(),
-    sender_email: cronSender.email,
-    wave2: { sent: [], skipped: [], failed: [] },
-    wave3: { sent: [], skipped: [], failed: [] },
+    accounts: [],
   };
 
-  for (const waveNumber of [2, 3] as const) {
-    const key = `wave${waveNumber}` as "wave2" | "wave3";
-    const prevWave = waveNumber - 1;
+  // 계정별로 독립 처리 — 한 계정의 토큰 만료/한도 초과는 그 계정만 중단하고 다음 계정 진행
+  for (const cronSender of cronSenders) {
+    const acc: AccountSummary = {
+      sender_email: cronSender.email,
+      wave2: { sent: [], skipped: [], failed: [] },
+      wave3: { sent: [], skipped: [], failed: [] },
+    };
+    summary.accounts.push(acc);
 
-    // 템플릿 조회 — cron 계정 전용 우선, 없으면 공용 fallback
-    const { data: templates } = await sb
-      .from("message_templates")
-      .select("*")
-      .eq("channel", "이메일")
-      .eq("variant_label", `${waveNumber}차`)
-      .or(`sender_account_id.eq.${cronSender.id},sender_account_id.is.null`);
-    const template =
-      templates?.find((t) => t.sender_account_id === cronSender.id) ??
-      templates?.find((t) => t.sender_account_id === null) ??
-      null;
-    if (!template) {
-      summary[key].error = `${waveNumber}차 이메일 템플릿 없음 (계정: ${cronSender.email})`;
+    // 인증 만료 계정은 경고 후 스킵 (다른 계정은 계속 진행)
+    if (!cronSender.refresh_token) {
+      acc.aborted = "token_expired";
+      await sendDiscordAlert({
+        title: "크론 발송 계정 인증 만료",
+        level: "error",
+        description: `${cronSender.email} 의 refresh_token 이 비어 있습니다 — 발송 모달에서 재인증하세요.`,
+      });
       continue;
     }
 
-    // 이전 차수 발송 ≥ 7일 경과 & result="체크필요" & sender_account_id = 크론 계정
-    // → 크론 계정으로 보낸 강사에게만 후속 발송
-    const { data: candidates } = await sb
-      .from("outreach_waves")
-      .select("instructor_id, sent_date, result, sender_account_id")
-      .eq("wave_number", prevWave)
-      .eq("result", "체크필요")
-      .eq("sender_account_id", cronSender.id)
-      .lte("sent_date", cutoff);
+    for (const waveNumber of [2, 3] as const) {
+      const key = `wave${waveNumber}` as "wave2" | "wave3";
+      const prevWave = waveNumber - 1;
 
-    if (!candidates || candidates.length === 0) continue;
+      // 템플릿 조회 — cron 계정 전용 우선, 없으면 공용 fallback
+      const { data: templates } = await sb
+        .from("message_templates")
+        .select("*")
+        .eq("channel", "이메일")
+        .eq("variant_label", `${waveNumber}차`)
+        .or(`sender_account_id.eq.${cronSender.id},sender_account_id.is.null`);
+      const template =
+        templates?.find((t) => t.sender_account_id === cronSender.id) ??
+        templates?.find((t) => t.sender_account_id === null) ??
+        null;
+      if (!template) {
+        acc[key].error = `${waveNumber}차 이메일 템플릿 없음 (계정: ${cronSender.email})`;
+        continue;
+      }
 
-    const candidateIds = candidates.map((c) => c.instructor_id);
-
-    // 이미 현재 차수 발송 기록 있는 강사 제외
-    const { data: existingCurrent } = await sb
-      .from("outreach_waves")
-      .select("instructor_id")
-      .in("instructor_id", candidateIds)
-      .eq("wave_number", waveNumber);
-    const alreadySent = new Set((existingCurrent ?? []).map((w) => w.instructor_id));
-    const pendingIds = candidateIds.filter((id) => !alreadySent.has(id));
-    if (pendingIds.length === 0) continue;
-
-    // 3차의 경우 1차 result 조회 (존재 시 '무응답'이어야 자동 발송 대상)
-    let earlierResults: Map<string, string | null> | null = null;
-    if (waveNumber === 3) {
-      const { data: earlierWaves } = await sb
+      // 이전 차수 발송 ≥ 7일 경과 & result="체크필요" & sender_account_id = 이 계정
+      // → 이 계정으로 보낸 강사에게만 후속 발송
+      const { data: candidates } = await sb
         .from("outreach_waves")
-        .select("instructor_id, result")
-        .in("instructor_id", pendingIds)
-        .eq("wave_number", 1);
-      earlierResults = new Map(
-        (earlierWaves ?? []).map((w) => [w.instructor_id, w.result]),
-      );
-    }
+        .select("instructor_id, sent_date, result, sender_account_id")
+        .eq("wave_number", prevWave)
+        .eq("result", "체크필요")
+        .eq("sender_account_id", cronSender.id)
+        .lte("sent_date", cutoff);
 
-    // 강사 조회
-    const { data: instructors } = await sb
-      .from("instructors")
-      .select("id, name, field, email, status, send_method, is_banned")
-      .in("id", pendingIds);
-    if (!instructors) continue;
+      if (!candidates || candidates.length === 0) continue;
 
-    const recordSkip = async (inst: { id: string; name: string }, reason: string) => {
-      summary[key].skipped.push({ id: inst.id, name: inst.name, reason });
-      await logActivity({
-        actionType: "이메일발송스킵",
-        targetType: "instructor",
-        targetId: inst.id,
-        targetName: inst.name,
-        detail: `${waveNumber}차 자동발송 스킵 → ${reason}`,
-        performedBy: "system:cron",
-      });
-    };
+      const candidateIds = candidates.map((c) => c.instructor_id);
 
-    for (const inst of instructors) {
-      if (inst.is_banned) {
-        await recordSkip(inst, "연락 금지");
-        continue;
+      // 이미 현재 차수 발송 기록 있는 강사 제외
+      const { data: existingCurrent } = await sb
+        .from("outreach_waves")
+        .select("instructor_id")
+        .in("instructor_id", candidateIds)
+        .eq("wave_number", waveNumber);
+      const alreadySent = new Set((existingCurrent ?? []).map((w) => w.instructor_id));
+      const pendingIds = candidateIds.filter((id) => !alreadySent.has(id));
+      if (pendingIds.length === 0) continue;
+
+      // 3차의 경우 1차 result 조회 (존재 시 '무응답'이어야 자동 발송 대상)
+      let earlierResults: Map<string, string | null> | null = null;
+      if (waveNumber === 3) {
+        const { data: earlierWaves } = await sb
+          .from("outreach_waves")
+          .select("instructor_id, result")
+          .in("instructor_id", pendingIds)
+          .eq("wave_number", 1);
+        earlierResults = new Map(
+          (earlierWaves ?? []).map((w) => [w.instructor_id, w.result]),
+        );
       }
-      if (inst.status !== "진행 중") {
-        await recordSkip(inst, `상태 ${inst.status ?? "(없음)"}`);
-        continue;
-      }
-      if (!inst.email?.trim()) {
-        await recordSkip(inst, "이메일 없음");
-        continue;
-      }
-      if (inst.send_method !== "이메일") {
-        await recordSkip(inst, `발송 수단 ${inst.send_method ?? "(없음)"}`);
-        continue;
-      }
-      if (earlierResults) {
-        const prevResult = earlierResults.get(inst.id);
-        if (prevResult !== undefined && prevResult !== "무응답") {
-          await recordSkip(inst, `1차 응답 ${prevResult ?? "(없음)"}`);
+
+      // 강사 조회
+      const { data: instructors } = await sb
+        .from("instructors")
+        .select("id, name, field, email, status, send_method, is_banned")
+        .in("id", pendingIds);
+      if (!instructors) continue;
+
+      const recordSkip = async (inst: { id: string; name: string }, reason: string) => {
+        acc[key].skipped.push({ id: inst.id, name: inst.name, reason });
+        await logActivity({
+          actionType: "이메일발송스킵",
+          targetType: "instructor",
+          targetId: inst.id,
+          targetName: inst.name,
+          detail: `${waveNumber}차 자동발송 스킵 → ${reason}`,
+          performedBy: "system:cron",
+        });
+      };
+
+      for (const inst of instructors) {
+        if (inst.is_banned) {
+          await recordSkip(inst, "연락 금지");
           continue;
         }
-      }
-
-      const subject = renderTemplate(template.subject || "", { name: inst.name, field: inst.field });
-      const body = renderTemplate(template.body || "", { name: inst.name, field: inst.field });
-
-      try {
-        const toName = inst.name?.trim() ? `${inst.name.trim()} 대표님` : undefined;
-        await sendEmail({
-          to: inst.email.trim(),
-          subject,
-          body,
-          toName,
-          senderAccount: cronSender,
-        });
-
-        // 현재 차수 기록 — 크론 계정으로 발송했음을 sender_account_id 에 기록
-        await sb
-          .from("outreach_waves")
-          .upsert(
-            {
-              instructor_id: inst.id,
-              wave_number: waveNumber,
-              sent_date: todayStr,
-              result: "체크필요",
-              sender_account_id: cronSender.id,
-            },
-            { onConflict: "instructor_id,wave_number" },
-          );
-
-        // 이전 차수 체크필요 → 무응답으로 자동 전환
-        await sb
-          .from("outreach_waves")
-          .update({ result: "무응답" })
-          .eq("instructor_id", inst.id)
-          .eq("wave_number", prevWave)
-          .eq("result", "체크필요");
-
-        await sb
-          .from("instructors")
-          .update({ email_sent: true, updated_at: new Date().toISOString() })
-          .eq("id", inst.id);
-
-        await logActivity({
-          actionType: "이메일발송",
-          targetType: "instructor",
-          targetId: inst.id,
-          targetName: inst.name,
-          detail: `${waveNumber}차 자동발송(크론) → ${inst.email} (${cronSender.email})`,
-          performedBy: "system:cron",
-        });
-
-        summary[key].sent.push({ id: inst.id, name: inst.name });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        summary[key].failed.push({ id: inst.id, name: inst.name, error: msg });
-
-        await logActivity({
-          actionType: "이메일발송실패",
-          targetType: "instructor",
-          targetId: inst.id,
-          targetName: inst.name,
-          detail: `${waveNumber}차 자동발송 실패 → ${msg.slice(0, 500)}`,
-          performedBy: "system:cron",
-        });
-
-        const classified = classifyGmailError(msg);
-        if (classified.kind === "token_expired" || classified.kind === "quota" || classified.kind === "auth") {
-          await sendDiscordAlert({
-            title: `크론 발송 중단 — ${classified.label}`,
-            level: "error",
-            description: msg.slice(0, 900),
-            fields: [
-              { name: "발송 계정", value: cronSender.email, inline: true },
-              { name: "차수", value: `${waveNumber}차`, inline: true },
-              { name: "성공", value: `${summary[key].sent.length}건`, inline: true },
-              { name: "실패", value: `${summary[key].failed.length}건`, inline: true },
-            ],
-          });
-          summary.aborted = classified.kind;
-          break;
+        if (inst.status !== "진행 중") {
+          await recordSkip(inst, `상태 ${inst.status ?? "(없음)"}`);
+          continue;
         }
+        if (!inst.email?.trim()) {
+          await recordSkip(inst, "이메일 없음");
+          continue;
+        }
+        if (inst.send_method !== "이메일") {
+          await recordSkip(inst, `발송 수단 ${inst.send_method ?? "(없음)"}`);
+          continue;
+        }
+        if (earlierResults) {
+          const prevResult = earlierResults.get(inst.id);
+          if (prevResult !== undefined && prevResult !== "무응답") {
+            await recordSkip(inst, `1차 응답 ${prevResult ?? "(없음)"}`);
+            continue;
+          }
+        }
+
+        const subject = renderTemplate(template.subject || "", { name: inst.name, field: inst.field });
+        const body = renderTemplate(template.body || "", { name: inst.name, field: inst.field });
+
+        try {
+          const toName = inst.name?.trim() ? `${inst.name.trim()} 대표님` : undefined;
+          await sendEmail({
+            to: inst.email.trim(),
+            subject,
+            body,
+            toName,
+            senderAccount: cronSender,
+          });
+
+          // 현재 차수 기록 — 어느 계정으로 발송했는지 sender_account_id 에 기록
+          await sb
+            .from("outreach_waves")
+            .upsert(
+              {
+                instructor_id: inst.id,
+                wave_number: waveNumber,
+                sent_date: todayStr,
+                result: "체크필요",
+                sender_account_id: cronSender.id,
+              },
+              { onConflict: "instructor_id,wave_number" },
+            );
+
+          // 이전 차수 체크필요 → 무응답으로 자동 전환
+          await sb
+            .from("outreach_waves")
+            .update({ result: "무응답" })
+            .eq("instructor_id", inst.id)
+            .eq("wave_number", prevWave)
+            .eq("result", "체크필요");
+
+          await sb
+            .from("instructors")
+            .update({ email_sent: true, updated_at: new Date().toISOString() })
+            .eq("id", inst.id);
+
+          await logActivity({
+            actionType: "이메일발송",
+            targetType: "instructor",
+            targetId: inst.id,
+            targetName: inst.name,
+            detail: `${waveNumber}차 자동발송(크론) → ${inst.email} (${cronSender.email})`,
+            performedBy: "system:cron",
+          });
+
+          acc[key].sent.push({ id: inst.id, name: inst.name });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          acc[key].failed.push({ id: inst.id, name: inst.name, error: msg });
+
+          await logActivity({
+            actionType: "이메일발송실패",
+            targetType: "instructor",
+            targetId: inst.id,
+            targetName: inst.name,
+            detail: `${waveNumber}차 자동발송 실패 → ${msg.slice(0, 500)}`,
+            performedBy: "system:cron",
+          });
+
+          const classified = classifyGmailError(msg);
+          if (classified.kind === "token_expired" || classified.kind === "quota" || classified.kind === "auth") {
+            await sendDiscordAlert({
+              title: `크론 발송 중단 — ${classified.label}`,
+              level: "error",
+              description: msg.slice(0, 900),
+              fields: [
+                { name: "발송 계정", value: cronSender.email, inline: true },
+                { name: "차수", value: `${waveNumber}차`, inline: true },
+                { name: "성공", value: `${acc[key].sent.length}건`, inline: true },
+                { name: "실패", value: `${acc[key].failed.length}건`, inline: true },
+              ],
+            });
+            acc.aborted = classified.kind;
+            break;
+          }
+        }
+
+        // Gmail rate limit 방지
+        await new Promise((r) => setTimeout(r, 1000));
       }
 
-      // Gmail rate limit 방지
-      await new Promise((r) => setTimeout(r, 1000));
+      if (acc.aborted) break;
     }
-
-    if (summary.aborted) break;
   }
 
-  const totalSent = summary.wave2.sent.length + summary.wave3.sent.length;
-  const totalFailed = summary.wave2.failed.length + summary.wave3.failed.length;
-  const totalSkipped = summary.wave2.skipped.length + summary.wave3.skipped.length;
+  // 전체 집계
+  const totalSent = summary.accounts.reduce(
+    (s, a) => s + a.wave2.sent.length + a.wave3.sent.length,
+    0,
+  );
+  const totalFailed = summary.accounts.reduce(
+    (s, a) => s + a.wave2.failed.length + a.wave3.failed.length,
+    0,
+  );
+  const totalSkipped = summary.accounts.reduce(
+    (s, a) => s + a.wave2.skipped.length + a.wave3.skipped.length,
+    0,
+  );
+  const perAccount = summary.accounts
+    .map((a) => `[${a.sender_email}] 2차 ${a.wave2.sent.length} / 3차 ${a.wave3.sent.length}`)
+    .join(" · ");
 
   await logActivity({
     actionType: "크론자동발송",
     targetType: "instructor",
     targetId: "cron",
     targetName: "자동 이메일 발송",
-    detail: `[${cronSender.email}] 2차 ${summary.wave2.sent.length} / 3차 ${summary.wave3.sent.length} · 실패 ${totalFailed} · 스킵 ${totalSkipped}`,
+    detail: `${perAccount} · 실패 ${totalFailed} · 스킵 ${totalSkipped}`,
     performedBy: "system:cron",
   });
 
@@ -341,7 +371,7 @@ export async function GET(req: Request) {
     await sendDiscordAlert({
       title: "자동 이메일 발송",
       level: totalFailed > 0 ? "warn" : "info",
-      description: `[${cronSender.email}] 2차 ${summary.wave2.sent.length} · 3차 ${summary.wave3.sent.length} · 실패 ${totalFailed} · 스킵 ${totalSkipped}`,
+      description: `${perAccount} · 실패 ${totalFailed} · 스킵 ${totalSkipped}`,
     });
   }
 
