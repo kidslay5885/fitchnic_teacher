@@ -72,13 +72,14 @@ export default function ContactTab() {
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
+  const [banWarnOpen, setBanWarnOpen] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({ active: false, select: true });
 
-  // 컨택 대상만 (발송 예정 / 진행 중 / 계약 완료), 연락 금지 제외
+  // 컨택 대상만 (발송 예정 / 진행 중 / 계약 완료). 연락 금지 강사도 상태에 맞으면 표시(행에 [금지] 배지)
   const contactInstructors = useMemo(() =>
-    state.instructors.filter((i) => !i.is_banned && CONTACT_STATUSES.includes(i.status as InstructorStatus)),
+    state.instructors.filter((i) => CONTACT_STATUSES.includes(i.status as InstructorStatus)),
   [state.instructors]);
 
   const emailDupMap = useMemo(
@@ -86,14 +87,18 @@ export default function ContactTab() {
     [state.instructors, state.youtubeChannels],
   );
 
+  // 선택된 강사 중 연락 금지 강사 (발송 전 경고용)
+  const selectedBanned = useMemo(
+    () => state.instructors.filter((i) => selectedIds.has(i.id) && i.is_banned),
+    [state.instructors, selectedIds],
+  );
+
   // 검색 시 노출되는 거절/제외 강사의 발송 기록까지 함께 조회 (셀 비어 보임 방지)
   const waveFetchInstructors = useMemo(
     () => state.instructors.filter((i) =>
-      !i.is_banned && (
-        CONTACT_STATUSES.includes(i.status as InstructorStatus) ||
-        i.status === "제외" ||
-        i.status === "거절"
-      ),
+      CONTACT_STATUSES.includes(i.status as InstructorStatus) ||
+      i.status === "제외" ||
+      i.status === "거절",
     ),
     [state.instructors],
   );
@@ -173,14 +178,12 @@ export default function ContactTab() {
 
   const filtered = useMemo(() => {
     const trimmedSearch = search.trim();
-    // 검색어가 있고 전체 보기일 때만 제외/거절 강사도 후보에 포함 (연락 금지는 계속 제외)
+    // 검색어가 있고 전체 보기일 때만 제외/거절 강사도 후보에 포함
     let list = (trimmedSearch && viewFilter === "all")
       ? state.instructors.filter((i) =>
-          !i.is_banned && (
-            CONTACT_STATUSES.includes(i.status as InstructorStatus) ||
-            i.status === "제외" ||
-            i.status === "거절"
-          ),
+          CONTACT_STATUSES.includes(i.status as InstructorStatus) ||
+          i.status === "제외" ||
+          i.status === "거절",
         )
       : contactInstructors;
     if (viewFilter === "no_preinfo") list = list.filter((i) => i.has_response && !i.pre_info);
@@ -785,6 +788,7 @@ export default function ContactTab() {
                     onClick={() => setDetailId(i.id)}
                   >
                     {i.name}
+                    {i.is_banned && <span className="shrink-0 text-red-500 text-xs" title={i.ban_reason || "연락 금지"}>[금지]</span>}
                     {i.has_response && !i.pre_info && (
                       <span className="shrink-0 h-2 w-2 rounded-full bg-red-500" title="사전 정보 미입력" />
                     )}
@@ -982,7 +986,7 @@ export default function ContactTab() {
           <Button
             size="sm"
             className="h-8 text-sm bg-indigo-600 hover:bg-indigo-700 text-white"
-            onClick={() => setSendEmailOpen(true)}
+            onClick={() => { if (selectedBanned.length > 0) setBanWarnOpen(true); else setSendEmailOpen(true); }}
           >
             <Mail className="h-3.5 w-3.5 mr-1.5" />메일 자동 발송
           </Button>
@@ -1118,6 +1122,43 @@ export default function ContactTab() {
           setSelectedIds(new Set());
         }}
       />
+
+      {/* ── 연락 금지 강사 발송 경고 모달 ── */}
+      {banWarnOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+          onClick={() => setBanWarnOpen(false)}
+        >
+          <div className="bg-white rounded-lg shadow-lg w-[400px] p-5" onClick={(e) => e.stopPropagation()}>
+            <p className="text-base font-semibold mb-2 text-red-600">연락 금지 강사 포함</p>
+            <p className="text-sm text-muted-foreground mb-3">
+              선택한 강사 중 <b className="text-red-600">{selectedBanned.length}명</b>이 연락 금지 상태입니다.
+              그래도 메일을 발송하시겠습니까?
+            </p>
+            <div className="max-h-40 overflow-y-auto rounded border bg-muted/30 px-3 py-2 mb-5 text-sm">
+              {selectedBanned.map((i) => (
+                <div key={i.id} className="flex items-center gap-2 py-0.5">
+                  <span className="text-red-500 text-xs">[금지]</span>
+                  <span className="font-medium">{i.name}</span>
+                  {i.ban_reason && <span className="text-xs text-muted-foreground truncate">— {i.ban_reason}</span>}
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="outline" className="h-9 text-sm" onClick={() => setBanWarnOpen(false)}>
+                취소
+              </Button>
+              <Button
+                size="sm"
+                className="h-9 text-sm bg-red-500 hover:bg-red-600 text-white"
+                onClick={() => { setBanWarnOpen(false); setSendEmailOpen(true); }}
+              >
+                금지 무시하고 발송
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
