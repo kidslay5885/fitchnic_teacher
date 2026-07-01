@@ -99,10 +99,11 @@ function InstructorListView() {
 
   const filtered = useMemo(() => {
     const hasSearch = !!state.filters.search;
+    const hasStatusFilter = state.filters.status !== "전체";
     return state.instructors.filter((i) => {
-      // YT채널수집 출처는 항상 제외, 연락금지 강사는 검색어가 있을 때만 포함
+      // YT채널수집 출처는 항상 제외, 연락금지 강사는 검색어 또는 상태 필터가 있을 때만 포함
       if (i.source === "YT채널수집") return false;
-      if (i.is_banned && !hasSearch) return false;
+      if (i.is_banned && !hasSearch && !hasStatusFilter) return false;
       const f = state.filters;
       if (f.status !== "전체" && i.status !== f.status) return false;
       if (f.search) {
