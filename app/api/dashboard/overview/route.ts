@@ -51,7 +51,7 @@ const PAGE = 1000;
 type SB = ReturnType<typeof getSupabase>;
 
 async function fetchAllInstructors(sb: SB) {
-  const cols = "id, name, field, assignee, status, source, meeting_date, meeting_confirmed, send_method";
+  const cols = "id, name, field, assignee, status, source, meeting_date, meeting_confirmed, send_method, created_at";
   const { data: firstPage, count, error } = await sb
     .from("instructors")
     .select(cols, { count: "exact" })
@@ -158,6 +158,7 @@ export async function GET(request: Request) {
     meeting_date: string | null;
     meeting_confirmed: boolean;
     send_method: string | null;
+    created_at: string;
   }[];
 
   // 강사 ID → send_method 매핑
@@ -503,6 +504,34 @@ export async function GET(request: Request) {
     if (info) monthlyContracts.push({ id, name: info.name, field: info.field, assignee: info.assignee });
   }
 
+  // 담당자별 실적: 기간 내 등록(created_at)된 강사를 '찾은 사람'(assignee)별로 집계하고,
+  // 그 코호트 중 이후 미팅/계약까지 도달한 인원(시점 무관 누적)을 카운트
+  const everContractIds = new Set<string>(); // '계약 완료'에 한 번이라도 도달한 강사
+  for (const h of contractHistory) if (h.to_status === "계약 완료") everContractIds.add(h.instructor_id);
+  for (const i of instrList) if (i.status === "계약 완료") everContractIds.add(i.id);
+
+  const assigneeStatsMap = new Map<
+    string,
+    { assignee: string; found: number; meetings: number; contracts: number }
+  >();
+  for (const i of instrList) {
+    const created = kstDateStr(i.created_at);
+    if (created < sumFromStr || created > sumToStr) continue;
+    const key = (i.assignee || "").trim() || "미지정";
+    let s = assigneeStatsMap.get(key);
+    if (!s) {
+      s = { assignee: key, found: 0, meetings: 0, contracts: 0 };
+      assigneeStatsMap.set(key, s);
+    }
+    s.found++;
+    const hasMeeting = !!(i.meeting_date && i.meeting_date.trim()) || i.meeting_confirmed;
+    if (hasMeeting) s.meetings++;
+    if (everContractIds.has(i.id)) s.contracts++;
+  }
+  const assigneeStats = Array.from(assigneeStatsMap.values()).sort(
+    (a, b) => b.found - a.found || b.contracts - a.contracts,
+  );
+
   return NextResponse.json({
     monthlySummary: {
       monthLabel: parseInt(sumFromStr.slice(5, 7), 10),
@@ -511,6 +540,7 @@ export async function GET(request: Request) {
       contacts: monthlyContacts,
       meetings: { willMeet: meetingWillMeet, met: meetingMet },
       contracts: monthlyContracts,
+      assigneeStats,
     },
     firstSentDate,
     wavesSent,

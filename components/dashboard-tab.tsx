@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import WaveCumulativeAnalysis from "@/components/dashboard/wave-cumulative-analysis";
 import SendTrendChart from "@/components/dashboard/send-trend-chart";
 import ResponseRateChart from "@/components/dashboard/response-rate-chart";
-import { AlertTriangle, LogIn, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { AlertTriangle, LogIn, ChevronLeft, ChevronRight, ChevronDown, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useOutreach } from "@/hooks/use-outreach-store";
@@ -60,6 +60,13 @@ interface ContractRow {
   assignee: string;
 }
 
+interface AssigneeStat {
+  assignee: string;
+  found: number;
+  meetings: number;
+  contracts: number;
+}
+
 interface MonthlySummary {
   monthLabel: number;
   rangeStart: string;
@@ -67,6 +74,7 @@ interface MonthlySummary {
   contacts: ContactRow[];
   meetings: { willMeet: MeetingRow[]; met: MeetingRow[] };
   contracts: ContractRow[];
+  assigneeStats: AssigneeStat[];
 }
 
 interface Overview {
@@ -204,6 +212,7 @@ function MonthlySummaryPanel({
   onMeetingClick: (id: string) => void;
 }) {
   const [tab, setTab] = useState<SummaryTab>("contacts");
+  const [assigneeOpen, setAssigneeOpen] = useState(false);
 
   const meetingCount = summary.meetings.willMeet.length + summary.meetings.met.length;
   const meetingRows = [
@@ -414,6 +423,65 @@ function MonthlySummaryPanel({
           )}
           </div>
         </div>
+      </div>
+
+      {/* 담당자별 실적: 기간 내 찾은 강사 수 + 코호트의 미팅/계약 도달 */}
+      <div className="mt-3 bg-white border rounded-xl overflow-hidden">
+        <button
+          onClick={() => setAssigneeOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left hover:bg-gray-50 transition-colors"
+        >
+          <div>
+            <p className="text-xs font-semibold text-foreground">담당자별 실적</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              해당 기간에 찾은(등록한) 강사 기준. 미팅·계약은 그 강사들이 이후 도달한 인원.
+            </p>
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              assigneeOpen && "rotate-180",
+            )}
+          />
+        </button>
+        {assigneeOpen && (
+        <div className="p-4 border-t">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-muted-foreground border-b">
+                <th className="text-left font-medium py-1.5 pr-3">담당자</th>
+                <th className="text-right font-medium py-1.5 pr-3">찾은 강사</th>
+                <th className="text-right font-medium py-1.5 pr-3">미팅 도달</th>
+                <th className="text-right font-medium py-1.5">계약 도달</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {summary.assigneeStats.length === 0 ? (
+                <EmptyRow colSpan={4} />
+              ) : (
+                summary.assigneeStats.map((r, idx) => (
+                  <tr key={idx}>
+                    <td className="py-1.5 pr-3 font-medium">{r.assignee}</td>
+                    <td className="py-1.5 pr-3 text-right tabular-nums">{r.found}</td>
+                    <td className="py-1.5 pr-3 text-right tabular-nums">
+                      {r.meetings}
+                      <span className="text-xs text-muted-foreground ml-1">
+                        ({r.found ? Math.round((r.meetings / r.found) * 100) : 0}%)
+                      </span>
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {r.contracts}
+                      <span className="text-xs text-muted-foreground ml-1">
+                        ({r.found ? Math.round((r.contracts / r.found) * 100) : 0}%)
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        )}
       </div>
     </section>
   );
