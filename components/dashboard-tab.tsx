@@ -41,6 +41,7 @@ interface ContactRow {
   id: string;
   name: string;
   field: string;
+  assignee: string;
   sentDate: string;
 }
 
@@ -48,6 +49,7 @@ interface MeetingRow {
   id: string;
   name: string;
   field: string;
+  assignee: string;
   meetingDate: string;
 }
 
@@ -55,6 +57,7 @@ interface ContractRow {
   id: string;
   name: string;
   field: string;
+  assignee: string;
 }
 
 interface MonthlySummary {
@@ -309,12 +312,13 @@ function MonthlySummaryPanel({
                 <tr className="text-xs text-muted-foreground border-b">
                   <th className="text-left font-medium py-1.5 pr-3">이름</th>
                   <th className="text-left font-medium py-1.5 pr-3">분야</th>
+                  <th className="text-left font-medium py-1.5 pr-3">찾은 사람</th>
                   <th className="text-left font-medium py-1.5">1차 발송일</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {summary.contacts.length === 0 ? (
-                  <EmptyRow colSpan={3} />
+                  <EmptyRow colSpan={4} />
                 ) : (
                   summary.contacts.map((r, idx) => (
                     <tr
@@ -325,6 +329,7 @@ function MonthlySummaryPanel({
                     >
                       <td className="py-1.5 pr-3 font-medium text-primary hover:underline">{r.name}</td>
                       <td className="py-1.5 pr-3"><FieldCell field={r.field} /></td>
+                      <td className="py-1.5 pr-3 text-muted-foreground">{r.assignee || "-"}</td>
                       <td className="py-1.5 text-muted-foreground">{formatMdShort(r.sentDate)}</td>
                     </tr>
                   ))
@@ -340,12 +345,13 @@ function MonthlySummaryPanel({
                   <th className="text-left font-medium py-1.5 pr-3">구분</th>
                   <th className="text-left font-medium py-1.5 pr-3">이름</th>
                   <th className="text-left font-medium py-1.5 pr-3">분야</th>
+                  <th className="text-left font-medium py-1.5 pr-3">찾은 사람</th>
                   <th className="text-left font-medium py-1.5">미팅날짜</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {meetingRows.length === 0 ? (
-                  <EmptyRow colSpan={4} />
+                  <EmptyRow colSpan={5} />
                 ) : (
                   meetingRows.map((r, idx) => (
                     <tr
@@ -368,6 +374,7 @@ function MonthlySummaryPanel({
                       </td>
                       <td className="py-1.5 pr-3 font-medium text-primary hover:underline">{r.name}</td>
                       <td className="py-1.5 pr-3"><FieldCell field={r.field} /></td>
+                      <td className="py-1.5 pr-3 text-muted-foreground">{r.assignee || "-"}</td>
                       <td className="py-1.5 text-muted-foreground">{formatMdShort(r.meetingDate)}</td>
                     </tr>
                   ))
@@ -381,12 +388,13 @@ function MonthlySummaryPanel({
               <thead>
                 <tr className="text-xs text-muted-foreground border-b">
                   <th className="text-left font-medium py-1.5 pr-3">이름</th>
-                  <th className="text-left font-medium py-1.5">분야</th>
+                  <th className="text-left font-medium py-1.5 pr-3">분야</th>
+                  <th className="text-left font-medium py-1.5">찾은 사람</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {summary.contracts.length === 0 ? (
-                  <EmptyRow colSpan={2} />
+                  <EmptyRow colSpan={3} />
                 ) : (
                   summary.contracts.map((r, idx) => (
                     <tr
@@ -396,7 +404,8 @@ function MonthlySummaryPanel({
                       title="미팅관리에서 보기"
                     >
                       <td className="py-1.5 pr-3 font-medium text-primary hover:underline">{r.name}</td>
-                      <td className="py-1.5"><FieldCell field={r.field} /></td>
+                      <td className="py-1.5 pr-3"><FieldCell field={r.field} /></td>
+                      <td className="py-1.5 text-muted-foreground">{r.assignee || "-"}</td>
                     </tr>
                   ))
                 )}
