@@ -26,7 +26,7 @@ function senderSection(
   const acc = senderId ? accountMap[senderId] : null;
   const local = acc ? acc.email.split("@")[0] : null;
   if (local === "business.center")
-    return { key: "team", label: "콘텐츠개발팀 이메일", headerClass: "text-teal-700", dotClass: "bg-teal-500", borderClass: "border-l-4 border-l-teal-400" };
+    return { key: "team", label: "강의기획팀 이메일", headerClass: "text-teal-700", dotClass: "bg-teal-500", borderClass: "border-l-4 border-l-teal-400" };
   // sender 미지정(공용) 또는 ceo → 대표님 이메일
   if (!acc || local === "ceo")
     return { key: "ceo", label: "대표님 이메일", headerClass: "text-blue-700", dotClass: "bg-blue-500", borderClass: "border-l-4 border-l-blue-400" };

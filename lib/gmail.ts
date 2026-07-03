@@ -235,7 +235,7 @@ export interface SendEmailResult {
 // 새 이미지로 business-card.ts 교체 후 true 로 바꾸면 다시 첨부된다.
 const ATTACH_BUSINESS_CARD = false;
 
-// 콘텐츠개발팀 이메일(팀메일) 계정 판별 — local part 가 business.center
+// 강의기획팀 이메일(팀메일) 계정 판별 — local part 가 business.center
 // (messages-tab.tsx 의 발신 계정 색 분기와 동일 기준)
 function isTeamAccount(email: string) {
   return email.split("@")[0] === "business.center";

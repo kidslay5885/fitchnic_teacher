@@ -13,7 +13,7 @@ ALTER TABLE message_templates
 CREATE INDEX IF NOT EXISTS idx_message_templates_sender
   ON message_templates(channel, variant_label, sender_account_id);
 
--- 콘텐츠개발팀 (business.center@fitchnic.com) 1차 전용 템플릿
+-- 강의기획팀 (business.center@fitchnic.com) 1차 전용 템플릿
 -- 기존 동일 row 가 있으면 갱신, 없으면 삽입
 DO $$
 DECLARE
@@ -35,11 +35,11 @@ BEGIN
 
   INSERT INTO message_templates (name, channel, subject, body, variant_label, sender_account_id)
   VALUES (
-    '이메일 1차 (콘텐츠개발팀)',
+    '이메일 1차 (강의기획팀)',
     '이메일',
     $tpl$[(주)핏크닉] 안녕하세요. '채널이름' 대표님께 한 가지 제안드립니다.$tpl$,
 $tpl$안녕하세요, 대표님.
-(주)핏크닉 콘텐츠개발팀 팀장 정승희입니다.
+(주)핏크닉 강의기획팀 팀장 정승희입니다.
 
 대표님의 '채널분야' 콘텐츠를 감명깊게 보고 연락을 드렸습니다.
 
@@ -64,7 +64,7 @@ $tpl$안녕하세요, 대표님.
 감사합니다.
 
 
-(주)핏크닉 콘텐츠개발팀 팀장 정승희 드림
+(주)핏크닉 강의기획팀 팀장 정승희 드림
 
 
 연락처: 010-7540-9761

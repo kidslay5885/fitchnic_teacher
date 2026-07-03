@@ -51,7 +51,7 @@ export default function ContactTab() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [wavesMap, setWavesMap] = useState<Record<string, OutreachWave[]>>({});
-  // 발신 계정 id → 표기 매핑 (예: ceo → "대", 콘텐츠개발팀 → "팀"). 1차 발송 계정 기준 셀 표기에 사용
+  // 발신 계정 id → 표기 매핑 (예: ceo → "대", 강의기획팀 → "팀"). 1차 발송 계정 기준 셀 표기에 사용
   const [accountTagMap, setAccountTagMap] = useState<Record<string, { tag: string; label: string; email: string; badgeClass: string }>>({});
   const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);

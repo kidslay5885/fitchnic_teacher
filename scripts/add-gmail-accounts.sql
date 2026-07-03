@@ -41,7 +41,7 @@ WHERE NOT EXISTS (SELECT 1 FROM gmail_accounts WHERE email = 'ceo@fitchnic.com')
 
 -- 3. 새 계정 슬롯 — refresh_token 은 OAuth 재인증 시 채워짐
 INSERT INTO gmail_accounts (email, label, is_default, is_cron_sender)
-SELECT 'business.center@fitchnic.com', '(주)핏크닉 콘텐츠개발팀', false, false
+SELECT 'business.center@fitchnic.com', '(주)핏크닉 강의기획팀', false, false
 WHERE NOT EXISTS (SELECT 1 FROM gmail_accounts WHERE email = 'business.center@fitchnic.com');
 
 -- 4. outreach_waves 에 발송 계정 추적 컬럼 추가
