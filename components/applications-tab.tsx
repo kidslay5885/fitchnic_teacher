@@ -16,11 +16,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { APPLICATION_SOURCES } from "@/lib/constants";
+import { APPLICATION_SOURCES, APPLICATION_FORM_URLS } from "@/lib/constants";
 import type { Application } from "@/lib/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Eye, UserPlus, Trash2, Search, ChevronUp, ChevronDown, Check, AlertTriangle } from "lucide-react";
+import { Eye, UserPlus, Trash2, Search, ChevronUp, ChevronDown, Check, AlertTriangle, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { editDistance } from "@/lib/utils";
 
@@ -378,6 +378,16 @@ export default function ApplicationsTab() {
           />
         </div>
         <span className="text-sm text-muted-foreground">{sorted.length}건</span>
+        {activeSource !== "전체" && APPLICATION_FORM_URLS[activeSource] && (
+          <a
+            href={APPLICATION_FORM_URLS[activeSource]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />{SOURCE_LABELS[activeSource] ?? activeSource} 폼 열기
+          </a>
+        )}
       </div>
 
       <div className="rounded-md border">

@@ -50,6 +50,22 @@ export const APPLICATION_SOURCES = [
   "머니업지원사업",
 ] as const;
 
+// 채널(source_platform) → 원본 구글폼 편집 URL
+// 키는 DB 저장값 기준 (핏크닉카/머니업카 = 표시상 카페)
+export const APPLICATION_FORM_URLS: Record<string, string> = {
+  "핏크닉메타": "https://docs.google.com/forms/d/1tl08yFQl4dms5l6KAkacDeWVSoOu6KwE2cxBV7M0k2c/edit",
+  "핏크닉홈": "https://docs.google.com/forms/d/1ky1GpWGyGXnSgVHMltjacMQlwnZkH5htLiIElUkutjE/edit",
+  "머니업홈": "https://docs.google.com/forms/d/1EHF7tpqE3TBrDW0OkwEhQBdd9Z-5cmbeZGbM82N5rbs/edit",
+  "핏크닉카": "https://docs.google.com/forms/d/1VsJut5q37c6tfKHsK6gIxH1lV5J2zijFvi02DR_hVxU/edit",
+  "머니업카": "https://docs.google.com/forms/d/1lM8S1nIOUbbMKqhKl_qPPsXRFKs4xVVi_bscDQIum6s/edit",
+  "핏크닉카카오": "https://docs.google.com/forms/d/1EpmmTJ8AQ3hiXOygMx6R5sL3o6iqvMLZ18PTUPoaQa8/edit",
+  "머니업카카오": "https://docs.google.com/forms/d/1cUuNirBrw0uL_39v5a36VPTNPz7UafeY2Y7gErwbBIg/edit",
+  "대표님SNS": "https://docs.google.com/forms/d/18ogkX7m1-RiUpdQmEriZFR191ww-iaQoZn19VMSinTo/edit",
+  "핏크닉YLC": "https://docs.google.com/forms/d/1pW2ld8oQcvviUnEWKMtx2iAQRDnli7cUQh6f8LYRWLU/edit",
+  "핏크닉지원사업": "https://docs.google.com/forms/d/1R3FoqrQc1NhYYoFBFASAvTtUq1Cz_V8BZ2ZM-Jrqc7M/edit",
+  "머니업지원사업": "https://docs.google.com/forms/d/1PqbhpSeeKeOixLYSDw8UZssfXix_COAE_k-Uk3KaIqE/edit",
+};
+
 export const BANNED_PLATFORMS = [
   "타이탄클래스",
   "인베이더스쿨",
