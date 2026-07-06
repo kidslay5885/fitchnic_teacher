@@ -471,7 +471,7 @@ export default function ApplicationsTab() {
                 {getDetailFields(detailApp).map(([l, v]) => v ? (
                   <div key={l}>
                     <p className="text-xs font-semibold text-muted-foreground mb-1">{l}</p>
-                    <p className="whitespace-pre-wrap leading-relaxed">{v}</p>
+                    <p className="whitespace-pre-wrap [overflow-wrap:anywhere] leading-relaxed">{v}</p>
                   </div>
                 ) : null)}
               </div>
