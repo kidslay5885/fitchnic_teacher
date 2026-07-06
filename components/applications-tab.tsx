@@ -57,7 +57,7 @@ function getDetailFields(app: Application): [string, string][] {
     ];
   }
 
-  if (app.source_platform === "대표님SNS") {
+  if (app.source_platform === "대표님SNS" || app.source_platform === "핏크닉YLC") {
     // 폼이 짧음: 지원 동기·경력/성과·수강생 성과·수강생이 얻는 것 항목 없음
     return [
       ...common,
@@ -66,7 +66,8 @@ function getDetailFields(app: Application): [string, string][] {
     ];
   }
 
-  // 핏크닉홈, 핏크닉카, 머니업홈, 머니업카, 머니업카카오, 핏크닉카카오
+  // 핏크닉홈, 핏크닉카, 머니업홈, 머니업카, 머니업카카오, 핏크닉카카오,
+  // 핏크닉지원사업, 머니업지원사업
   return [
     ...common,
     ["강의 주제", app.topic],

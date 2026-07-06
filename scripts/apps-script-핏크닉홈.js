@@ -88,3 +88,45 @@ function importAll() {
   }
   Logger.log("전체 " + (data.length - 1) + "건 완료");
 }
+
+// ── 누락분만 보충 등록 (트리거 중단 기간 복구용) ──
+// DB에 이미 있는 이 채널의 최신 제출일 이후 행만 다시 전송한다.
+// 중복 없이 안전하며, 다시 실행해도 추가 등록되지 않는다.
+function importMissing() {
+  const CHANNEL = "핏크닉홈"; // 이 스크립트의 채널명 (source_platform과 동일)
+
+  // 1) DB에서 이 채널의 최신 제출일 조회
+  const res = UrlFetchApp.fetch(API_URL, { method: "get", muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) {
+    Logger.log("DB 조회 실패: " + res.getResponseCode() + " " + res.getContentText());
+    return;
+  }
+  const all = JSON.parse(res.getContentText());
+  let cutoff = 0;
+  for (let j = 0; j < all.length; j++) {
+    if (all[j].source_platform !== CHANNEL || !all[j].submitted_at) continue;
+    const t = new Date(all[j].submitted_at).getTime();
+    if (t > cutoff) cutoff = t;
+  }
+  Logger.log(CHANNEL + " DB 최신 제출일: " + (cutoff ? new Date(cutoff).toISOString() : "(없음 — 전체 등록)"));
+
+  // 2) 시트에서 cutoff 이후 행만 재전송
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const data = sheet.getDataRange().getValues();
+  let sent = 0;
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const ts = row[0];
+    if (!(ts instanceof Date) || isNaN(ts.getTime())) continue;
+    if (ts.getTime() <= cutoff) continue; // 이미 등록됨 → skip
+    const values = row.map(function(cell, idx) {
+      if (idx === 0 && cell instanceof Date) return cell.toISOString();
+      return String(cell);
+    });
+    onFormSubmit({ values: values });
+    Utilities.sleep(200);
+    sent++;
+    Logger.log("등록: row " + (i + 1) + " (" + ts.toISOString() + ")");
+  }
+  Logger.log("완료: " + CHANNEL + " 신규 " + sent + "건 등록");
+}
