@@ -159,7 +159,7 @@ export default function MeetingTab() {
 
   // 문자 자동발송 게이트웨이: 등록 기기 상태 + 예약시각 + 발송중 단계
   const [smsDevice, setSmsDevice] = useState<{ paired: boolean; pairing_code: string; last_seen: string | null; phone_number: string } | null>(null);
-  const [smsScheduleAt, setSmsScheduleAt] = useState("");
+  const [smsSchedules, setSmsSchedules] = useState<Record<string, string>>({}); // 단계별 예약 시각
   const [smsBusy, setSmsBusy] = useState<string | null>(null);
   const [showDeviceModal, setShowDeviceModal] = useState(false);
   // 발송 확인 모달
@@ -190,11 +190,13 @@ export default function MeetingTab() {
     } catch {}
   };
   useEffect(() => { loadDevice(); }, []);
-  // 메시지 탭 진입 시 해당 강사 발송/예약 내역 로드
+  // 메시지 탭 열려있는 동안 발송/예약 내역 자동 폴링 (상태 자동 갱신)
   useEffect(() => {
-    if (editingMeeting?.modalTab === "messages" && editingMeeting.instructor.id) {
-      loadQueue(editingMeeting.instructor.id);
-    }
+    if (editingMeeting?.modalTab !== "messages" || !editingMeeting?.instructor.id) return;
+    const id = editingMeeting.instructor.id;
+    loadQueue(id);
+    const t = setInterval(() => loadQueue(id), 6000);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingMeeting?.instructor.id, editingMeeting?.modalTab]);
 
@@ -1045,7 +1047,6 @@ export default function MeetingTab() {
                         };
                         const phone = (editingMeeting.phone || "").replace(/[^0-9]/g, "");
                         const canSend = !!smsDevice?.paired && !!phone;
-                        const schedISO = smsScheduleAt ? new Date(smsScheduleAt).toISOString() : "";
                         return (
                           <div className="space-y-3">
                             {/* 발송 대상 번호 + 예약 시각 */}
@@ -1058,22 +1059,17 @@ export default function MeetingTab() {
                                   <button onClick={() => { setShowDeviceModal(true); loadDevice(); }} className="text-[11px] text-blue-600 hover:underline">기기 등록 필요 →</button>
                                 )}
                               </div>
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <label className="text-[11px] text-muted-foreground mb-0.5 block">받는 전화번호</label>
-                                  <Input
-                                    className="h-8 text-sm"
-                                    placeholder="01012345678"
-                                    value={editingMeeting.phone}
-                                    onChange={(e) => setEditingMeeting({ ...editingMeeting, phone: e.target.value })}
-                                  />
-                                </div>
-                                <div className="flex-1">
-                                  <label className="text-[11px] text-muted-foreground mb-0.5 block">예약 시각 (비우면 즉시)</label>
-                                  <Input type="datetime-local" className="h-8 text-xs" value={smsScheduleAt} onChange={(e) => setSmsScheduleAt(e.target.value)} />
-                                </div>
+                              <div>
+                                <label className="text-[11px] text-muted-foreground mb-0.5 block">받는 전화번호</label>
+                                <Input
+                                  className="h-8 text-sm"
+                                  placeholder="01012345678"
+                                  value={editingMeeting.phone}
+                                  onChange={(e) => setEditingMeeting({ ...editingMeeting, phone: e.target.value })}
+                                />
                               </div>
                               {!phone && <p className="text-[11px] text-red-500">번호를 입력해야 발송할 수 있습니다.</p>}
+                              <p className="text-[11px] text-muted-foreground">각 단계 아래에서 즉시 발송하거나, 시각을 정해 개별 예약할 수 있습니다.</p>
                             </div>
 
                             {/* 발송/예약 내역 */}
@@ -1157,18 +1153,6 @@ export default function MeetingTab() {
                                         onClick={() => copy(text)}
                                         className="text-xs text-blue-600 hover:underline whitespace-nowrap"
                                       >복사</button>
-                                      <button
-                                        type="button"
-                                        disabled={!canSend || smsBusy !== null}
-                                        onClick={() => setSmsConfirm({ inst, stage: s.key, stageLabel: s.label, text, phone: editingMeeting.phone })}
-                                        className="text-xs font-medium text-white bg-primary rounded px-2 py-0.5 disabled:opacity-40 whitespace-nowrap"
-                                      >발송</button>
-                                      <button
-                                        type="button"
-                                        disabled={!canSend || !schedISO || smsBusy !== null}
-                                        onClick={() => setSmsConfirm({ inst, stage: s.key, stageLabel: s.label, text, phone: editingMeeting.phone, scheduledAt: schedISO })}
-                                        className="text-xs font-medium text-primary border border-primary rounded px-2 py-0.5 disabled:opacity-40 whitespace-nowrap"
-                                      >예약</button>
                                       <label
                                         className={`flex items-center gap-1 px-2 py-1 rounded-md border cursor-pointer text-xs font-medium transition-colors ${done ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500"}`}
                                       >
@@ -1202,6 +1186,29 @@ export default function MeetingTab() {
                                       </div>
                                     </div>
                                   )}
+
+                                  {/* 발송 / 개별 예약 */}
+                                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-gray-100">
+                                    <button
+                                      type="button"
+                                      disabled={!canSend || smsBusy !== null}
+                                      onClick={() => setSmsConfirm({ inst, stage: s.key, stageLabel: s.label, text, phone: editingMeeting.phone })}
+                                      className="text-xs font-medium text-white bg-primary rounded px-2.5 py-1 disabled:opacity-40 whitespace-nowrap"
+                                    >지금 발송</button>
+                                    <span className="text-[11px] text-muted-foreground ml-1">예약</span>
+                                    <Input
+                                      type="datetime-local"
+                                      className="h-7 text-xs w-auto flex-1 min-w-[150px]"
+                                      value={smsSchedules[s.key] || ""}
+                                      onChange={(e) => setSmsSchedules({ ...smsSchedules, [s.key]: e.target.value })}
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={!canSend || !smsSchedules[s.key] || smsBusy !== null}
+                                      onClick={() => setSmsConfirm({ inst, stage: s.key, stageLabel: s.label, text, phone: editingMeeting.phone, scheduledAt: new Date(smsSchedules[s.key]).toISOString() })}
+                                      className="text-xs font-medium text-primary border border-primary rounded px-2.5 py-1 disabled:opacity-40 whitespace-nowrap"
+                                    >예약</button>
+                                  </div>
                                 </div>
                               );
                             })}
