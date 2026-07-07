@@ -113,16 +113,17 @@ function buildMessage(
   opts: { name: string; dateStr: string; hour: number | null; carNumber: string; sender: string }
 ): string {
   const { name, dateStr, hour, carNumber, sender } = opts;
-  const car = carNumber.trim() || "000라 0000";
+  // 차량번호 입력 시에만 주차등록 안내 줄 포함
+  const carLine = carNumber.trim() ? `\n\n(주차등록 차량번호: ${carNumber.trim()})` : "";
   const hourTxt = hour != null ? `${hour}시 ` : "";
   const dateBlock = `-\n미팅일시: ${dateStr || "(미정)"}\n${MSG_PLACE}\n\n${MSG_NAVER}`;
   switch (stage) {
     case "before":
       return `안녕하세요, 대표님 :)\n금일 연락드린 ${sender}입니다.\n다음주 미팅을 위해 오시는 길을 안내드립니다.\n\n삼성동 마에스트로 주차장을 이용하실 경우,\n핏크닉에서 무료주차(1시간) 지원을 해드립니다.\n주차등록이 필요하시다면 차량번호 전달 부탁드립니다. ^^\n${dateBlock}`;
     case "dayBefore":
-      return `안녕하세요, 대표님\n내일 ${hourTxt}미팅일정 리마인드차 연락드립니다!\n일정 변동이 없으시다면 내일 뵙고 다시 한 번 인사드리겠습니다.\n\n방문 시 아름빌딩 5층에 오셔서 벨 눌러주세요. 감사합니다. ^^\n\n(주차등록 차량번호: ${car})\n${dateBlock}`;
+      return `안녕하세요, 대표님\n내일 ${hourTxt}미팅일정 리마인드차 연락드립니다!\n일정 변동이 없으시다면 내일 뵙고 다시 한 번 인사드리겠습니다.\n\n방문 시 아름빌딩 5층에 오셔서 벨 눌러주세요. 감사합니다. ^^${carLine}\n${dateBlock}`;
     case "dayOf":
-      return `안녕하세요, 대표님\n금일 ${hourTxt}미팅일정 리마인드차 연락드립니다!\n아름빌딩 5층에 올라오셔서 벨 눌러주시면 됩니다. 감사합니다. ^^\n\n(주차등록 차량번호: ${car})\n${dateBlock}`;
+      return `안녕하세요, 대표님\n금일 ${hourTxt}미팅일정 리마인드차 연락드립니다!\n아름빌딩 5층에 올라오셔서 벨 눌러주시면 됩니다. 감사합니다. ^^${carLine}\n${dateBlock}`;
     case "afterEnd":
       return `대표님, 오늘 시간내어 방문해주셔서 감사합니다.\n덕분에 많은 말씀 나눌 수 있었습니다.\n저희는 충분한 내부논의 거친 후에 다시 한 번 연락드리겠습니다!\n\n감사합니다. ^^`;
     case "rejected":
@@ -1060,7 +1061,7 @@ export default function MeetingTab() {
                                 )}
                               </div>
                               <div>
-                                <label className="text-[11px] text-muted-foreground mb-0.5 block">받는 전화번호</label>
+                                <label className="text-[11px] text-muted-foreground mb-0.5 block">강사님 연락처</label>
                                 <Input
                                   className="h-8 text-sm"
                                   placeholder="01012345678"
@@ -1076,7 +1077,7 @@ export default function MeetingTab() {
                             {smsQueue.length > 0 && (
                               <div className="border rounded-lg p-3 space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs font-semibold">발송/예약 내역</span>
+                                  <span className="text-xs font-semibold">예약 및 발송 확인</span>
                                   <button onClick={() => loadQueue(inst.id)} className="text-[11px] text-muted-foreground hover:underline">새로고침</button>
                                 </div>
                                 {smsQueue.map((q) => {
