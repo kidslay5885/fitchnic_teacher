@@ -142,6 +142,7 @@ export default function MeetingTab() {
     preQuestions: Record<string, string>;
     preInfo: string;
     messageStatus: MessageStatus;
+    phone: string;
   } | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -160,6 +161,26 @@ export default function MeetingTab() {
   const [smsDevice, setSmsDevice] = useState<{ paired: boolean; pairing_code: string; last_seen: string | null; phone_number: string } | null>(null);
   const [smsScheduleAt, setSmsScheduleAt] = useState("");
   const [smsBusy, setSmsBusy] = useState<string | null>(null);
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  // 발송 확인 모달
+  const [smsConfirm, setSmsConfirm] = useState<{ inst: Instructor; stage: string; stageLabel: string; text: string; phone: string; scheduledAt?: string } | null>(null);
+  // 발송/예약 내역 (현재 강사)
+  const [smsQueue, setSmsQueue] = useState<Array<{ id: string; stage: string; images: string; scheduled_at: string; status: string; result: string; created_at: string; sent_at: string | null }>>([]);
+  const loadQueue = async (instructorId: string) => {
+    try {
+      const r = await fetch(`/api/sms/queue?instructor_id=${instructorId}`);
+      const d = await r.json();
+      setSmsQueue(d.items || []);
+    } catch {}
+  };
+  const cancelQueued = async (id: string, instructorId: string) => {
+    try {
+      const r = await fetch("/api/sms/queue/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      if (!r.ok) throw new Error((await r.json()).error);
+      toast.success("취소됨");
+      loadQueue(instructorId);
+    } catch (e: any) { toast.error(e.message); }
+  };
 
   const loadDevice = async () => {
     try {
@@ -169,6 +190,13 @@ export default function MeetingTab() {
     } catch {}
   };
   useEffect(() => { loadDevice(); }, []);
+  // 메시지 탭 진입 시 해당 강사 발송/예약 내역 로드
+  useEffect(() => {
+    if (editingMeeting?.modalTab === "messages" && editingMeeting.instructor.id) {
+      loadQueue(editingMeeting.instructor.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingMeeting?.instructor.id, editingMeeting?.modalTab]);
 
   const registerDevice = async () => {
     try {
@@ -187,10 +215,10 @@ export default function MeetingTab() {
   };
 
   // 발송/예약 등록
-  const enqueueSms = async (inst: Instructor, stage: string, text: string, scheduledAt?: string) => {
-    if (!smsDevice?.paired) { toast.error("먼저 폰 기기를 등록·연결하세요."); return; }
-    const phone = (inst.phone || "").replace(/[^0-9]/g, "");
-    if (!phone) { toast.error("강사 전화번호가 없습니다."); return; }
+  const enqueueSms = async (inst: Instructor, stage: string, text: string, phoneRaw: string, scheduledAt?: string) => {
+    if (!smsDevice?.paired) { toast.error("먼저 폰 기기를 등록·연결하세요. (미팅관리 상단)"); return; }
+    const phone = (phoneRaw || "").replace(/[^0-9]/g, "");
+    if (!phone) { toast.error("전화번호를 입력하세요."); return; }
     setSmsBusy(stage + (scheduledAt ? ":sched" : ":now"));
     try {
       const images = stage === "before" ? "transit,car" : "";
@@ -199,7 +227,8 @@ export default function MeetingTab() {
         body: JSON.stringify({ instructor_id: inst.id, instructor_name: inst.name, phone, stage, body: text, images, scheduled_at: scheduledAt || undefined }),
       });
       if (!res.ok) throw new Error((await res.json()).error);
-      toast.success(scheduledAt ? "예약 등록 완료" : "발송 대기열에 추가됨");
+      toast.success(scheduledAt ? "예약 등록 완료" : "발송 요청됨 (폰에서 곧 전송)");
+      loadQueue(inst.id);
     } catch (e: any) { toast.error(e.message); }
     finally { setSmsBusy(null); }
   };
@@ -431,6 +460,7 @@ export default function MeetingTab() {
       postSpecial: post.special, postPositive: post.positive, postNegative: post.negative,
       modalTab: defaultTab, preQuestions: preQ, preInfo: i.pre_info || "",
       messageStatus: parseMessageStatus(i.message_status || ""),
+      phone: i.phone || "",
     });
   };
 
@@ -454,6 +484,7 @@ export default function MeetingTab() {
           pre_questions: JSON.stringify(data.preQuestions),
           post_info: JSON.stringify({ special: data.postSpecial, positive: data.postPositive, negative: data.postNegative }),
           message_status: JSON.stringify(data.messageStatus),
+          phone: data.phone,
         }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -589,6 +620,15 @@ export default function MeetingTab() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">미팅관리</h2>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className={`h-8 text-sm ${smsDevice?.paired ? "text-green-600 border-green-300" : "text-muted-foreground"}`}
+                onClick={() => { setShowDeviceModal(true); loadDevice(); }}
+                title="문자 발송 기기 관리"
+              >
+                <MessageSquare className="h-4 w-4 mr-1" />{smsDevice?.paired ? "문자 연결됨" : "문자 기기"}
+              </Button>
               <Link href="/meeting" target="_blank">
                 <Button size="sm" variant="outline" className="h-8 text-sm">
                   <ArrowUpRight className="h-4 w-4 mr-1" />미팅 페이지
@@ -1003,42 +1043,73 @@ export default function MeetingTab() {
                             .then(() => toast.success("메시지 복사됨"))
                             .catch(() => toast.error("복사 실패"));
                         };
-                        const phone = (inst.phone || "").replace(/[^0-9]/g, "");
+                        const phone = (editingMeeting.phone || "").replace(/[^0-9]/g, "");
                         const canSend = !!smsDevice?.paired && !!phone;
                         const schedISO = smsScheduleAt ? new Date(smsScheduleAt).toISOString() : "";
                         return (
                           <div className="space-y-3">
-                            {/* 문자 자동발송: 기기 상태 + 예약시각 */}
+                            {/* 발송 대상 번호 + 예약 시각 */}
                             <div className="border rounded-lg p-3 bg-slate-50/60 space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-semibold text-foreground">문자 자동발송 (내 폰)</span>
-                                {!smsDevice ? (
-                                  <button onClick={registerDevice} className="text-xs text-blue-600 hover:underline">기기 등록</button>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-foreground">문자 자동발송</span>
+                                {smsDevice?.paired ? (
+                                  <span className="text-[11px] text-green-700">✓ 기기 연결됨</span>
                                 ) : (
-                                  <div className="flex items-center gap-2">
-                                    <button onClick={loadDevice} className="text-xs text-muted-foreground hover:underline">새로고침</button>
-                                    <button onClick={unregisterDevice} className="text-xs text-red-500 hover:underline">등록 해제</button>
-                                  </div>
+                                  <button onClick={() => { setShowDeviceModal(true); loadDevice(); }} className="text-[11px] text-blue-600 hover:underline">기기 등록 필요 →</button>
                                 )}
                               </div>
-                              {!smsDevice && <p className="text-[11px] text-muted-foreground">등록된 폰이 없습니다. '기기 등록'으로 페어링 코드를 발급하세요.</p>}
-                              {smsDevice && !smsDevice.paired && (
-                                <p className="text-[11px] text-orange-600">
-                                  페어링 코드 <span className="font-mono font-bold text-sm">{smsDevice.pairing_code}</span> — 폰 앱에 입력 후 '새로고침'
-                                </p>
-                              )}
-                              {smsDevice?.paired && (
-                                <p className="text-[11px] text-green-700">
-                                  ✓ 연결됨 {smsDevice.phone_number && `(${smsDevice.phone_number})`}
-                                  {smsDevice.last_seen && ` · 최근 접속 ${new Date(smsDevice.last_seen).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`}
-                                </p>
-                              )}
-                              {!phone && <p className="text-[11px] text-red-500">이 강사는 전화번호가 없어 발송할 수 없습니다.</p>}
-                              <div>
-                                <label className="text-[11px] text-muted-foreground mb-0.5 block">예약 발송 시각 (비우면 즉시)</label>
-                                <Input type="datetime-local" className="h-8 text-xs" value={smsScheduleAt} onChange={(e) => setSmsScheduleAt(e.target.value)} />
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="text-[11px] text-muted-foreground mb-0.5 block">받는 전화번호</label>
+                                  <Input
+                                    className="h-8 text-sm"
+                                    placeholder="01012345678"
+                                    value={editingMeeting.phone}
+                                    onChange={(e) => setEditingMeeting({ ...editingMeeting, phone: e.target.value })}
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-[11px] text-muted-foreground mb-0.5 block">예약 시각 (비우면 즉시)</label>
+                                  <Input type="datetime-local" className="h-8 text-xs" value={smsScheduleAt} onChange={(e) => setSmsScheduleAt(e.target.value)} />
+                                </div>
                               </div>
+                              {!phone && <p className="text-[11px] text-red-500">번호를 입력해야 발송할 수 있습니다.</p>}
                             </div>
+
+                            {/* 발송/예약 내역 */}
+                            {smsQueue.length > 0 && (
+                              <div className="border rounded-lg p-3 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-semibold">발송/예약 내역</span>
+                                  <button onClick={() => loadQueue(inst.id)} className="text-[11px] text-muted-foreground hover:underline">새로고침</button>
+                                </div>
+                                {smsQueue.map((q) => {
+                                  const label = MESSAGE_STAGES.find((s) => s.key === q.stage)?.label || q.stage;
+                                  const badge = q.status === "sent" ? { t: "발송완료", c: "bg-green-100 text-green-700" }
+                                    : q.status === "failed" ? { t: "실패", c: "bg-red-100 text-red-700" }
+                                    : q.status === "sending" ? { t: "전송 중", c: "bg-blue-100 text-blue-700" }
+                                    : q.status === "canceled" ? { t: "취소됨", c: "bg-gray-100 text-gray-500" }
+                                    : new Date(q.scheduled_at) > new Date() ? { t: "예약", c: "bg-amber-100 text-amber-700" }
+                                    : { t: "대기", c: "bg-slate-100 text-slate-600" };
+                                  const when = q.status === "sent" && q.sent_at ? new Date(q.sent_at)
+                                    : q.status === "pending" && new Date(q.scheduled_at) > new Date() ? new Date(q.scheduled_at)
+                                    : new Date(q.created_at);
+                                  const whenStr = when.toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+                                  return (
+                                    <div key={q.id} className="flex items-center gap-2 text-xs py-0.5">
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${badge.c}`}>{badge.t}</span>
+                                      <span className="font-medium">{label}</span>
+                                      {q.images && <span className="text-[10px] text-muted-foreground">📎</span>}
+                                      <span className="text-muted-foreground ml-auto">{whenStr}</span>
+                                      {q.status === "pending" && (
+                                        <button onClick={() => cancelQueued(q.id, inst.id)} className="text-[11px] text-red-500 hover:underline">취소</button>
+                                      )}
+                                      {q.status === "failed" && q.result && <span className="text-[10px] text-red-400 max-w-[100px] truncate" title={q.result}>{q.result}</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
 
                             {/* 주차등록 차량번호 */}
                             <div>
@@ -1089,15 +1160,15 @@ export default function MeetingTab() {
                                       <button
                                         type="button"
                                         disabled={!canSend || smsBusy !== null}
-                                        onClick={() => enqueueSms(inst, s.key, text)}
+                                        onClick={() => setSmsConfirm({ inst, stage: s.key, stageLabel: s.label, text, phone: editingMeeting.phone })}
                                         className="text-xs font-medium text-white bg-primary rounded px-2 py-0.5 disabled:opacity-40 whitespace-nowrap"
-                                      >{smsBusy === s.key + ":now" ? "…" : "발송"}</button>
+                                      >발송</button>
                                       <button
                                         type="button"
                                         disabled={!canSend || !schedISO || smsBusy !== null}
-                                        onClick={() => enqueueSms(inst, s.key, text, schedISO)}
+                                        onClick={() => setSmsConfirm({ inst, stage: s.key, stageLabel: s.label, text, phone: editingMeeting.phone, scheduledAt: schedISO })}
                                         className="text-xs font-medium text-primary border border-primary rounded px-2 py-0.5 disabled:opacity-40 whitespace-nowrap"
-                                      >{smsBusy === s.key + ":sched" ? "…" : "예약"}</button>
+                                      >예약</button>
                                       <label
                                         className={`flex items-center gap-1 px-2 py-1 rounded-md border cursor-pointer text-xs font-medium transition-colors ${done ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500"}`}
                                       >
@@ -1267,6 +1338,87 @@ export default function MeetingTab() {
           onConfirm={handleStatusChange}
           onClose={() => setEditingStatus(null)}
         />
+      )}
+      {/* ── 문자 발송 기기 관리 모달 ── */}
+      {showDeviceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowDeviceModal(false)}>
+          <Card className="w-full max-w-[460px]" onClick={(e) => e.stopPropagation()}>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-base font-semibold">문자 발송 기기</p>
+                <button onClick={() => setShowDeviceModal(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+              </div>
+
+              {!smsDevice && (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">등록된 폰이 없습니다. 아래 버튼으로 페어링 코드를 발급한 뒤, 폰 게이트웨이 앱에 입력하세요.</p>
+                  <Button size="sm" className="w-full" onClick={registerDevice}>기기 등록 (코드 발급)</Button>
+                </div>
+              )}
+
+              {smsDevice && !smsDevice.paired && (
+                <div className="space-y-3">
+                  <div className="text-center py-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-xs text-orange-700 mb-1">페어링 코드 — 폰 앱에 입력</p>
+                    <p className="font-mono font-bold text-3xl tracking-widest text-orange-800">{smsDevice.pairing_code}</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">폰 앱에서 코드 입력 → 연결 → 서비스 시작 후, 아래 '새로고침'을 누르세요.</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="flex-1" onClick={loadDevice}>새로고침</Button>
+                    <Button size="sm" variant="outline" className="text-red-500" onClick={unregisterDevice}>등록 해제</Button>
+                  </div>
+                </div>
+              )}
+
+              {smsDevice?.paired && (
+                <div className="space-y-3">
+                  <div className="py-3 px-4 bg-green-50 border border-green-200 rounded-lg text-sm">
+                    <p className="text-green-800 font-medium">✓ 연결됨</p>
+                    {smsDevice.phone_number && <p className="text-xs text-green-700 mt-1">번호: {smsDevice.phone_number}</p>}
+                    {smsDevice.last_seen && <p className="text-xs text-green-700">최근 접속: {new Date(smsDevice.last_seen).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="flex-1" onClick={loadDevice}>새로고침</Button>
+                    <Button size="sm" variant="outline" className="text-red-500" onClick={unregisterDevice}>등록 해제</Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+      {/* ── 발송 확인 모달 ── */}
+      {smsConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setSmsConfirm(null)}>
+          <Card className="w-full max-w-[440px]" onClick={(e) => e.stopPropagation()}>
+            <CardContent className="p-5 space-y-4">
+              <p className="text-base font-semibold">
+                {smsConfirm.scheduledAt ? "예약 발송 확인" : "발송 확인"}
+              </p>
+              <div className="text-sm space-y-1.5 bg-gray-50 rounded-lg p-3 border">
+                <div className="flex gap-2"><span className="text-muted-foreground w-16 shrink-0">받는이</span><span className="font-medium">{smsConfirm.inst.name}</span></div>
+                <div className="flex gap-2"><span className="text-muted-foreground w-16 shrink-0">번호</span><span className="font-medium">{smsConfirm.phone}</span></div>
+                <div className="flex gap-2"><span className="text-muted-foreground w-16 shrink-0">단계</span><span className="font-medium">{smsConfirm.stageLabel}{smsConfirm.stage === "before" && " (이미지 2장 포함)"}</span></div>
+                {smsConfirm.scheduledAt && (
+                  <div className="flex gap-2"><span className="text-muted-foreground w-16 shrink-0">예약시각</span><span className="font-medium text-amber-700">{new Date(smsConfirm.scheduledAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></div>
+                )}
+              </div>
+              <div className="max-h-[160px] overflow-y-auto text-xs whitespace-pre-wrap bg-white border rounded-lg p-2 text-foreground/80">{smsConfirm.text}</div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm" className="flex-1"
+                  disabled={smsBusy !== null}
+                  onClick={async () => {
+                    const c = smsConfirm;
+                    await enqueueSms(c.inst, c.stage, c.text, c.phone, c.scheduledAt);
+                    setSmsConfirm(null);
+                  }}
+                >{smsConfirm.scheduledAt ? "예약 등록" : "지금 발송"}</Button>
+                <Button size="sm" variant="outline" onClick={() => setSmsConfirm(null)}>취소</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
       {/* ── 미팅 추가 모달 ── */}
       {showAddModal && (
