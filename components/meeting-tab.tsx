@@ -201,6 +201,26 @@ export default function MeetingTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingMeeting?.instructor.id, editingMeeting?.modalTab]);
 
+  // 발송 완료(sent)된 단계는 '전송완료' 자동 체크
+  useEffect(() => {
+    if (!editingMeeting || editingMeeting.modalTab !== "messages") return;
+    const stageKeys = ["before", "dayBefore", "dayOf", "afterEnd", "rejected"] as const;
+    const sentStages = smsQueue.filter((q) => q.status === "sent").map((q) => q.stage);
+    if (sentStages.length === 0) return;
+    const ms = editingMeeting.messageStatus;
+    let changed = false;
+    const next = { ...ms };
+    for (const st of sentStages) {
+      const key = st as (typeof stageKeys)[number];
+      if ((stageKeys as readonly string[]).includes(st) && !ms[key]) {
+        next[key] = true;
+        changed = true;
+      }
+    }
+    if (changed) setEditingMeeting({ ...editingMeeting, messageStatus: next });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [smsQueue]);
+
   const registerDevice = async () => {
     try {
       const r = await fetch("/api/sms/device/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
