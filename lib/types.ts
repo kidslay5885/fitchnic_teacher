@@ -80,6 +80,7 @@ export interface Instructor {
   sns_over_10k: string;
   meeting_type_override: boolean;
   free_lecture_date: string;   // 무료강의일 (촬영/리허설/킥오프 등 모든 마일스톤 기준)
+  message_status: string;      // 미팅 안내 메시지 전송 현황 (JSON: {before,dayBefore,dayOf,afterEnd,rejected,carNumber})
   created_at: string;
   updated_at: string;
 }

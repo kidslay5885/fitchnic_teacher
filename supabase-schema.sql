@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS instructors (
   is_banned BOOLEAN DEFAULT false,
   ban_reason TEXT DEFAULT '',
   free_lecture_date TEXT DEFAULT '',   -- 무료강의일 (촬영/리허설/킥오프 등 모든 마일스톤 기준)
+  message_status TEXT DEFAULT '',      -- 미팅 안내 메시지 전송 현황 (JSON)
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );

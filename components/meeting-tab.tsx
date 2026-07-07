@@ -62,6 +62,75 @@ const PRE_QUESTIONS = [
   },
 ];
 
+// 미팅 안내 메시지 단계 정의 (전송 현황 체크용)
+const MESSAGE_STAGES = [
+  { key: "before", label: "미팅 전", desc: "일정 확정" },
+  { key: "dayBefore", label: "전날", desc: "" },
+  { key: "dayOf", label: "당일", desc: "" },
+  { key: "afterEnd", label: "종료 후", desc: "" },
+  { key: "rejected", label: "계약 반려", desc: "" },
+] as const;
+
+type MessageStatus = {
+  before: boolean; dayBefore: boolean; dayOf: boolean;
+  afterEnd: boolean; rejected: boolean; carNumber: string;
+  // 단계별 수정본(강사별). 키가 있으면 자동 문구 대신 이 값을 사용
+  overrides: Record<string, string>;
+};
+
+const EMPTY_MESSAGE_STATUS: MessageStatus = {
+  before: false, dayBefore: false, dayOf: false,
+  afterEnd: false, rejected: false, carNumber: "", overrides: {},
+};
+
+const parseMessageStatus = (raw: string): MessageStatus => {
+  try {
+    const p = JSON.parse(raw || "{}");
+    return {
+      before: !!p.before, dayBefore: !!p.dayBefore, dayOf: !!p.dayOf,
+      afterEnd: !!p.afterEnd, rejected: !!p.rejected, carNumber: p.carNumber || "",
+      overrides: (p.overrides && typeof p.overrides === "object") ? p.overrides : {},
+    };
+  } catch { return { ...EMPTY_MESSAGE_STATUS, overrides: {} }; }
+};
+
+// 미팅 안내 문구 (장소·네이버링크 고정)
+const MSG_PLACE = "장소: 서울 강남구 역삼동 702-29 아름빌딩 5층 (1층 생활맥주 건물)";
+const MSG_NAVER = "https://naver.me/GRoB9jjU";
+
+// 담당자별 발신자 표기 (메시지 서명)
+function senderLabel(assignee: string): string {
+  const name = (assignee || "").trim();
+  if (name === "정승희") return "(주)핏크닉 강의기획팀 팀장 정승희";
+  if (name === "김보성") return "(주)핏크닉 강의기획파트장 김보성";
+  if (name) return `(주)핏크닉 강의기획팀 ${name}`;
+  return "(주)핏크닉 강의기획팀 팀장 정승희";
+}
+
+// 단계별 안내 메시지 생성 (미팅일시·시간·차량번호·발신자 자동 반영)
+function buildMessage(
+  stage: string,
+  opts: { name: string; dateStr: string; hour: number | null; carNumber: string; sender: string }
+): string {
+  const { name, dateStr, hour, carNumber, sender } = opts;
+  const car = carNumber.trim() || "000라 0000";
+  const hourTxt = hour != null ? `${hour}시 ` : "";
+  const dateBlock = `-\n미팅일시: ${dateStr || "(미정)"}\n${MSG_PLACE}\n\n${MSG_NAVER}`;
+  switch (stage) {
+    case "before":
+      return `안녕하세요, 대표님 :)\n금일 연락드린 ${sender}입니다.\n다음주 미팅을 위해 오시는 길을 안내드립니다.\n\n삼성동 마에스트로 주차장을 이용하실 경우,\n핏크닉에서 무료주차(1시간) 지원을 해드립니다.\n주차등록이 필요하시다면 차량번호 전달 부탁드립니다. ^^\n${dateBlock}`;
+    case "dayBefore":
+      return `안녕하세요, 대표님\n내일 ${hourTxt}미팅일정 리마인드차 연락드립니다!\n일정 변동이 없으시다면 내일 뵙고 다시 한 번 인사드리겠습니다.\n\n방문 시 아름빌딩 5층에 오셔서 벨 눌러주세요. 감사합니다. ^^\n\n(주차등록 차량번호: ${car})\n${dateBlock}`;
+    case "dayOf":
+      return `안녕하세요, 대표님\n금일 ${hourTxt}미팅일정 리마인드차 연락드립니다!\n아름빌딩 5층에 올라오셔서 벨 눌러주시면 됩니다. 감사합니다. ^^\n\n(주차등록 차량번호: ${car})\n${dateBlock}`;
+    case "afterEnd":
+      return `대표님, 오늘 시간내어 방문해주셔서 감사합니다.\n덕분에 많은 말씀 나눌 수 있었습니다.\n저희는 충분한 내부논의 거친 후에 다시 한 번 연락드리겠습니다!\n\n감사합니다. ^^`;
+    case "rejected":
+      return `안녕하세요 ${name} 대표님, ${sender}입니다.\n지난 미팅 시간내어주셔서 감사합니다.\n\n내부적으로 충분히 검토한 결과, 현재 저희의 기획과정에서 대표님과 함께 진행하기에는 시점이 조금 아쉬운 것 같습니다.\n추후 발전된 방향성으로 다시 한 번 연락드릴 수 있도록 하겠습니다.\n\n대표님의 사업에도 늘 좋은 성과가 있으시길 응원하겠습니다.\n감사합니다 :)`;
+    default: return "";
+  }
+}
+
 export default function MeetingTab() {
   const { state, dispatch, loadStats } = useOutreach();
   const [monthOffset, setMonthOffset] = useState(0);
@@ -69,9 +138,10 @@ export default function MeetingTab() {
     instructor: Instructor; date: string; time: string; memo: string;
     confirmed: boolean; remindDate: string; meetingType: string;
     postSpecial: string; postPositive: string; postNegative: string;
-    modalTab: "before" | "questions" | "after";
+    modalTab: "before" | "questions" | "after" | "messages";
     preQuestions: Record<string, string>;
     preInfo: string;
+    messageStatus: MessageStatus;
   } | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -312,6 +382,7 @@ export default function MeetingTab() {
       confirmed: !!i.meeting_confirmed, remindDate, meetingType: i.meeting_type || "",
       postSpecial: post.special, postPositive: post.positive, postNegative: post.negative,
       modalTab: defaultTab, preQuestions: preQ, preInfo: i.pre_info || "",
+      messageStatus: parseMessageStatus(i.message_status || ""),
     });
   };
 
@@ -334,6 +405,7 @@ export default function MeetingTab() {
           pre_info: data.preInfo,
           pre_questions: JSON.stringify(data.preQuestions),
           post_info: JSON.stringify({ special: data.postSpecial, positive: data.postPositive, negative: data.postNegative }),
+          message_status: JSON.stringify(data.messageStatus),
         }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -432,6 +504,24 @@ export default function MeetingTab() {
         <td className="px-3 py-2 border-r border-gray-200/60 whitespace-nowrap font-medium text-blue-700">
           {showDate ? formatMeetingDate(i.meeting_date || "") : "-"}
         </td>
+        <td className="px-2 py-2 border-r border-gray-200/60 whitespace-nowrap hidden md:table-cell">
+          {(() => {
+            const ms = parseMessageStatus(i.message_status || "");
+            return (
+              <div className="flex items-center gap-0.5">
+                {MESSAGE_STAGES.map((s, si) => (
+                  <span
+                    key={s.key}
+                    title={`${si + 1}. ${s.label}${ms[s.key] ? " · 전송완료" : " · 미전송"}`}
+                    className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold ${
+                      ms[s.key] ? "bg-green-500 text-white" : "bg-gray-100 text-gray-400"
+                    }`}
+                  >{si + 1}</span>
+                ))}
+              </div>
+            );
+          })()}
+        </td>
         <td className="px-2 py-2 border-r border-gray-200/60 text-center whitespace-nowrap hidden sm:table-cell">
           {i.meeting_type ? (
             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${i.meeting_type === "줌미팅" ? "text-blue-600 border-blue-300 bg-blue-50" : i.meeting_type === "보류" ? "text-gray-600 border-gray-300 bg-gray-50" : "text-orange-600 border-orange-300 bg-orange-50"}`}>{i.meeting_type}</Badge>
@@ -488,6 +578,7 @@ export default function MeetingTab() {
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap hidden sm:table-cell">분야</th>
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap hidden md:table-cell">담당자</th>
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap">미팅일</th>
+                <th className="text-left px-2 py-2 border-r border-gray-200 whitespace-nowrap hidden md:table-cell">메시지</th>
                 <th className="text-center px-2 py-2 border-r border-gray-200 whitespace-nowrap hidden sm:table-cell">방식</th>
                 <th className="text-left px-3 py-2 border-r border-gray-200 whitespace-nowrap hidden lg:table-cell">메모</th>
               </tr>
@@ -497,7 +588,7 @@ export default function MeetingTab() {
               {confirmedWithDate.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={7} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
+                    <td colSpan={8} className="bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 ({confirmedWithDate.length})</span>
                     </td>
                   </tr>
@@ -508,7 +599,7 @@ export default function MeetingTab() {
               {confirmedNoDate.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={7} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
+                    <td colSpan={8} className="bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 border-b">
                       <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />미팅 확정 · 날짜 미정 ({confirmedNoDate.length})</span>
                     </td>
                   </tr>
@@ -519,7 +610,7 @@ export default function MeetingTab() {
               {notConfirmed.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={7} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
+                    <td colSpan={8} className="bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border-b">
                       <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />미팅 예정 ({notConfirmed.length})</span>
                     </td>
                   </tr>
@@ -754,6 +845,7 @@ export default function MeetingTab() {
                         { id: "before" as const, label: "미팅 전" },
                         { id: "questions" as const, label: "미팅 질문" },
                         { id: "after" as const, label: "미팅 후" },
+                        { id: "messages" as const, label: "메시지" },
                       ]).map((tab) => (
                         <button
                           key={tab.id}
@@ -846,6 +938,110 @@ export default function MeetingTab() {
                           </div>
                         </div>
                       )}
+
+                      {/* 메시지 전송 현황 */}
+                      {editingMeeting.modalTab === "messages" && (() => {
+                        const ms = editingMeeting.messageStatus;
+                        let dateStr = "";
+                        let hour: number | null = null;
+                        if (editingMeeting.date) {
+                          const [yy, mm, dd] = editingMeeting.date.split("-").map(Number);
+                          const d = new Date(yy, mm - 1, dd);
+                          dateStr = `${String(yy).slice(2)}.${String(mm).padStart(2, "0")}.${String(dd).padStart(2, "0")}. (${DAY_KO[d.getDay()]})${editingMeeting.time ? ` ${editingMeeting.time}` : ""}`;
+                        }
+                        if (editingMeeting.time) hour = parseInt(editingMeeting.time.split(":")[0], 10);
+                        const copy = (text: string) => {
+                          navigator.clipboard.writeText(text)
+                            .then(() => toast.success("메시지 복사됨"))
+                            .catch(() => toast.error("복사 실패"));
+                        };
+                        return (
+                          <div className="space-y-3">
+                            {/* 주차등록 차량번호 */}
+                            <div>
+                              <label className="text-xs text-muted-foreground mb-1 block">주차등록 차량번호 (전날·당일 안내에 자동 반영)</label>
+                              <Input
+                                className="h-9 text-sm"
+                                placeholder="예: 12가 3456"
+                                value={ms.carNumber}
+                                onChange={(e) => setEditingMeeting({ ...editingMeeting, messageStatus: { ...ms, carNumber: e.target.value } })}
+                              />
+                            </div>
+
+                            {MESSAGE_STAGES.map((s, si) => {
+                              const done = ms[s.key];
+                              const overrides = ms.overrides ?? {};
+                              const hasOverride = Object.prototype.hasOwnProperty.call(overrides, s.key);
+                              const generated = buildMessage(s.key, { name: inst.name, dateStr, hour, carNumber: ms.carNumber, sender: senderLabel(inst.contact_assignee || inst.assignee) });
+                              const text = hasOverride ? overrides[s.key] : generated;
+                              const setOverride = (val: string) =>
+                                setEditingMeeting({ ...editingMeeting, messageStatus: { ...ms, overrides: { ...overrides, [s.key]: val } } });
+                              const resetOverride = () => {
+                                const next = { ...overrides };
+                                delete next[s.key];
+                                setEditingMeeting({ ...editingMeeting, messageStatus: { ...ms, overrides: next } });
+                              };
+                              return (
+                                <div key={s.key} className={`border rounded-lg p-3 space-y-2 ${done ? "border-green-300 bg-green-50/40" : "border-gray-200"}`}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${done ? "bg-green-500 text-white" : "bg-gray-200 text-gray-500"}`}>{si + 1}</span>
+                                      <span className="text-sm font-semibold">{s.label}</span>
+                                      {s.desc && <span className="text-xs text-muted-foreground">{s.desc}</span>}
+                                      {hasOverride && <span className="text-[10px] text-orange-600 bg-orange-50 border border-orange-200 rounded px-1 py-0.5">수정됨</span>}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {hasOverride && (
+                                        <button
+                                          type="button"
+                                          onClick={resetOverride}
+                                          className="text-xs text-muted-foreground hover:text-foreground hover:underline whitespace-nowrap"
+                                        >기본 문구로</button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => copy(text)}
+                                        className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+                                      >복사</button>
+                                      <label
+                                        className={`flex items-center gap-1 px-2 py-1 rounded-md border cursor-pointer text-xs font-medium transition-colors ${done ? "bg-green-100 border-green-300 text-green-700" : "bg-white border-gray-200 text-gray-500"}`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          className="h-3.5 w-3.5 rounded accent-green-600"
+                                          checked={done}
+                                          onChange={() => setEditingMeeting({ ...editingMeeting, messageStatus: { ...ms, [s.key]: !done } })}
+                                        />
+                                        전송완료
+                                      </label>
+                                    </div>
+                                  </div>
+                                  <Textarea
+                                    className="text-xs leading-relaxed bg-gray-50 !min-h-[120px]"
+                                    rows={Math.max(6, text.split("\n").length + 1)}
+                                    value={text}
+                                    onChange={(e) => setOverride(e.target.value)}
+                                    placeholder="메시지 내용..."
+                                  />
+                                  {s.key === "before" && (
+                                    <div className="space-y-1">
+                                      <p className="text-[11px] text-muted-foreground">※ 아래 오시는길 이미지 2장도 함께 첨부하세요.</p>
+                                      <div className="flex gap-2">
+                                        <a href="/fitchnic-route-transit.png" target="_blank" rel="noopener noreferrer" className="block w-1/2">
+                                          <img src="/fitchnic-route-transit.png" alt="오시는길(대중교통)" className="w-full rounded border" />
+                                        </a>
+                                        <a href="/fitchnic-route-car.png" target="_blank" rel="noopener noreferrer" className="block w-1/2">
+                                          <img src="/fitchnic-route-car.png" alt="오시는길(차량)" className="w-full rounded border" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
