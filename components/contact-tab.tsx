@@ -68,7 +68,10 @@ export default function ContactTab() {
   const [bulkStatusLoading, setBulkStatusLoading] = useState(false);
   const [waveFilters, setWaveFilters] = useState<Record<number, WaveFilterKey>>({});
   const [sendMethodFilter, setSendMethodFilter] = useState<SendMethodFilter>("");
-  const [dateFilter, setDateFilter] = useState("");
+  // 발송일 필터: start만 있으면 단일 일자, end까지 있으면 기간
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
+  // 발송일 필터 대상 차수 (0=전체, 1~3=해당 차수만)
+  const [dateWave, setDateWave] = useState(0);
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [sendEmailOpen, setSendEmailOpen] = useState(false);
@@ -199,8 +202,11 @@ export default function ContactTab() {
     } else if (sendMethodFilter) {
       list = list.filter((i) => i.send_method === sendMethodFilter);
     }
-    if (dateFilter) {
-      list = list.filter((i) => (wavesMap[i.id] || []).some((w) => w.sent_date === dateFilter));
+    if (dateRange.start) {
+      const lo = dateRange.start;
+      const hi = dateRange.end || dateRange.start;
+      list = list.filter((i) => (wavesMap[i.id] || []).some((w) =>
+        (dateWave === 0 || w.wave_number === dateWave) && !!w.sent_date && w.sent_date >= lo && w.sent_date <= hi));
     }
     const waveDateMatch = sortKey ? /^wave([123])_date$/.exec(sortKey) : null;
     let sorted = [...list].sort((a, b) => {
@@ -258,16 +264,18 @@ export default function ContactTab() {
     }
 
     return sorted;
-  }, [contactInstructors, state.instructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds, sendMethodFilter, dateFilter]);
+  }, [contactInstructors, state.instructors, viewFilter, search, sortKey, sortDir, waveFilters, wavesMap, checkNeededIds, sendMethodFilter, dateRange, dateWave]);
 
-  // 발송일이 있는 날짜 집합 (달력에 점 표시용)
+  // 발송일이 있는 날짜 집합 (달력에 점 표시용, 선택 차수만 반영)
   const datesWithWave = useMemo(() => {
     const set = new Set<string>();
     for (const waves of Object.values(wavesMap)) {
-      for (const w of waves) if (w.sent_date) set.add(w.sent_date);
+      for (const w of waves) {
+        if (w.sent_date && (dateWave === 0 || w.wave_number === dateWave)) set.add(w.sent_date);
+      }
     }
     return set;
-  }, [wavesMap]);
+  }, [wavesMap, dateWave]);
 
   useEffect(() => { setSelectedIds(new Set()); }, [viewFilter, search]);
 
@@ -301,7 +309,8 @@ export default function ContactTab() {
       setSearch("");
       setWaveFilters({});
       setSendMethodFilter("");
-      setDateFilter("");
+      setDateRange({ start: "", end: "" });
+      setDateWave(0);
       return;
     }
     const idx = filtered.findIndex((i) => i.id === focusId);
@@ -682,18 +691,26 @@ export default function ContactTab() {
             <Button
               size="sm"
               variant="outline"
-              className={`h-8 text-sm ${dateFilter ? "text-primary border-primary" : ""}`}
+              className={`h-8 text-sm ${dateRange.start || dateWave ? "text-primary border-primary" : ""}`}
               onClick={() => setDateFilterOpen((v) => !v)}
             >
               <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
-              {dateFilter
-                ? (() => { const p = dateFilter.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; })()
-                : "날짜"}
+              {(() => {
+                const md = (s: string) => { const p = s.split("-"); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
+                const wavePfx = dateWave ? `${dateWave}차 ` : "";
+                if (!dateRange.start) return dateWave ? `${wavePfx}발송일` : "날짜";
+                const dateLabel = dateRange.end && dateRange.end !== dateRange.start
+                  ? `${md(dateRange.start)}~${md(dateRange.end)}`
+                  : md(dateRange.start);
+                return `${wavePfx}${dateLabel}`;
+              })()}
             </Button>
             {dateFilterOpen && (
               <DateFilterPopover
-                selected={dateFilter}
-                onSelect={(d) => { setDateFilter(d); if (d) setDateFilterOpen(false); }}
+                range={dateRange}
+                onChange={(r) => { setDateRange(r); if (r.start && r.end) setDateFilterOpen(false); }}
+                wave={dateWave}
+                onWaveChange={setDateWave}
                 onClose={() => setDateFilterOpen(false)}
                 datesWithData={datesWithWave}
               />
@@ -1670,16 +1687,31 @@ function fmtDateYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function DateFilterPopover({ selected, onSelect, onClose, datesWithData }: {
-  selected: string;
-  onSelect: (date: string) => void;
+function DateFilterPopover({ range, onChange, wave, onWaveChange, onClose, datesWithData }: {
+  range: { start: string; end: string };
+  onChange: (r: { start: string; end: string }) => void;
+  wave: number;
+  onWaveChange: (n: number) => void;
   onClose: () => void;
   datesWithData: Set<string>;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const initial = selected ? new Date(selected) : new Date();
+  const initial = range.start ? new Date(range.start) : new Date();
   const [viewYear, setViewYear] = useState(initial.getFullYear());
   const [viewMonth, setViewMonth] = useState(initial.getMonth());
+  // 종료일 선택 중 마우스 오버 시 임시 범위 미리보기
+  const [hoverDate, setHoverDate] = useState("");
+
+  // 날짜 클릭: 시작일만 있으면 종료일 확정(필요 시 자동 정렬), 그 외엔 새 시작일 지정
+  const handleClick = (date: string) => {
+    if (range.start && !range.end) {
+      const [lo, hi] = date < range.start ? [date, range.start] : [range.start, date];
+      onChange({ start: lo, end: hi });
+    } else {
+      onChange({ start: date, end: "" });
+    }
+  };
+  const clear = () => { onChange({ start: "", end: "" }); onWaveChange(0); onClose(); };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -1723,6 +1755,20 @@ function DateFilterPopover({ selected, onSelect, onClose, datesWithData }: {
       ref={ref}
       className="absolute top-full right-0 mt-1 z-50 bg-white border rounded-lg shadow-lg p-3 w-72"
     >
+      {/* 차수 선택: 선택 차수의 발송일만 필터/점 표시 */}
+      <div className="grid grid-cols-4 gap-0.5 mb-2 p-0.5 bg-gray-100 rounded-md">
+        {[{ n: 0, label: "전체" }, { n: 1, label: "1차" }, { n: 2, label: "2차" }, { n: 3, label: "3차" }].map((o) => (
+          <button
+            key={o.n}
+            onClick={() => onWaveChange(o.n)}
+            className={`text-xs py-1 rounded transition ${
+              wave === o.n ? "bg-white text-primary font-semibold shadow-sm" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
       <div className="flex items-center justify-between mb-2">
         <button onClick={prevMonth} className="p-1 hover:bg-gray-100 rounded">
           <ChevronLeft className="h-4 w-4" />
@@ -1735,19 +1781,29 @@ function DateFilterPopover({ selected, onSelect, onClose, datesWithData }: {
       <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] mb-1 text-muted-foreground">
         {["일","월","화","수","목","금","토"].map(d => <div key={d}>{d}</div>)}
       </div>
-      <div className="grid grid-cols-7 gap-0.5">
+      <div className="grid grid-cols-7 gap-0.5" onMouseLeave={() => setHoverDate("")}>
         {cells.map((c, idx) => {
           const hasData = datesWithData.has(c.date);
-          const isSelected = selected === c.date;
+          // 확정 범위 또는 (종료일 선택 중) 시작일~호버 임시 범위
+          const lo = range.start;
+          const hi = range.end || (range.start && !range.end ? hoverDate : "");
+          const [rLo, rHi] = lo && hi && hi < lo ? [hi, lo] : [lo, hi];
+          const isStart = c.date === range.start;
+          const isEnd = !!range.end && c.date === range.end;
+          const inRange = !!rLo && !!rHi && c.date >= rLo && c.date <= rHi;
+          const isEndpoint = isStart || isEnd || (!range.end && c.date === range.start);
           const isToday = today === c.date;
           return (
             <button
               key={idx}
-              onClick={() => onSelect(isSelected ? "" : c.date)}
+              onClick={() => handleClick(c.date)}
+              onMouseEnter={() => setHoverDate(c.date)}
               disabled={!c.inMonth && !hasData}
               className={`relative aspect-square rounded text-xs flex items-center justify-center transition ${
-                isSelected
+                isEndpoint
                   ? "bg-primary text-primary-foreground font-semibold"
+                  : inRange
+                  ? "bg-primary/15 text-primary font-medium"
                   : !c.inMonth
                   ? "text-gray-300 hover:bg-gray-50"
                   : hasData
@@ -1758,7 +1814,7 @@ function DateFilterPopover({ selected, onSelect, onClose, datesWithData }: {
               }`}
             >
               {c.day}
-              {hasData && !isSelected && (
+              {hasData && !isEndpoint && !inRange && (
                 <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-blue-500" />
               )}
             </button>
@@ -1767,15 +1823,16 @@ function DateFilterPopover({ selected, onSelect, onClose, datesWithData }: {
       </div>
       <div className="mt-2 flex items-center justify-between text-xs">
         <span className="text-muted-foreground">
-          {selected
-            ? `${selected} 선택됨`
-            : `발송일 ${datesWithData.size}개`}
+          {range.start
+            ? range.end && range.end !== range.start
+              ? `${range.start} ~ ${range.end}`
+              : range.end
+              ? `${range.start} 선택됨`
+              : "종료일을 선택하세요"
+            : `${wave ? `${wave}차 ` : ""}발송일 ${datesWithData.size}개`}
         </span>
-        {selected && (
-          <button
-            onClick={() => { onSelect(""); onClose(); }}
-            className="text-primary hover:underline"
-          >
+        {(range.start || wave > 0) && (
+          <button onClick={clear} className="text-primary hover:underline">
             해제
           </button>
         )}
