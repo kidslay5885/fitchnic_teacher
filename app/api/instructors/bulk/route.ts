@@ -1,6 +1,48 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
+import { normalizeUrl } from "@/lib/utils";
+
+// 여러 강사 일괄 등록 (크롤링 채널 붙여넣기 등)
+export async function POST(req: Request) {
+  const sb = getSupabase();
+  const { instructors, performedBy } = await req.json();
+
+  if (!Array.isArray(instructors) || instructors.length === 0) {
+    return NextResponse.json({ error: "instructors 배열이 필요합니다." }, { status: 400 });
+  }
+
+  // 삽입 데이터 정규화 (유튜브 URL 프로토콜 보정)
+  const rows = instructors.map((it: any) => ({
+    ...it,
+    youtube: normalizeUrl(it.youtube),
+    status: it.status || "미검토",
+  }));
+
+  const { data, error } = await sb.from("instructors").insert(rows).select();
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // 초기 상태 이력 일괄 기록
+  const historyRows = (data ?? []).map((d: any) => ({
+    instructor_id: d.id,
+    from_status: "",
+    to_status: d.status || "미검토",
+    changed_by: performedBy || d.assignee || "",
+    reason: "신규 등록(일괄)",
+  }));
+  if (historyRows.length) await sb.from("status_history").insert(historyRows);
+
+  await logActivity({
+    actionType: "강사일괄등록",
+    targetType: "instructor",
+    targetId: (data ?? []).map((d: any) => d.id).join(","),
+    targetName: (data ?? []).map((d: any) => d.name).join(", "),
+    detail: `${(data ?? []).length}명 등록`,
+    performedBy: performedBy || "",
+  });
+
+  return NextResponse.json(data ?? [], { status: 201 });
+}
 
 // 일괄 상태 변경
 export async function PATCH(req: Request) {

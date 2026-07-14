@@ -17,6 +17,7 @@ import type { Instructor, InstructorStatus } from "@/lib/types";
 import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
 import InstructorForm from "@/components/instructor-form";
+import BulkInstructorForm from "@/components/bulk-instructor-form";
 import BulkActions from "@/components/bulk-actions";
 import YouTubeChannelsTab from "@/components/youtube-channels-tab";
 import { Plus, Search, ChevronUp, ChevronDown, X, ExternalLink, Trash2, RotateCcw } from "lucide-react";
@@ -87,6 +88,7 @@ export default function InstructorsTab() {
 function InstructorListView() {
   const { state, dispatch, loadInstructors, loadStats } = useOutreach();
   const [showForm, setShowForm] = useState(false);
+  const [showBulkForm, setShowBulkForm] = useState(false);
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR);
@@ -263,6 +265,9 @@ function InstructorListView() {
           <Button onClick={() => setShowForm(true)} size="sm" className="h-8 text-sm">
             <Plus className="h-4 w-4 mr-1" />추가
           </Button>
+          <Button onClick={() => setShowBulkForm(true)} size="sm" variant="outline" className="h-8 text-sm">
+            <Plus className="h-4 w-4 mr-1" />일괄 추가
+          </Button>
           <a
             href="/submit"
             target="_blank"
@@ -398,6 +403,7 @@ function InstructorListView() {
         />
       )}
       {showForm && <InstructorForm onClose={() => setShowForm(false)} />}
+      {showBulkForm && <BulkInstructorForm onClose={() => setShowBulkForm(false)} />}
 
       {editingStatus && (
         <StatusPopover
