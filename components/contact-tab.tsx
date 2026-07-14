@@ -529,7 +529,12 @@ export default function ContactTab() {
     if (raw !== "이메일") return raw;
     const w1 = getWave(inst.id, 1);
     const acc = w1?.sender_account_id ? accountTagMap[w1.sender_account_id] : null;
-    return acc ? `이메일(${acc.tag})` : "이메일";
+    if (!acc) return "이메일";
+    // ceo/팀은 "이메일(대)/이메일(팀)", 그 외 계정은 "메일_라벨" (예: 메일_김보성)
+    const local = acc.email.split("@")[0];
+    return local === "ceo" || local === "business.center"
+      ? `이메일(${acc.tag})`
+      : `메일_${acc.tag}`;
   };
 
   const formatWave = (w: OutreachWave | undefined) => {
