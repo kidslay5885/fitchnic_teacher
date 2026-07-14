@@ -140,10 +140,10 @@ export default function ContactTab() {
         if (cancelled) return;
         const map: Record<string, { tag: string; label: string; email: string; badgeClass: string }> = {};
         for (const a of data.accounts ?? []) {
-          // 이메일 로컬 파트로 태그·색 결정: ceo → "대"(파랑), business.center → "팀"(청록), 그 외는 라벨/이메일 기본 파랑
+          // 이메일 로컬 파트로 태그·색 결정: ceo → "대"(파랑), business.center → "팀"(청록), 그 외는 라벨/회색
           const local = String(a.email).split("@")[0];
           let tag = a.label;
-          let badgeClass = "bg-blue-100 text-blue-700";
+          let badgeClass = "bg-slate-100 text-slate-700";
           if (local === "ceo") {
             tag = "대";
             badgeClass = "bg-blue-100 text-blue-700";
