@@ -10,13 +10,14 @@ export interface GmailAccount {
   id: string;
   email: string;
   label: string;
+  from_name: string | null; // 받는사람 메일함에 뜨는 발신자 표시명. 없으면 label 사용.
   refresh_token: string | null;
   is_default: boolean;
   is_cron_sender: boolean;
   bcc: string[];
 }
 
-const ACCOUNT_COLUMNS = "id, email, label, refresh_token, is_default, is_cron_sender, bcc";
+const ACCOUNT_COLUMNS = "id, email, label, from_name, refresh_token, is_default, is_cron_sender, bcc";
 
 // (계정 id → 클라이언트) 캐시. refresh_token 이 바뀌면 무효화된다.
 const clientCache = new Map<string, { token: string; client: ReturnType<typeof buildOAuth2Client> }>();
@@ -48,6 +49,7 @@ function normalizeAccount(row: Record<string, unknown>): GmailAccount {
     id: row.id as string,
     email: row.email as string,
     label: row.label as string,
+    from_name: (row.from_name as string | null) ?? null,
     refresh_token: (row.refresh_token as string | null) ?? null,
     is_default: !!row.is_default,
     is_cron_sender: !!row.is_cron_sender,
@@ -258,7 +260,7 @@ export async function sendEmail({
     ATTACH_BUSINESS_CARD && isTeamAccount(account.email) ? [BUSINESS_CARD_ATTACHMENT] : undefined;
   const raw = buildRawMessage(
     account.email,
-    account.label,
+    account.from_name || account.label, // 받는사람 표시명: from_name 우선, 없으면 label
     to,
     subject,
     body,
