@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import { getSupabase } from "@/lib/supabase";
 import { BUSINESS_CARD_ATTACHMENT } from "@/lib/business-card";
+import { BUSINESS_CARD_KIMBOSEONG } from "@/lib/business-card-kimboseong";
 
 // Gmail API 발송 헬퍼 (다중 계정 지원)
 // gmail_accounts 테이블에서 계정별 refresh_token 을 불러와 OAuth 클라이언트를 만든다.
@@ -243,6 +244,13 @@ function isTeamAccount(email: string) {
   return email.split("@")[0] === "business.center";
 }
 
+// 계정별 자동 첨부 명함 — 해당 계정으로 발송 시 첨부할 명함(없으면 null)
+function cardForAccount(email: string): EmailAttachment | null {
+  const local = email.split("@")[0];
+  if (local === "bbosk456") return BUSINESS_CARD_KIMBOSEONG; // 김보성 명함
+  return null;
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -254,10 +262,14 @@ export async function sendEmail({
   const account = senderAccount ?? (await getAccount(senderAccountId));
   const auth = await getClient(account);
   const gmail = google.gmail({ version: "v1", auth });
-  // 팀메일 계정으로 나가는 메일에는 명함을 자동 첨부 (크론·수동 발송 공통)
-  // ATTACH_BUSINESS_CARD 가 false 면 첨부 비활성화
-  const attachments =
-    ATTACH_BUSINESS_CARD && isTeamAccount(account.email) ? [BUSINESS_CARD_ATTACHMENT] : undefined;
+  // 명함 자동 첨부 (크론·수동 발송 공통)
+  // - 팀메일 계정: ATTACH_BUSINESS_CARD 토글로 제어 (현재 비활성화)
+  // - 그 외 계정: cardForAccount 로 계정별 명함 첨부 (예: 김보성)
+  const teamCard =
+    ATTACH_BUSINESS_CARD && isTeamAccount(account.email) ? BUSINESS_CARD_ATTACHMENT : null;
+  const accountCard = cardForAccount(account.email);
+  const cards = [teamCard, accountCard].filter(Boolean) as EmailAttachment[];
+  const attachments = cards.length > 0 ? cards : undefined;
   const raw = buildRawMessage(
     account.email,
     account.from_name || account.label, // 받는사람 표시명: from_name 우선, 없으면 label
