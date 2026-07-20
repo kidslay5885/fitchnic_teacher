@@ -17,6 +17,7 @@ import type { InstructorStatus } from "@/lib/types";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, CheckCircle2, Plus, Minus } from "lucide-react";
 import { editDistance } from "@/lib/utils";
+import { isDupEmailReason } from "@/lib/duplicate-email";
 
 interface Props {
   onClose: () => void;
@@ -190,7 +191,8 @@ export default function InstructorForm({ onClose }: Props) {
       toast.error("연락 금지 대상입니다. 추가할 수 없습니다.");
       return;
     }
-    if ((nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") && !force) return;
+    // 이메일 중복은 막지 않는다 (서버가 '제외' + 사유 '이메일 중복'으로 자동 처리)
+    if (nameCheck?.type === "duplicate" && !force) return;
     setSaving(true);
     try {
       const { status_memo, ...rest } = form;
@@ -218,7 +220,11 @@ export default function InstructorForm({ onClose }: Props) {
       if (!res.ok && !data.warning) throw new Error(data.error);
       dispatch({ type: "ADD_INSTRUCTOR", instructor: data });
       await loadStats();
-      toast.success(`${form.name} 추가 완료`);
+      if (isDupEmailReason(data.reason)) {
+        toast.warning(`${form.name} 추가됨 — 이메일 중복으로 '제외' 처리되었습니다.`);
+      } else {
+        toast.success(`${form.name} 추가 완료`);
+      }
       onClose();
     } catch (e: any) {
       toast.error(e.message);
@@ -458,6 +464,7 @@ export default function InstructorForm({ onClose }: Props) {
                       <AlertTriangle className="h-3.5 w-3.5" />이미 등록된 이메일
                       {emailCheck.source === "youtube_channels" && <span className="text-orange-500 font-normal">(YT채널수집)</span>}
                     </div>
+                    <p className="text-[11px] text-orange-600">추가 시 상태가 &apos;제외&apos;, 사유가 &apos;이메일 중복&apos;으로 자동 입력됩니다.</p>
                     {emailCheck.matches.map((d) => (
                       <div key={d.id} className="text-xs text-orange-600 bg-orange-100 rounded px-2 py-1">
                         {d.name} {d.field && `| ${d.field}`} | {d.status}
@@ -541,7 +548,7 @@ export default function InstructorForm({ onClose }: Props) {
 
             <div className="flex justify-end gap-2 mt-1">
               <Button variant="outline" size="sm" className="h-8 text-sm" onClick={onClose}>취소</Button>
-              {(nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") ? (
+              {nameCheck?.type === "duplicate" ? (
                 <Button size="sm" className="h-8 text-sm" onClick={() => handleSubmit(true)} disabled={saving}>
                   {saving ? "저장 중..." : "그래도 추가"}
                 </Button>

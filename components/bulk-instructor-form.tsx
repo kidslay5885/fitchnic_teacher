@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { AlertTriangle, Ban, CheckCircle2 } from "lucide-react";
+import { isDupEmailReason } from "@/lib/duplicate-email";
 
 interface Props {
   onClose: () => void;
@@ -116,12 +117,14 @@ export default function BulkInstructorForm({ onClose }: Props) {
       });
   }, [raw, instructors, ytChannels]);
 
-  // 붙여넣기가 바뀌면 포함 여부 기본값 재설정 (정상=포함, 중복=제외, 금지=불가)
+  // 붙여넣기가 바뀌면 포함 여부 기본값 재설정
+  // 정상=포함, 이메일 중복=포함(서버가 '제외' 상태로 자동 등록), 이름 중복=미포함, 금지=불가
   useEffect(() => {
     const next: Record<number, boolean> = {};
     for (const r of rows) {
       if (r.dup === "banned") next[r.idx] = false;
-      else next[r.idx] = r.dup !== "duplicate";
+      else if (r.dup === "duplicate") next[r.idx] = r.dupBy === "email";
+      else next[r.idx] = true;
     }
     setInclude(next);
   }, [rows]);
@@ -156,7 +159,10 @@ export default function BulkInstructorForm({ onClose }: Props) {
         dispatch({ type: "ADD_INSTRUCTOR", instructor: inst });
       }
       await loadStats();
-      toast.success(`${data.length}명 추가 완료`);
+      const excluded = data.filter((d: any) => isDupEmailReason(d.reason)).length;
+      toast.success(
+        `${data.length}명 추가 완료${excluded ? ` (이메일 중복 ${excluded}명은 '제외' 처리)` : ""}`
+      );
       onClose();
     } catch (e: any) {
       toast.error(e.message);
@@ -246,6 +252,9 @@ export default function BulkInstructorForm({ onClose }: Props) {
                                 <AlertTriangle className="h-3.5 w-3.5" />
                                 중복({r.dupBy === "email" ? "이메일" : "이름"}
                                 {r.dupSource === "youtube_channels" ? "·YT" : ""})
+                                {r.dupBy === "email" && (
+                                  <span className="text-[10px] text-orange-500">→ 제외로 등록</span>
+                                )}
                               </span>
                             )}
                             {!r.dup && (

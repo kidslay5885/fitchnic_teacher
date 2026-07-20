@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
+import {
+  findEmailOwners,
+  findExistingChannelEmails,
+  normalizeEmail,
+  dupEmailReason,
+  isDupEmailReason,
+} from "@/lib/duplicate-email";
 
 export async function GET() {
   const sb = getSupabase();
@@ -34,25 +41,6 @@ export async function GET() {
   return NextResponse.json(all);
 }
 
-// instructors 테이블에 존재하는 이메일 Set을 반환한다.
-async function getInstructorEmails(sb: ReturnType<typeof getSupabase>, emails: string[]): Promise<Set<string>> {
-  const existing = new Set<string>();
-  // 50개씩 배치 조회
-  for (let i = 0; i < emails.length; i += 50) {
-    const batch = emails.slice(i, i + 50);
-    const { data } = await sb
-      .from("instructors")
-      .select("email")
-      .in("email", batch);
-    if (data) {
-      for (const row of data) {
-        if (row.email) existing.add(row.email);
-      }
-    }
-  }
-  return existing;
-}
-
 // 이름 정규화: 공백 제거 + 소문자
 function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, "").toLowerCase();
@@ -81,10 +69,11 @@ export async function POST(req: Request) {
   if (Array.isArray(body)) {
     const results = { created: 0, skipped: 0, duplicateInstructors: 0, bannedExcluded: 0, errors: [] as string[] };
 
-    // instructors 교차 중복 + 연락금지 강사 이름 조회 (병렬)
+    // 이메일 중복(기존 보유자) + 이미 등록된 채널 이메일 + 연락금지 강사 이름 조회 (병렬)
     const emails = body.map((item: any) => item.email).filter(Boolean);
-    const [instructorEmails, bannedNames] = await Promise.all([
-      getInstructorEmails(sb, emails),
+    const [emailOwners, existingChannelEmails, bannedNames] = await Promise.all([
+      findEmailOwners(sb, emails),
+      findExistingChannelEmails(sb, emails),
       getBannedInstructorNames(sb),
     ]);
 
@@ -94,16 +83,18 @@ export async function POST(req: Request) {
         continue;
       }
 
-      // instructors에 이미 있으면 건너뜀
-      if (instructorEmails.has(item.email)) {
-        results.duplicateInstructors++;
-        results.skipped++;
-        continue;
-      }
+      const emailKey = normalizeEmail(item.email);
+      // 이미 등록된 채널의 재임포트(upsert)면 중복 판정 대상이 아님
+      const isNewChannel = !existingChannelEmails.has(emailKey);
+      const dupOwner = isNewChannel ? emailOwners.get(emailKey) : undefined;
 
       // 채널명이 연락금지 강사와 일치하면 상태를 "제외"로 강제
       const isBanned = bannedNames.has(normalizeName(item.channel_name));
-      const status = isBanned ? "제외" : (item.status || "미검토");
+      // 이메일 중복도 "제외" 처리하고 사유를 메모에 남김 (youtube_channels에는 reason 컬럼이 없음)
+      const status = isBanned || dupOwner !== undefined ? "제외" : (item.status || "미검토");
+      const memo = dupOwner !== undefined
+        ? [dupEmailReason(dupOwner), item.memo].filter(Boolean).join(" / ")
+        : (item.memo || "");
 
       const { error } = await sb
         .from("youtube_channels")
@@ -116,7 +107,7 @@ export async function POST(req: Request) {
             channel_url: item.channel_url || "",
             email: item.email,
             status,
-            memo: item.memo || "",
+            memo,
           },
           { onConflict: "email" }
         );
@@ -127,6 +118,7 @@ export async function POST(req: Request) {
       } else {
         results.created++;
         if (isBanned) results.bannedExcluded++;
+        if (dupOwner !== undefined) results.duplicateInstructors++;
       }
     }
 
@@ -138,24 +130,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "email, channel_name은 필수입니다." }, { status: 400 });
   }
 
-  // instructors 교차 중복 체크
-  const { data: existing } = await sb
-    .from("instructors")
-    .select("id, name")
-    .eq("email", body.email)
-    .limit(1);
-
-  if (existing && existing.length > 0) {
-    return NextResponse.json(
-      { warning: "duplicate_instructor", instructor: existing[0] },
-      { status: 200 }
-    );
-  }
+  // 이메일 중복 체크 (이미 등록된 채널의 재등록은 대상 아님)
+  const emailKey = normalizeEmail(body.email);
+  const [emailOwners, existingChannelEmails, bannedNames] = await Promise.all([
+    findEmailOwners(sb, [body.email]),
+    findExistingChannelEmails(sb, [body.email]),
+    getBannedInstructorNames(sb),
+  ]);
+  const dupOwner = existingChannelEmails.has(emailKey) ? undefined : emailOwners.get(emailKey);
 
   // 채널명이 연락금지 강사와 일치하면 상태를 "제외"로 강제
-  const bannedNames = await getBannedInstructorNames(sb);
   const isBanned = bannedNames.has(normalizeName(body.channel_name));
-  const status = isBanned ? "제외" : (body.status || "미검토");
+  // 이메일 중복도 "제외" 처리하고 사유를 메모에 남김
+  const status = isBanned || dupOwner !== undefined ? "제외" : (body.status || "미검토");
+  const memo = dupOwner !== undefined
+    ? [dupEmailReason(dupOwner), body.memo].filter(Boolean).join(" / ")
+    : (body.memo || "");
 
   const { data, error } = await sb
     .from("youtube_channels")
@@ -168,7 +158,7 @@ export async function POST(req: Request) {
         channel_url: body.channel_url || "",
         email: body.email,
         status,
-        memo: body.memo || "",
+        memo,
       },
       { onConflict: "email" }
     )
@@ -176,7 +166,10 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ...data, bannedExcluded: isBanned }, { status: 201 });
+  return NextResponse.json(
+    { ...data, bannedExcluded: isBanned, dupEmailExcluded: dupOwner !== undefined },
+    { status: 201 }
+  );
 }
 
 // 이관이 필요한 상태 (미검토 이후 단계)
@@ -205,6 +198,8 @@ async function migrateToInstructor(sb: ReturnType<typeof getSupabase>, channel: 
       field: channel.keyword || "",
       status: channel.status,
       notes: channel.memo || "",
+      // 이메일 중복으로 제외된 채널이면 사유도 함께 이관
+      reason: isDupEmailReason(channel.memo) ? channel.memo : "",
       source: "YT채널수집",
       assignee: "크롤링",
     })

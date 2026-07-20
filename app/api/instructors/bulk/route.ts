@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
 import { normalizeUrl } from "@/lib/utils";
+import { findEmailOwners, normalizeEmail, dupEmailReason, isDupEmailReason } from "@/lib/duplicate-email";
 
 // 여러 강사 일괄 등록 (크롤링 채널 붙여넣기 등)
 export async function POST(req: Request) {
@@ -12,12 +13,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "instructors 배열이 필요합니다." }, { status: 400 });
   }
 
-  // 삽입 데이터 정규화 (유튜브 URL 프로토콜 보정)
-  const rows = instructors.map((it: any) => ({
-    ...it,
-    youtube: normalizeUrl(it.youtube),
-    status: it.status || "미검토",
-  }));
+  // 기존 데이터(instructors + youtube_channels)와 이메일이 겹치는지 조회
+  const owners = await findEmailOwners(sb, instructors.map((it: any) => it.email));
+  const seenInBatch = new Map<string, string>(); // 같은 요청 안에서의 중복도 처리
+  let dupEmailExcluded = 0;
+
+  // 삽입 데이터 정규화 (유튜브 URL 프로토콜 보정) + 이메일 중복 시 자동 제외
+  const rows = instructors.map((it: any) => {
+    const row = {
+      ...it,
+      youtube: normalizeUrl(it.youtube),
+      status: it.status || "미검토",
+    };
+    const key = normalizeEmail(it.email);
+    if (key) {
+      const owner = owners.get(key) ?? seenInBatch.get(key);
+      if (owner !== undefined) {
+        row.status = "제외";
+        row.reason = dupEmailReason(owner);
+        dupEmailExcluded++;
+      } else {
+        seenInBatch.set(key, row.name || "");
+      }
+    }
+    return row;
+  });
 
   const { data, error } = await sb.from("instructors").insert(rows).select();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -28,7 +48,9 @@ export async function POST(req: Request) {
     from_status: "",
     to_status: d.status || "미검토",
     changed_by: performedBy || d.assignee || "",
-    reason: "신규 등록(일괄)",
+    reason: isDupEmailReason(d.reason)
+      ? "신규 등록(일괄, 이메일 중복 자동 제외)"
+      : "신규 등록(일괄)",
   }));
   if (historyRows.length) await sb.from("status_history").insert(historyRows);
 
@@ -37,7 +59,7 @@ export async function POST(req: Request) {
     targetType: "instructor",
     targetId: (data ?? []).map((d: any) => d.id).join(","),
     targetName: (data ?? []).map((d: any) => d.name).join(", "),
-    detail: `${(data ?? []).length}명 등록`,
+    detail: `${(data ?? []).length}명 등록${dupEmailExcluded ? ` (이메일 중복 자동 제외 ${dupEmailExcluded}명)` : ""}`,
     performedBy: performedBy || "",
   });
 

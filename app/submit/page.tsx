@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { STATUSES, STATUS_COLORS, ASSIGNEES, SOURCES } from "@/lib/constants";
+import { isDupEmailReason } from "@/lib/duplicate-email";
 import type { Instructor, InstructorStatus, YouTubeChannel } from "@/lib/types";
 import { Search, ChevronUp, ChevronDown, AlertTriangle, Ban, CheckCircle2, Plus, Minus, RotateCcw, X } from "lucide-react";
 
@@ -741,7 +742,8 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
   const handleSubmit = async (force = false) => {
     if (!form.name.trim()) { toast.error("강사 이름을 입력하세요."); return; }
     if (!editing && (nameCheck?.type === "banned" || emailCheck?.type === "banned")) { toast.error("연락 금지 대상입니다. 추가할 수 없습니다."); return; }
-    if (!editing && (nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") && !force) return;
+    // 이메일 중복은 막지 않는다 (서버가 '제외' + 사유 '이메일 중복'으로 자동 처리)
+    if (!editing && nameCheck?.type === "duplicate" && !force) return;
     setSaving(true);
     try {
       const payload = {
@@ -772,7 +774,11 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
         const data = await res.json();
         if (data.warning === "duplicate_name" && !force) return;
         if (!res.ok && !data.warning) throw new Error(data.error);
-        toast.success(`${form.name} 추가 완료`);
+        if (isDupEmailReason(data.reason)) {
+          toast.warning(`${form.name} 추가됨 — 이메일 중복으로 '제외' 처리되었습니다.`);
+        } else {
+          toast.success(`${form.name} 추가 완료`);
+        }
         onAdded(data);
         resetForm();
       }
@@ -1002,6 +1008,7 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
                 <AlertTriangle className="h-3.5 w-3.5" />이미 등록된 이메일
                 {emailCheck.source === "youtube_channels" && <span className="text-orange-500 font-normal">(YT채널수집)</span>}
               </div>
+              <p className="text-[11px] text-orange-600">추가 시 상태가 &apos;제외&apos;, 사유가 &apos;이메일 중복&apos;으로 자동 입력됩니다.</p>
               {emailCheck.matches.map((d) => (
                 <div key={d.id} className="text-xs text-orange-600 bg-orange-100 rounded px-2 py-1 cursor-pointer hover:bg-orange-200" onClick={() => emailCheck.source === "instructors" && onScrollTo(d.id)}>
                   {d.name} {d.field && `| ${d.field}`} | {d.status}
@@ -1043,7 +1050,7 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
               취소
             </Button>
           </>
-        ) : (nameCheck?.type === "duplicate" || emailCheck?.type === "duplicate") ? (
+        ) : nameCheck?.type === "duplicate" ? (
           <Button className="w-full h-9 text-sm" onClick={() => handleSubmit(true)} disabled={saving}>
             {saving ? "저장 중..." : "그래도 추가"}
           </Button>

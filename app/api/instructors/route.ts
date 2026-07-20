@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
 import { normalizeUrl, normalizeRefLinks } from "@/lib/utils";
+import { findEmailOwners, normalizeEmail, dupEmailReason } from "@/lib/duplicate-email";
 
 // URL 계열 필드를 정규화 (프로토콜 누락 시 https:// 자동 추가)
 function normalizeUrlFields<T extends Record<string, any>>(obj: T): T {
@@ -81,6 +82,18 @@ export async function POST(req: Request) {
     }
   }
 
+  // 이메일 중복이면 상태를 "제외"로 강제하고 사유를 자동 입력 (_force와 무관하게 항상 적용)
+  let dupEmailExcluded = false;
+  if (insertData.email) {
+    const owners = await findEmailOwners(sb, [insertData.email]);
+    const owner = owners.get(normalizeEmail(insertData.email));
+    if (owner !== undefined) {
+      insertData.status = "제외";
+      insertData.reason = dupEmailReason(owner);
+      dupEmailExcluded = true;
+    }
+  }
+
   const { data, error } = await sb
     .from("instructors")
     .insert(insertData)
@@ -95,7 +108,7 @@ export async function POST(req: Request) {
     from_status: "",
     to_status: data.status || "미검토",
     changed_by: insertData.assignee || "",
-    reason: "신규 등록",
+    reason: dupEmailExcluded ? "신규 등록(이메일 중복 자동 제외)" : "신규 등록",
   });
 
   await logActivity({
@@ -103,7 +116,7 @@ export async function POST(req: Request) {
     targetType: "instructor",
     targetId: data.id,
     targetName: data.name,
-    detail: `상태: ${data.status || "미검토"}`,
+    detail: `상태: ${data.status || "미검토"}${dupEmailExcluded ? " (이메일 중복 자동 제외)" : ""}`,
     performedBy: insertData.assignee || "",
   });
 

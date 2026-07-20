@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { STATUS_COLORS, STATUSES, ASSIGNEES, SOURCES } from "@/lib/constants";
 import { requiresReason } from "@/lib/status-machine";
+import { isDupEmailReason } from "@/lib/duplicate-email";
 import type { Instructor, InstructorStatus } from "@/lib/types";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -1557,7 +1558,11 @@ function AddMeetingModal({ instructors, dispatch, loadStats, onSave, onClose }: 
       if (!res.ok) throw new Error(data.error);
       dispatch({ type: "ADD_INSTRUCTOR", instructor: data });
       await loadStats();
-      toast.success(`${form.name} 등록 + 미팅 추가 완료`);
+      if (isDupEmailReason(data.reason)) {
+        toast.warning(`${form.name} 등록됨 — 이메일 중복으로 '제외' 처리되었습니다.`);
+      } else {
+        toast.success(`${form.name} 등록 + 미팅 추가 완료`);
+      }
       onClose();
     } catch (e: any) {
       toast.error(e.message || "등록 실패");
