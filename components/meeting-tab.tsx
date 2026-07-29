@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import Link from "next/link";
 import {
   ChevronLeft, ChevronRight, Save, ExternalLink,
-  MessageSquare, X, Search, Calendar, Clock, Plus, Minus, ArrowUpRight, Trash2,
+  MessageSquare, X, Search, Calendar, Clock, Plus, Minus, ArrowUpRight, Trash2, PauseCircle,
 } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
@@ -354,18 +354,32 @@ export default function MeetingTab() {
   // 미팅 있는 강사 (캘린더용)
   const meetings = useMemo(() => state.instructors.filter((i) => i.meeting_date), [state.instructors]);
 
-  // 3섹션 분리: 확정+날짜 / 확정+날짜미정 / 미확정
-  // 날짜가 있으면 확정으로 간주
+  // 4섹션 분리: 확정+날짜 / 확정+날짜미정 / 미확정 / 보류
+  // 날짜가 있으면 확정으로 간주. 미팅 방식이 '보류'면 날짜 유무와 무관하게 맨 아래 보류 섹션으로
   const isConfirmed = (i: Instructor) => i.meeting_confirmed || !!i.meeting_date;
+  // 날짜 있는 항목 먼저(오름차순), 날짜 없는 항목은 뒤로
+  const byMeetingDate = (a: Instructor, b: Instructor) => {
+    const ad = a.meeting_date || "", bd = b.meeting_date || "";
+    if (!ad && !bd) return 0;
+    if (!ad) return 1;
+    if (!bd) return -1;
+    return ad.localeCompare(bd);
+  };
+  const onHold = useMemo(() =>
+    filteredList.filter((i) => i.meeting_type === "보류").sort(byMeetingDate),
+  [filteredList]);
+  const activeList = useMemo(() =>
+    filteredList.filter((i) => i.meeting_type !== "보류"),
+  [filteredList]);
   const confirmedWithDate = useMemo(() =>
-    filteredList.filter((i) => isConfirmed(i) && i.meeting_date).sort((a, b) => (a.meeting_date || "").localeCompare(b.meeting_date || "")),
-  [filteredList]);
+    activeList.filter((i) => isConfirmed(i) && i.meeting_date).sort((a, b) => (a.meeting_date || "").localeCompare(b.meeting_date || "")),
+  [activeList]);
   const confirmedNoDate = useMemo(() =>
-    filteredList.filter((i) => i.meeting_confirmed && !i.meeting_date),
-  [filteredList]);
+    activeList.filter((i) => i.meeting_confirmed && !i.meeting_date),
+  [activeList]);
   const notConfirmed = useMemo(() =>
-    filteredList.filter((i) => !isConfirmed(i)),
-  [filteredList]);
+    activeList.filter((i) => !isConfirmed(i)),
+  [activeList]);
 
   // 캘린더 계산
   const now = new Date();
@@ -605,7 +619,7 @@ export default function MeetingTab() {
         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground truncate max-w-[120px] hidden sm:table-cell">{i.field}</td>
         <td className="px-3 py-2 border-r border-gray-200/60 text-muted-foreground whitespace-nowrap hidden md:table-cell">{i.contact_assignee}</td>
         <td className="px-3 py-2 border-r border-gray-200/60 whitespace-nowrap font-medium text-blue-700">
-          {showDate ? formatMeetingDate(i.meeting_date || "") : "-"}
+          {showDate ? (formatMeetingDate(i.meeting_date || "") || "-") : "-"}
         </td>
         <td className="px-2 py-2 border-r border-gray-200/60 whitespace-nowrap hidden md:table-cell">
           {(() => {
@@ -678,6 +692,12 @@ export default function MeetingTab() {
             <span>확정 {confirmedWithDate.length + confirmedNoDate.length}명</span>
             <span>·</span>
             <span>예정 {notConfirmed.length}명</span>
+            {onHold.length > 0 && (
+              <>
+                <span>·</span>
+                <span>보류 {onHold.length}명</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -727,6 +747,17 @@ export default function MeetingTab() {
                     </td>
                   </tr>
                   {renderRows(notConfirmed, false)}
+                </>
+              )}
+              {/* 보류 (미팅 방식 = 보류) */}
+              {onHold.length > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={8} className="bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600 border-b">
+                      <span className="flex items-center gap-1.5"><PauseCircle className="h-3.5 w-3.5" />보류 ({onHold.length})</span>
+                    </td>
+                  </tr>
+                  {renderRows(onHold, true)}
                 </>
               )}
             </tbody>
