@@ -159,12 +159,14 @@ export default function MeetingReportPage() {
     }).sort((a, b) => timeToMinutes(a.meeting_date || "") - timeToMinutes(b.meeting_date || ""));
   };
 
+  // 미팅일이 없어도 리마인드 날짜만 있으면 표시하므로 전체 강사를 대상으로 조회
   const getRemindersForDate = (date: Date | null) => {
     if (!date) return [];
     const targetIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    return meetings.filter((mt) => {
+    return instructors.filter((mt) => {
       if (mt.remind_disabled) return false;
       if (mt.remind_date) return mt.remind_date === targetIso;
+      // 자동 계산은 미팅일이 있는 경우에만 (미팅일 없으면 빈 문자열이라 매칭 안 됨)
       return calcRemindDate(mt.meeting_date || "") === targetIso;
     });
   };

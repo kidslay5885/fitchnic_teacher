@@ -431,12 +431,14 @@ export default function MeetingTab() {
 
   // 리마인드 대상 조회: remind_date가 있으면 그걸 사용, 없으면 미팅일+1달(주말→금)
   // remind_disabled=true면 명시적으로 삭제된 상태이므로 자동 계산도 무시
+  // 미팅일이 없어도 리마인드 날짜만 있으면 표시하므로 전체 강사를 대상으로 조회
   const getRemindersForDate = (date: Date | null) => {
     if (!date) return [];
     const targetIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    return meetings.filter((mt) => {
+    return state.instructors.filter((mt) => {
       if (mt.remind_disabled) return false;
       if (mt.remind_date) return mt.remind_date === targetIso;
+      // 자동 계산은 미팅일이 있는 경우에만 (미팅일 없으면 빈 문자열이라 매칭 안 됨)
       return calcRemindDate(mt.meeting_date || "") === targetIso;
     });
   };
