@@ -21,6 +21,9 @@ import {
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 
+// 리마인드를 캘린더에 표시하지 않는 상태 (다시 연락할 일이 없는 강사)
+const REMIND_HIDDEN_STATUSES = ["제외", "거절"];
+
 // 사전 질문 구조
 const PRE_QUESTIONS = [
   {
@@ -436,6 +439,7 @@ export default function MeetingTab() {
     if (!date) return [];
     const targetIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     return state.instructors.filter((mt) => {
+      if (REMIND_HIDDEN_STATUSES.includes(mt.status)) return false;
       if (mt.remind_disabled) return false;
       if (mt.remind_date) return mt.remind_date === targetIso;
       // 자동 계산은 미팅일이 있는 경우에만 (미팅일 없으면 빈 문자열이라 매칭 안 됨)
