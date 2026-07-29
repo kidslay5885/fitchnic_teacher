@@ -652,8 +652,8 @@ export default function MeetingTab() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-4" style={{ height: "calc(100vh - 56px)" }}>
-      {/* ── 좌측: 전체 미팅 목록 ── */}
-      <div className="flex flex-col w-full lg:w-[750px] shrink-0">
+      {/* ── 좌측: 전체 미팅 목록 (남는 가로 공간을 목록이 차지) ── */}
+      <div className="flex flex-col w-full lg:flex-1 lg:min-w-[750px]">
         <div className="shrink-0 space-y-3 pb-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">미팅관리</h2>
@@ -769,7 +769,8 @@ export default function MeetingTab() {
       </div>
 
       {/* ── 우측: 캘린더 ── */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-[400px]">
+      {/* 사이드바 접힘과 무관하게 폭 유지: 100vw - (사이드바 208 + 좌우 패딩 48 + 목록 750 + gap 16) */}
+      <div className="flex flex-col w-full lg:w-[calc(100vw-1022px)] lg:min-w-[380px] lg:max-w-[900px] lg:shrink-0 min-h-[400px]">
         {/* 월 네비 */}
         <div className="shrink-0 flex items-center gap-2 sm:gap-3 pb-3 pt-3 lg:pt-9">
           <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setMonthOffset(monthOffset - 1)}>
