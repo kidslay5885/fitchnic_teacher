@@ -18,5 +18,8 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // public/ 정적 파일(확장자가 있는 경로)은 인증 검사에서 제외한다.
+  // 제외하지 않으면 /contact-widget.js 등이 /login HTML로 리다이렉트되어
+  // 브라우저에서 "Unexpected token '<'" 구문 오류가 발생한다.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[\\w]+$).*)"],
 };
