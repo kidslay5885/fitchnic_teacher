@@ -252,7 +252,8 @@ export default function RemindTab() {
   }, [allItems, kinds, showDone, search]);
 
   // 지난 / 오늘 / 예정
-  const overdue = filtered.filter((it) => it.remindDate < todayIso && !it.done);
+  // 완료 건 노출 여부는 filtered(완료 포함 토글)에서 이미 처리한다
+  const overdue = filtered.filter((it) => it.remindDate < todayIso);
   const today = filtered.filter((it) => it.remindDate === todayIso);
   const upcoming = filtered.filter((it) => it.remindDate > todayIso);
 
