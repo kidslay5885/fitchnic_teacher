@@ -940,7 +940,7 @@ export default function MeetingTab() {
 
                     {/* 리마인드 날짜 */}
                     <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">리마인드 날짜</label>
+                      <label className="text-xs text-muted-foreground mb-1 block">재연락 날짜</label>
                       <div className="flex gap-2 items-center">
                         <Input
                           type="date" className="h-9 text-sm flex-1"
@@ -1306,7 +1306,7 @@ export default function MeetingTab() {
             if (!res.ok) throw new Error("Failed");
             dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
             setRemindModal(null);
-            toast.success("리마인드 날짜 저장 완료");
+            toast.success("재연락 날짜 저장 완료");
           } catch { toast.error("저장 실패"); }
         };
         const handleRemindDelete = async () => {
@@ -1319,7 +1319,7 @@ export default function MeetingTab() {
             if (!res.ok) throw new Error("Failed");
             dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
             setRemindModal(null);
-            toast.success("리마인드 삭제 완료");
+            toast.success("재연락 삭제 완료");
           } catch { toast.error("삭제 실패"); }
         };
         return (
@@ -1329,7 +1329,7 @@ export default function MeetingTab() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-orange-600">📞</span>
-                    <p className="text-base font-semibold">{inst.name} 리마인드</p>
+                    <p className="text-base font-semibold">{inst.name} 재연락</p>
                     <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[inst.status as InstructorStatus] || ""}`}>{inst.status}</Badge>
                   </div>
                   <button onClick={() => setRemindModal(null)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
@@ -1364,7 +1364,7 @@ export default function MeetingTab() {
 
                 {/* 리마인드 날짜 변경 */}
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">리마인드 날짜</label>
+                  <label className="text-xs text-muted-foreground mb-1 block">재연락 날짜</label>
                   <div className="flex gap-2 items-center">
                     <Input type="date" className="h-9 text-sm flex-1" value={remindDate} onChange={(e) => setRemindDate(e.target.value)} />
                     {inst.meeting_date && (
@@ -1383,7 +1383,7 @@ export default function MeetingTab() {
                   onClick={() => setRemindDone(!remindDone)}
                 >
                   <input type="checkbox" className="h-4 w-4 rounded accent-green-600 pointer-events-none" checked={remindDone} readOnly />
-                  <span className={`text-sm font-medium ${remindDone ? "text-green-800" : "text-gray-500"}`}>리마인드 완료</span>
+                  <span className={`text-sm font-medium ${remindDone ? "text-green-800" : "text-gray-500"}`}>재연락 완료</span>
                 </div>
 
                 <div className="flex gap-2">
