@@ -32,6 +32,25 @@ const KIND_STYLE: Record<string, string> = {
   "강의": "bg-purple-100 border-purple-300 text-purple-900 font-semibold",
 };
 
+// 배경색 (기간: 광고·인터뷰 3주 / 현장 리허설 1주 / PPT 세일즈 1주 / 당일: 무료강의·PPT강의·인터뷰수강생확정)
+type RangeKey = "ad" | "rehearsal" | "sales" | "lecture" | "pptLecture" | "student";
+const RANGE_BG: Record<RangeKey, string> = {
+  ad: "bg-sky-100/70",
+  rehearsal: "bg-emerald-100/70",
+  sales: "bg-fuchsia-100/60",
+  lecture: "bg-purple-50",
+  pptLecture: "bg-rose-50",
+  student: "bg-rose-50",
+};
+
+// 기간색에 맞춘 칩(라벨) 색 — 미지정 라벨은 KIND_STYLE 사용
+const LABEL_CHIP: Record<string, string> = {
+  "광고촬영": "bg-sky-100 border-sky-200 text-sky-800",
+  "인터뷰 촬영": "bg-sky-100 border-sky-200 text-sky-800",
+  "현장 리허설": "bg-emerald-100 border-emerald-200 text-emerald-800",
+  "PPT 세일즈 파트": "bg-fuchsia-100 border-fuchsia-200 text-fuchsia-800",
+};
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const toIso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const parseIso = (s: string): Date | null => {
@@ -39,12 +58,7 @@ const parseIso = (s: string): Date | null => {
   return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
 };
 const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
-const mondayOf = (d: Date) => {
-  const r = new Date(d);
-  const day = r.getDay();
-  r.setDate(r.getDate() + (day === 0 ? -6 : 1 - day));
-  return r;
-};
+const sundayOf = (d: Date) => { const r = new Date(d); r.setDate(r.getDate() - r.getDay()); return r; };
 
 type DayEvent = { iso: string; label: string; kind: "시작" | "완료" | "강의" };
 
@@ -91,10 +105,11 @@ export default function TimelineTab() {
   // 강사 변경 시 달력 위치 초기화
   useEffect(() => { setMonthOffset(0); }, [selectedId]);
 
-  // 선택 강사의 일정 → ISO별 이벤트 맵 + 킥오프 주간(월~토)
-  const { eventsByIso, kickoffWeek } = useMemo(() => {
+  // 선택 강사의 일정 → ISO별 이벤트 맵 + 킥오프 주간(월~토) + 기간 배경색
+  const { eventsByIso, kickoffWeek, rangeByIso } = useMemo(() => {
     const map: Record<string, DayEvent[]> = {};
     const week = new Set<string>();
+    const ranges: Record<string, RangeKey> = {};
     if (selected) {
       const lecture = parseIso(selected.free_lecture_date);
       if (lecture) {
@@ -103,12 +118,24 @@ export default function TimelineTab() {
         };
         push(toIso(lecture), "무료강의", "강의");
         for (const m of MILESTONES) push(toIso(addDays(lecture, m.offsetDays)), m.label, m.kind);
-        // 킥오프 미팅 예정 주간: 무료강의일 8주 전이 속한 주의 월~토
-        const mon = mondayOf(addDays(lecture, -56));
-        for (let i = 0; i < 6; i++) week.add(toIso(addDays(mon, i)));
+        // 킥오프 미팅 예정 주간: 무료강의일 8주 전이 속한 주(일~토 한 줄)
+        const sun = sundayOf(addDays(lecture, -56));
+        for (let i = 0; i < 7; i++) week.add(toIso(addDays(sun, i)));
+        // 기간 배경색: 시작일이 속한 주부터 N주(일~토 줄 단위). 7의 배수 간격이라 서로 겹치지 않음
+        const fillWeeks = (anchor: Date, weeks: number, key: RangeKey) => {
+          const s = sundayOf(anchor);
+          for (let i = 0; i < weeks * 7; i++) ranges[toIso(addDays(s, i))] = key;
+        };
+        fillWeeks(addDays(lecture, -42), 3, "ad");        // 광고촬영/인터뷰 촬영: 6주 전 주부터 3줄
+        fillWeeks(addDays(lecture, -21), 1, "rehearsal"); // 현장 리허설: 3주 전 주 1줄
+        fillWeeks(addDays(lecture, -14), 1, "sales");     // PPT 세일즈 파트: 2주 전 주 1줄
+        // 당일만 배경색 (일요일이어도 표시)
+        ranges[toIso(lecture)] = "lecture";                // 무료강의일
+        ranges[toIso(addDays(lecture, -7))] = "pptLecture";  // PPT 강의 파트: 1주 전
+        ranges[toIso(addDays(lecture, -3))] = "student";     // 인터뷰 수강생 확정: 3일 전
       }
     }
-    return { eventsByIso: map, kickoffWeek: week };
+    return { eventsByIso: map, kickoffWeek: week, rangeByIso: ranges };
   }, [selected]);
 
   // 달력 기준월: 무료강의일이 있으면 강의월 -1 (전 일정 + 강의일이 함께 보이도록)
@@ -193,6 +220,7 @@ export default function TimelineTab() {
                 const hidden = (t < monthStart && !fillLeading) || (t > monthEnd && !fillTrailing);
                 const isToday = date.toDateString() === now.toDateString();
                 const inKickoff = !hidden && kickoffWeek.has(iso);
+                const rangeKey = hidden ? undefined : rangeByIso[iso];
                 const dayEvents = hidden ? [] : eventsByIso[iso] || [];
                 if (hidden) {
                   return <div key={ci} className={`p-1 overflow-hidden min-h-[64px] bg-gray-50/50 ${ci < 6 ? "border-r border-gray-200" : ""}`} />;
@@ -201,7 +229,7 @@ export default function TimelineTab() {
                   <div
                     key={ci}
                     className={`p-1 overflow-hidden min-h-[64px] ${ci < 6 ? "border-r border-gray-200" : ""} ${
-                      inKickoff ? "bg-amber-50" : !inMonth ? "bg-gray-50/50" : isToday ? "bg-primary/5" : "bg-white"
+                      inKickoff ? "bg-amber-50" : rangeKey ? RANGE_BG[rangeKey] : !inMonth ? "bg-gray-50/50" : isToday ? "bg-primary/5" : "bg-white"
                     }`}
                   >
                     <div className={`text-[11px] mb-0.5 ${
@@ -218,7 +246,7 @@ export default function TimelineTab() {
                       {dayEvents.map((ev, i) => (
                         <div
                           key={i}
-                          className={`rounded px-1 py-0.5 text-[10px] border truncate ${KIND_STYLE[ev.kind]}`}
+                          className={`rounded px-1 py-0.5 text-[10px] border truncate ${LABEL_CHIP[ev.label] ?? KIND_STYLE[ev.kind]}`}
                           title={`${ev.label}${ev.kind !== "강의" ? ` ${ev.kind}` : ""}`}
                         >
                           {ev.kind === "강의" ? "🎤 " : ""}{ev.label}
@@ -330,11 +358,12 @@ export default function TimelineTab() {
           )}
 
           {/* 범례 */}
-          <div className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+          <div className="ml-auto flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-purple-200 border border-purple-300" />무료강의</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-green-200 border border-green-300" />시작</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-rose-200 border border-rose-300" />완료</span>
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-amber-200 border border-amber-300" />킥오프</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-amber-200 border border-amber-300" />킥오프 주간</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-sky-200 border border-sky-300" />광고·인터뷰(3주)</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-200 border border-emerald-300" />현장 리허설(1주)</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-fuchsia-200 border border-fuchsia-300" />PPT 세일즈(1주)</span>
           </div>
         </div>
 
@@ -370,9 +399,9 @@ export default function TimelineTab() {
                   <div className="flex justify-between">
                     <span className="text-amber-700">킥오프 미팅 주간 (8주 전)</span>
                     <span className="text-muted-foreground">
-                      {formatDate(toIso(mondayOf(addDays(parseIso(editing.lectureDate)!, -56))))}
+                      {formatDate(toIso(sundayOf(addDays(parseIso(editing.lectureDate)!, -56))))}
                       {" ~ "}
-                      {formatDate(toIso(addDays(mondayOf(addDays(parseIso(editing.lectureDate)!, -56)), 5)))}
+                      {formatDate(toIso(addDays(sundayOf(addDays(parseIso(editing.lectureDate)!, -56)), 6)))}
                     </span>
                   </div>
                   {MILESTONES.map((m) => {
