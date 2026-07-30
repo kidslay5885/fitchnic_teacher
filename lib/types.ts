@@ -173,7 +173,28 @@ export type TabId =
   | "messages"
   | "activity"
   | "schedule"
-  | "timeline";
+  | "timeline"
+  | "remind";
+
+// ===== 시간표에서 가져온 강사미팅/킥오프 일정 =====
+export interface TimetableEvent {
+  id: string;
+  source_key: string;
+  sheet: string;
+  cell: string;
+  event_date: string;                 // YYYY-MM-DD
+  event_time: string;                 // HH:MM
+  event_type: "강사미팅" | "킥오프";
+  meeting_mode: string;               // 대면 | 줌 | ''
+  protocol: string;                   // 의전 O | X | ''
+  display_name: string;
+  raw_text: string;
+  instructor_id: string | null;
+  match_type: "자동" | "수동" | "미매칭" | "해당없음";
+  match_reason: "" | "이름" | "일정+이름" | "일정";
+  remind_done: boolean;
+  synced_at: string;
+}
 
 export interface InstructorWithWaves extends Instructor {
   waves: OutreachWave[];

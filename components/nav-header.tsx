@@ -5,7 +5,7 @@ import type { TabId } from "@/lib/types";
 import {
   LayoutDashboard, Users, MessageSquare, Calendar,
   FileText, Ban, Mail, Activity, PanelLeftClose, PanelLeftOpen,
-  CalendarDays, CalendarClock,
+  CalendarDays, CalendarClock, BellRing,
 } from "lucide-react";
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
@@ -13,6 +13,7 @@ const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: "instructors", label: "강사찾기", icon: Users },
   { id: "contact", label: "컨택관리", icon: MessageSquare },
   { id: "meeting", label: "미팅관리", icon: Calendar },
+  { id: "remind", label: "리마인드", icon: BellRing },
   { id: "applications", label: "지원서", icon: FileText },
   { id: "banned", label: "연락금지", icon: Ban },
   { id: "messages", label: "메시지", icon: Mail },

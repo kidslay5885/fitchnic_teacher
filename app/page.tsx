@@ -7,6 +7,7 @@ import DashboardTab from "@/components/dashboard-tab";
 import InstructorsTab from "@/components/instructors-tab";
 import ContactTab from "@/components/contact-tab";
 import MeetingTab from "@/components/meeting-tab";
+import RemindTab from "@/components/remind-tab";
 import ApplicationsTab from "@/components/applications-tab";
 import BannedTab from "@/components/banned-tab";
 import MessagesTab from "@/components/messages-tab";
@@ -33,11 +34,12 @@ function MainContent() {
     <div className="min-h-screen bg-background">
       <NavHeader collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
       <main className={`p-6 transition-[margin] duration-200 ${sidebarCollapsed ? "ml-14" : "ml-52"}`}>
-        <div className={state.tab === "meeting" || state.tab === "schedule" || state.tab === "timeline" || state.tab === "contact" || state.tab === "dashboard" ? "" : "max-w-7xl"}>
+        <div className={state.tab === "meeting" || state.tab === "remind" || state.tab === "schedule" || state.tab === "timeline" || state.tab === "contact" || state.tab === "dashboard" ? "" : "max-w-7xl"}>
           {state.tab === "dashboard" && <DashboardTab />}
           {state.tab === "instructors" && <InstructorsTab />}
           {state.tab === "contact" && <ContactTab />}
           {state.tab === "meeting" && <MeetingTab />}
+          {state.tab === "remind" && <RemindTab />}
           {state.tab === "applications" && <ApplicationsTab />}
           {state.tab === "banned" && <BannedTab />}
           {state.tab === "messages" && <MessagesTab />}
