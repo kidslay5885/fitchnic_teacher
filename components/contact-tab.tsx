@@ -54,6 +54,8 @@ export default function ContactTab() {
   // 발신 계정 id → 표기 매핑 (예: ceo → "대", 강의기획팀 → "팀"). 1차 발송 계정 기준 셀 표기에 사용
   const [accountTagMap, setAccountTagMap] = useState<Record<string, { tag: string; label: string; email: string; badgeClass: string }>>({});
   const [editingWave, setEditingWave] = useState<{ instructorId: string; wave: number; x: number; y: number } | null>(null);
+  // 발송 모달에서 자동 저장이 일어났는지 — 모달을 닫을 때 목록을 한 번만 갱신하기 위한 플래그
+  const waveAutoSavedRef = useRef(false);
   const [editingStatus, setEditingStatus] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
   const [editingFinal, setEditingFinal] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
   const [editingSendMethod, setEditingSendMethod] = useState<{ instructor: Instructor; x: number; y: number } | null>(null);
@@ -327,7 +329,9 @@ export default function ContactTab() {
   }, [highlightedId]);
 
   /* ── 개별 발송 저장 (응답여부 모달 저장) ── */
-  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { result: string; reject_reason: string; response_date: string | null; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => {
+  const handleWaveSave = async (instructorId: string, waveNumber: number, data: { result: string; reject_reason: string; response_date: string | null; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }, opts?: { silent?: boolean }) => {
+    // silent = 자동 저장. 토스트·모달 닫기·목록 재조회 없이 저장만 수행
+    const silent = opts?.silent ?? false;
     try {
       const { pre_info, meeting_type, contact_assignee, has_own_lecture, lecture_appeal, sns_over_10k, meeting_type_override, result, reject_reason, response_date } = data;
       // 발송 기록 저장 (result만 업데이트, sent_date 등은 건드리지 않음)
@@ -349,10 +353,19 @@ export default function ContactTab() {
         });
         if (r2.ok) dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await r2.json() });
       }
+      if (silent) {
+        // 자동 저장은 목록 재조회를 건너뛰고, 모달을 닫을 때 한 번만 갱신
+        waveAutoSavedRef.current = true;
+        return;
+      }
+      waveAutoSavedRef.current = false;
       await loadAllWaves();
       toast.success(`${waveNumber}차 발송 저장 완료`);
       setEditingWave(null);
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) {
+      toast.error(silent ? `자동 저장 실패: ${e.message}` : e.message);
+      throw e;
+    }
   };
 
   /* ── 개별 발송 삭제 ── */
@@ -1058,9 +1071,16 @@ export default function ContactTab() {
             meetingTypeOverride={state.instructors.find(i => i.id === editingWave.instructorId)?.meeting_type_override || false}
             senderLabel={senderAcc?.label || null}
             senderEmail={senderAcc?.email || null}
-            onSave={(data) => handleWaveSave(editingWave.instructorId, editingWave.wave, data)}
+            onSave={(data, opts) => handleWaveSave(editingWave.instructorId, editingWave.wave, data, opts)}
             onDelete={() => handleWaveDelete(editingWave.instructorId, editingWave.wave)}
-            onClose={() => setEditingWave(null)}
+            onClose={async () => {
+              setEditingWave(null);
+              // 자동 저장분이 있으면 닫을 때 목록에 반영
+              if (waveAutoSavedRef.current) {
+                waveAutoSavedRef.current = false;
+                await loadAllWaves();
+              }
+            }}
           />
         );
       })()}
@@ -1317,7 +1337,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   meetingTypeOverride: boolean;
   senderLabel?: string | null;
   senderEmail?: string | null;
-  onSave: (data: { result: string; reject_reason: string; response_date: string | null; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }) => Promise<void>;
+  onSave: (data: { result: string; reject_reason: string; response_date: string | null; pre_info: string; meeting_type: string; contact_assignee: string; has_own_lecture: string; lecture_appeal: string; sns_over_10k: string; meeting_type_override: boolean }, opts?: { silent?: boolean }) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -1338,8 +1358,13 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
   // 평가 입력 변경 시 자동 산출
   const autoMeetingType = calculateMeetingType(hasOwnLecture, lectureAppeal, snsOver10k);
 
+  // 사용자가 실제로 값을 건드렸을 때만 자동 저장 (모달을 열기만 해서는 저장하지 않음)
+  const dirtyRef = useRef(false);
+  const markDirty = () => { dirtyRef.current = true; };
+
   // 강의 X 선택 시 매력도 초기화
   const handleLectureChange = (value: string) => {
+    markDirty();
     setHasOwnLecture(hasOwnLecture === value ? "" : value);
     if (value === "X" || (hasOwnLecture === "O" && value === "O")) {
       setLectureAppeal("");
@@ -1356,6 +1381,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
 
   // 미팅 방식 수동 변경
   const handleMeetingTypeManual = (type: string) => {
+    markDirty();
     if (meetingType === type) {
       setMeetingType("");
       setIsOverride(false);
@@ -1365,18 +1391,128 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
     }
   };
 
+  // 저장에 보낼 최종 값 — 자동 저장·수동 저장이 동일한 페이로드를 사용
+  const payload = useMemo(() => {
+    const finalResult = result || "체크필요";
+    const isResponded = finalResult === "응답" || finalResult === "거절";
+    return {
+      result: finalResult,
+      reject_reason: finalResult === "거절" ? rejectReason.trim() : "",
+      response_date: isResponded ? (responseDate || null) : null,
+      pre_info: preInfo,
+      meeting_type: meetingType,
+      contact_assignee: contactAssignee,
+      has_own_lecture: hasOwnLecture,
+      lecture_appeal: lectureAppeal,
+      sns_over_10k: snsOver10k,
+      meeting_type_override: isOverride,
+    };
+  }, [result, rejectReason, responseDate, preInfo, meetingType, contactAssignee, hasOwnLecture, lectureAppeal, snsOver10k, isOverride]);
+
+  /* ── 자동 저장 ── */
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [autoSavedAt, setAutoSavedAt] = useState<number | null>(null);
+  const payloadRef = useRef(payload);
+  payloadRef.current = payload;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  // 마지막으로 저장된 값의 스냅샷 (초기값 = 열었을 때의 값 → 변경 없으면 저장하지 않음)
+  const savedSnapshotRef = useRef(JSON.stringify(payload));
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 삭제 진행 중에는 자동 저장이 기록을 되살리지 않도록 차단
+  const suppressAutoSaveRef = useRef(false);
+
+  const runAutoSave = useCallback(async () => {
+    if (suppressAutoSaveRef.current || !dirtyRef.current) return;
+    const snapshot = JSON.stringify(payloadRef.current);
+    if (snapshot === savedSnapshotRef.current) return;
+    setAutoSaving(true);
+    try {
+      await onSaveRef.current(payloadRef.current, { silent: true });
+      savedSnapshotRef.current = snapshot;
+      setAutoSavedAt(Date.now());
+    } catch {
+      // 실패 토스트는 부모에서 표시. 스냅샷을 갱신하지 않아 다음 변경 때 재시도됨
+    } finally {
+      setAutoSaving(false);
+    }
+  }, []);
+
+  // 값이 바뀌면 0.8초 후 자동 저장
+  useEffect(() => {
+    if (!dirtyRef.current) return;
+    if (JSON.stringify(payload) === savedSnapshotRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      runAutoSave();
+    }, 800);
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [payload, runAutoSave]);
+
+  // 대기 중인 자동 저장을 즉시 반영
+  const flushAutoSave = useCallback(async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    await runAutoSave();
+  }, [runAutoSave]);
+
+  // 닫기 — 저장되지 않은 변경분을 먼저 반영한 뒤 닫음
+  const handleClose = async () => {
+    await flushAutoSave();
+    onClose();
+  };
+  const handleCloseRef = useRef(handleClose);
+  handleCloseRef.current = handleClose;
+
+  // 언마운트 시에도 미저장분 반영 (보험) — 저장할 변경이 없으면 runAutoSave가 스스로 무시함
+  useEffect(() => () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    void runAutoSave();
+  }, [runAutoSave]);
+
+  const confirmDeleteRef = useRef(confirmDelete);
+  confirmDeleteRef.current = confirmDelete;
+
+  // ESC로 닫기 (삭제 확인창이 열려 있으면 무시)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (confirmDeleteRef.current) return;
+      void handleCloseRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const handleSubmit = async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
     setSaving(true);
     try {
-      const finalResult = result || "체크필요";
-      const isResponded = finalResult === "응답" || finalResult === "거절";
-      await onSave({ result: finalResult, reject_reason: finalResult === "거절" ? rejectReason.trim() : "", response_date: isResponded ? (responseDate || null) : null, pre_info: preInfo, meeting_type: meetingType, contact_assignee: contactAssignee, has_own_lecture: hasOwnLecture, lecture_appeal: lectureAppeal, sns_over_10k: snsOver10k, meeting_type_override: isOverride });
+      await onSave(payload);
+      savedSnapshotRef.current = JSON.stringify(payload);
+    } catch {
+      // 에러 토스트는 부모에서 표시
     } finally { setSaving(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-lg w-[820px] max-h-[90vh] p-6 flex flex-col" onClick={(e) => e.stopPropagation()}>
+    // 바깥 클릭으로는 닫지 않음 (작성 중인 내용 보호) — 닫기 버튼·취소·ESC로만 닫힘
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-lg shadow-lg w-[820px] max-h-[90vh] p-6 flex flex-col">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-baseline gap-3">
             <p className="text-base font-semibold">{waveNumber}차 발송</p>
@@ -1386,9 +1522,18 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
               </p>
             )}
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {autoSaving
+                ? "자동 저장 중..."
+                : autoSavedAt
+                  ? `자동 저장됨 · ${new Date(autoSavedAt).toLocaleTimeString("ko-KR", { hour12: false })}`
+                  : ""}
+            </span>
+            <button onClick={handleClose} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-6 flex-1 min-h-0">
@@ -1397,7 +1542,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">결과</label>
               <div className="flex gap-2 items-stretch">
-                <Select value={result || "체크필요"} onValueChange={setResult}>
+                <Select value={result || "체크필요"} onValueChange={(v) => { markDirty(); setResult(v ?? ""); }}>
                   <SelectTrigger className="h-9 text-sm w-[110px] shrink-0"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {WAVE_RESULTS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
@@ -1409,7 +1554,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
                     className="flex-1 min-w-0 h-9 border rounded-md px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                     placeholder="거절 사유 입력..."
                     value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
+                    onChange={(e) => { markDirty(); setRejectReason(e.target.value); }}
                   />
                 )}
               </div>
@@ -1420,7 +1565,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
                     type="date"
                     className="h-9 border rounded-md px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                     value={responseDate}
-                    onChange={(e) => setResponseDate(e.target.value)}
+                    onChange={(e) => { markDirty(); setResponseDate(e.target.value); }}
                   />
                 </div>
               )}
@@ -1432,7 +1577,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
                 {(["정승희", "김보성"] as const).map((a) => (
                   <button
                     key={a}
-                    onClick={() => setContactAssignee(contactAssignee === a ? "" : a)}
+                    onClick={() => { markDirty(); setContactAssignee(contactAssignee === a ? "" : a); }}
                     className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                       contactAssignee === a
                         ? "bg-primary text-primary-foreground border-primary"
@@ -1475,7 +1620,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
                     <button
                       key={v}
                       disabled={hasOwnLecture !== "O"}
-                      onClick={() => { setLectureAppeal(lectureAppeal === v ? "" : v); setIsOverride(false); }}
+                      onClick={() => { markDirty(); setLectureAppeal(lectureAppeal === v ? "" : v); setIsOverride(false); }}
                       className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                         hasOwnLecture !== "O"
                           ? "bg-gray-100 text-gray-300 border-gray-200 cursor-not-allowed"
@@ -1499,7 +1644,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
                   {(["O", "X"] as const).map((v) => (
                     <button
                       key={v}
-                      onClick={() => { setSnsOver10k(snsOver10k === v ? "" : v); setIsOverride(false); }}
+                      onClick={() => { markDirty(); setSnsOver10k(snsOver10k === v ? "" : v); setIsOverride(false); }}
                       className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                         snsOver10k === v
                           ? "bg-primary text-primary-foreground border-primary"
@@ -1554,7 +1699,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
               className="w-full flex-1 border rounded-md px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30"
               placeholder="강사에 대한 사전 정보나 메모..."
               value={preInfo}
-              onChange={(e) => setPreInfo(e.target.value)}
+              onChange={(e) => { markDirty(); setPreInfo(e.target.value); }}
             />
           </div>
         </div>
@@ -1568,7 +1713,7 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
               삭제
             </Button>
           )}
-          <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>취소</Button>
+          <Button size="sm" variant="outline" className="h-9 text-sm" onClick={handleClose}>닫기</Button>
         </div>
       </div>
 
@@ -1601,7 +1746,17 @@ function WaveModal({ wave, waveNumber, preInfo: initialPreInfo, meetingType: ini
                 className="h-9 text-sm bg-red-500 hover:bg-red-600 text-white"
                 onClick={async () => {
                   setDeleting(true);
-                  try { await onDelete(); } finally { setDeleting(false); setConfirmDelete(false); }
+                  // 삭제 후 자동 저장이 기록을 되살리지 않도록 차단
+                  suppressAutoSaveRef.current = true;
+                  if (autoSaveTimerRef.current) {
+                    clearTimeout(autoSaveTimerRef.current);
+                    autoSaveTimerRef.current = null;
+                  }
+                  try {
+                    await onDelete();
+                  } catch {
+                    suppressAutoSaveRef.current = false;
+                  } finally { setDeleting(false); setConfirmDelete(false); }
                 }}
                 disabled={deleting}
               >
