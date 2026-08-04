@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -48,6 +48,50 @@ function renderTemplate(template: string, vars: { name: string; field: string })
     .replaceAll("'채널분야'", vars.field || "");
 }
 
+// ── 편집 내용 자동 저장 (localStorage) ──
+// 키: 발송계정 + 차수 + 대상 강사 조합. 조합이 달라지면 별개의 임시 저장본으로 관리됨
+const DRAFT_PREFIX = "fitchnic:send-email-draft:";
+
+interface Draft {
+  subject: string | null;
+  body: string | null;
+  savedAt: number;
+}
+
+function readDraft(key: string): Draft | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Draft;
+    if (parsed.subject == null && parsed.body == null) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(key: string, subject: string | null, body: string | null): number | null {
+  try {
+    if (subject === null && body === null) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    const savedAt = Date.now();
+    localStorage.setItem(key, JSON.stringify({ subject, body, savedAt } satisfies Draft));
+    return savedAt;
+  } catch {
+    return null;
+  }
+}
+
+function formatSavedAt(ts: number) {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
 export default function SendEmailModal({ open, onClose, selectedIds, instructors, wavesMap, onComplete }: Props) {
   const { state, loadTemplates } = useOutreach();
   const [wave, setWave] = useState<Wave>(1);
@@ -59,6 +103,11 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
   // 미리보기 직접 편집값 (null = 미편집, 템플릿 기본값 사용). 1명 발송일 때만 사용
   const [editedSubject, setEditedSubject] = useState<string | null>(null);
   const [editedBody, setEditedBody] = useState<string | null>(null);
+  // 자동 저장 상태
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [restored, setRestored] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef<{ key: string; subject: string | null; body: string | null } | null>(null);
 
   // gmail 계정 목록 로드
   const loadAccounts = useCallback(async () => {
@@ -100,14 +149,37 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     return () => window.removeEventListener("message", handler);
   }, [open, loadAccounts]);
 
+  // 대기 중인 자동 저장을 즉시 기록 (모달을 닫거나 언마운트될 때 유실 방지)
+  const flushSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    const pending = pendingSaveRef.current;
+    if (!pending) return;
+    pendingSaveRef.current = null;
+    writeDraft(pending.key, pending.subject, pending.body);
+  }, []);
+
   useEffect(() => {
     if (!open) {
+      flushSave();
       setResult(null);
       setWave(1);
       setEditedSubject(null);
       setEditedBody(null);
+      setSavedAt(null);
+      setRestored(false);
     }
-  }, [open]);
+  }, [open, flushSave]);
+
+  // 언마운트·새로고침 시에도 마지막 편집 내용을 저장
+  useEffect(() => () => flushSave(), [flushSave]);
+  useEffect(() => {
+    if (!open) return;
+    window.addEventListener("beforeunload", flushSave);
+    return () => window.removeEventListener("beforeunload", flushSave);
+  }, [open, flushSave]);
 
   const selectedInstructors = useMemo(
     () => instructors.filter((i) => selectedIds.has(i.id)),
@@ -186,11 +258,74 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
   const subjectValue = editedSubject ?? previewSubject;
   const bodyValue = editedBody ?? previewBody;
 
-  // 차수·계정·대상 강사가 바뀌면 편집값 초기화 (stale 방지)
+  // 자동 저장 키 — 계정·차수·대상 강사 조합마다 별도 보관
+  const draftKey = useMemo(
+    () =>
+      senderAccountId && previewInst
+        ? `${DRAFT_PREFIX}${senderAccountId}:${wave}:${previewInst.id}`
+        : null,
+    [senderAccountId, wave, previewInst?.id],
+  );
+
+  // 차수·계정·대상 강사가 바뀌면 편집값 초기화 후, 저장된 임시본이 있으면 복원
   useEffect(() => {
+    flushSave();
+    if (!open || !draftKey) {
+      setEditedSubject(null);
+      setEditedBody(null);
+      setSavedAt(null);
+      setRestored(false);
+      return;
+    }
+    const draft = readDraft(draftKey);
+    setEditedSubject(draft?.subject ?? null);
+    setEditedBody(draft?.body ?? null);
+    setSavedAt(draft?.savedAt ?? null);
+    setRestored(!!draft);
+  }, [open, draftKey, flushSave]);
+
+  // 편집값 변경 시 디바운스 자동 저장
+  const scheduleSave = useCallback(
+    (subject: string | null, body: string | null) => {
+      if (!draftKey) return;
+      pendingSaveRef.current = { key: draftKey, subject, body };
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        const pending = pendingSaveRef.current;
+        if (!pending) return;
+        pendingSaveRef.current = null;
+        const ts = writeDraft(pending.key, pending.subject, pending.body);
+        setSavedAt(ts);
+        setRestored(false);
+      }, 500);
+    },
+    [draftKey],
+  );
+
+  const handleSubjectChange = (value: string) => {
+    setEditedSubject(value);
+    scheduleSave(value, editedBody);
+  };
+
+  const handleBodyChange = (value: string) => {
+    setEditedBody(value);
+    scheduleSave(editedSubject, value);
+  };
+
+  // 편집 내용을 버리고 템플릿 원본으로 되돌리기
+  const resetEdits = () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    pendingSaveRef.current = null;
+    if (draftKey) writeDraft(draftKey, null, null);
     setEditedSubject(null);
     setEditedBody(null);
-  }, [wave, senderAccountId, previewInst?.id]);
+    setSavedAt(null);
+    setRestored(false);
+  };
 
   const openReauth = (email: string) => {
     const url = `/api/gmail-oauth/start?account=${encodeURIComponent(email)}`;
@@ -233,6 +368,17 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "발송 실패");
       setResult(data);
+      // 발송 성공 시 임시 저장본 정리
+      if (data.sent.length > 0 && draftKey) {
+        if (saveTimerRef.current) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
+        pendingSaveRef.current = null;
+        writeDraft(draftKey, null, null);
+        setSavedAt(null);
+        setRestored(false);
+      }
       if (data.sent.length > 0) toast.success(`${data.sent.length}명 발송 완료`);
       if (data.failed.length > 0) toast.error(`${data.failed.length}명 발송 실패`);
       onComplete();
@@ -243,8 +389,13 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
     }
   };
 
+  // 바깥 클릭으로는 닫히지 않음 (작성 중인 내용 보호) — 취소/닫기 버튼이나 ESC로만 닫힘
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => { if (!o) onClose(); }}
+      disablePointerDismissal
+    >
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -418,19 +569,37 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
                   <div className="mt-1.5 space-y-1.5">
                     <Input
                       value={subjectValue}
-                      onChange={(e) => setEditedSubject(e.target.value)}
+                      onChange={(e) => handleSubjectChange(e.target.value)}
                       className="text-xs h-auto py-2"
                       placeholder="제목"
                     />
                     <Textarea
                       value={bodyValue}
-                      onChange={(e) => setEditedBody(e.target.value)}
+                      onChange={(e) => handleBodyChange(e.target.value)}
                       className="text-xs leading-relaxed min-h-64 max-h-80 overflow-y-auto font-mono"
                     />
-                    <div className="text-[11px] text-muted-foreground">
-                      {(editedSubject !== null || editedBody !== null)
-                        ? "수정한 내용으로 발송됩니다 — 이 강사 1명에게만 적용됩니다."
-                        : "이 강사 1명에게만 발송되므로 제목·내용을 직접 수정할 수 있습니다."}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-[11px] text-muted-foreground">
+                        {(editedSubject !== null || editedBody !== null)
+                          ? "수정한 내용으로 발송됩니다 — 이 강사 1명에게만 적용됩니다."
+                          : "이 강사 1명에게만 발송되므로 제목·내용을 직접 수정할 수 있습니다."}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {savedAt && (
+                          <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                            {restored ? "이전 작성분 복원됨" : "자동 저장됨"} · {formatSavedAt(savedAt)}
+                          </span>
+                        )}
+                        {(editedSubject !== null || editedBody !== null) && (
+                          <button
+                            type="button"
+                            onClick={resetEdits}
+                            className="text-[11px] text-muted-foreground underline hover:text-foreground whitespace-nowrap"
+                          >
+                            원본으로 되돌리기
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (
