@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
+import { useRowSelection } from "@/hooks/use-row-selection";
 import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -84,7 +85,6 @@ export default function ApplicationsTab() {
   const [activeSource, setActiveSource] = useState<string>("전체");
   const [reviewFilter, setReviewFilter] = useState<string>("전체");
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   // 기본 정렬: 최신 지원서 우선
   const [sortKey, setSortKey] = useState<keyof Application | null>("submitted_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -168,17 +168,6 @@ export default function ApplicationsTab() {
     else { setSortKey(key); setSortDir("asc"); }
   };
 
-  const toggleAll = () => {
-    if (selected.size === sorted.length) setSelected(new Set());
-    else setSelected(new Set(sorted.map((a) => a.id)));
-  };
-
-  const toggleOne = (id: string) => {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    setSelected(next);
-  };
-
   useEffect(() => { if (state.applications.length === 0) loadApplications(); }, []);
 
   const filtered = useMemo(() => {
@@ -206,6 +195,10 @@ export default function ApplicationsTab() {
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortKey, sortDir]);
+
+  const sortedIds = useMemo(() => sorted.map((a) => a.id), [sorted]);
+  // 전체선택 · Shift+클릭 범위선택은 강사찾기/YT채널과 동일한 훅을 사용
+  const { selected, setSelected, allSelected, someSelected, toggleAll, handleClick: handleRowClick } = useRowSelection(sortedIds);
 
   const handleReviewStatus = async (app: Application, status: string) => {
     // 낙관적 업데이트: 즉시 UI 반영
@@ -394,7 +387,7 @@ export default function ApplicationsTab() {
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="py-2 w-10"><Checkbox checked={sorted.length > 0 && selected.size === sorted.length} onCheckedChange={toggleAll} /></TableHead>
+              <TableHead className="py-2 w-10"><Checkbox checked={allSelected} indeterminate={someSelected} onCheckedChange={toggleAll} /></TableHead>
               <SortableHead label="이름" col="applicant_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHead label="활동명" col="activity_name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHead label="채널" col="source_platform" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -431,7 +424,9 @@ export default function ApplicationsTab() {
             ) : (
               sorted.map((a, idx) => (
                 <TableRow key={a.id} className={`${idx % 2 === 1 ? "bg-muted/20" : ""} ${selected.has(a.id) ? "!bg-primary/10" : ""}`}>
-                  <TableCell className="py-2"><Checkbox checked={selected.has(a.id)} onCheckedChange={() => toggleOne(a.id)} /></TableCell>
+                  <TableCell className="py-2 select-none" onClick={(e) => handleRowClick(a.id, e)}>
+                    <Checkbox checked={selected.has(a.id)} tabIndex={-1} />
+                  </TableCell>
                   <TableCell className="py-2 text-sm font-medium">
                     {a.applicant_name}
                     {a.instructor_id && state.instructors.some((i) => i.id === a.instructor_id) && <span className="ml-1.5 text-xs text-green-600 font-normal">등록됨</span>}
