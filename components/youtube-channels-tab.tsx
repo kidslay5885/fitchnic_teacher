@@ -89,7 +89,7 @@ export default function YouTubeChannelsTab() {
   }, [filtered, sortKey, sortDir]);
 
   const sortedIds = useMemo(() => sorted.map((c) => c.id), [sorted]);
-  const { selected: selectedIds, setSelected: setSelectedIds, toggleAll, handleClick: handleRowClick, handleMouseDown, handleMouseEnter, handleMouseUp } = useRowSelection(sortedIds);
+  const { selected: selectedIds, setSelected: setSelectedIds, allSelected, someSelected, toggleAll, handleClick: handleRowClick, handleMouseDown, handleMouseEnter, handleMouseUp } = useRowSelection(sortedIds);
 
   // 글로벌 mouseup 등록 (드래그 종료)
   useEffect(() => {
@@ -279,7 +279,7 @@ export default function YouTubeChannelsTab() {
           style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
         >
           <div className="px-1 flex justify-center border-r border-gray-200 cursor-pointer" onClick={toggleAll}>
-            <Checkbox checked={sorted.length > 0 && selectedIds.size === sorted.length} />
+            <Checkbox checked={allSelected} indeterminate={someSelected} />
           </div>
           <HeaderCell label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <HeaderCell label="프로필" col="profile" sk={sortKey} sd={sortDir} onSort={handleSort} />

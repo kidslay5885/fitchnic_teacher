@@ -141,7 +141,7 @@ function InstructorListView() {
   }, [filtered, sortKey, sortDir]);
 
   const sortedIds = useMemo(() => sorted.map((i) => i.id), [sorted]);
-  const { selected, setSelected, toggleAll, handleClick: handleRowClick, handleMouseDown, handleMouseEnter, handleMouseUp } = useRowSelection(sortedIds);
+  const { selected, setSelected, allSelected, someSelected, toggleAll, handleClick: handleRowClick, handleMouseDown, handleMouseEnter, handleMouseUp } = useRowSelection(sortedIds);
 
   // 글로벌 mouseup 등록 (드래그 종료)
   useEffect(() => {
@@ -287,7 +287,7 @@ function InstructorListView() {
           style={{ gridTemplateColumns: GRID, minWidth: MIN_W }}
         >
           <div className="px-1 flex justify-center border-r border-gray-200 cursor-pointer" onClick={toggleAll}>
-            <Checkbox checked={sorted.length > 0 && selected.size === sorted.length} />
+            <Checkbox checked={allSelected} indeterminate={someSelected} />
           </div>
           <HeaderCell label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} />
           <HeaderCell label="분야" col="field" sk={sortKey} sd={sortDir} onSort={handleSort} />

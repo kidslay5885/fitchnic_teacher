@@ -483,8 +483,17 @@ export default function ContactTab() {
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
+  // 현재 목록 중 몇 개가 선택됐는지 (목록 밖에 남은 선택은 계산에서 제외)
+  const selectedInListCount = useMemo(
+    () => filtered.reduce((n, i) => (selectedIds.has(i.id) ? n + 1 : n), 0),
+    [filtered, selectedIds]
+  );
+  const allSelected = filtered.length > 0 && selectedInListCount === filtered.length;
+  const someSelected = selectedInListCount > 0 && !allSelected;
+
+  // 하나라도 선택돼 있으면 해제, 아무것도 없으면 전체 선택
   const toggleSelectAll = () => {
-    setSelectedIds(prev => prev.size === filtered.length && filtered.length > 0 ? new Set() : new Set(filtered.map(i => i.id)));
+    setSelectedIds(selectedInListCount > 0 ? new Set() : new Set(filtered.map(i => i.id)));
   };
   const handleCheckClick = (id: string, idx: number, e: React.MouseEvent) => {
     if (e.shiftKey && lastClickedIdx.current !== null) {
@@ -746,7 +755,8 @@ export default function ContactTab() {
         >
           <div className="row-span-2 px-1 flex justify-center items-center cursor-pointer border-r border-gray-200" onClick={toggleSelectAll}>
             <input type="checkbox" className="h-3.5 w-3.5 rounded accent-primary pointer-events-none"
-              checked={selectedIds.size === filtered.length && filtered.length > 0} readOnly />
+              ref={el => { if (el) el.indeterminate = someSelected; }}
+              checked={allSelected} readOnly />
           </div>
           <SortHeader label="이름" col="name" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2 text-[13px]" sub={`~ '대표님'이 붙었을 때 자연스럽게`} />
           <SortHeader label="상태" col="status" sk={sortKey} sd={sortDir} onSort={handleSort} extraClass="row-span-2 text-[13px]" />
