@@ -16,6 +16,7 @@ export async function GET() {
     .from("youtube_channels")
     .select("*", { count: "exact" })
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .range(0, PAGE - 1);
 
   if (firstError) return NextResponse.json({ error: firstError.message }, { status: 500 });
@@ -30,7 +31,7 @@ export async function GET() {
   }
   const results = await Promise.all(
     remainingPages.map((from) =>
-      sb.from("youtube_channels").select("*").order("created_at", { ascending: false }).range(from, from + PAGE - 1)
+      sb.from("youtube_channels").select("*").order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, from + PAGE - 1)
     )
   );
   const all: any[] = [...firstData];

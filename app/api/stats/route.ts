@@ -12,6 +12,7 @@ export async function GET() {
     .from("instructors")
     .select("id, status, assignee, source, final_status, meeting_date", { count: "exact" })
     .eq("is_banned", false)
+    .order("id")
     .range(0, PAGE - 1);
 
   if (firstError || !firstData) return NextResponse.json({ error: firstError?.message }, { status: 500 });
@@ -29,6 +30,7 @@ export async function GET() {
         sb.from("instructors")
           .select("id, status, assignee, source, final_status, meeting_date")
           .eq("is_banned", false)
+          .order("id")
           .range(from, from + PAGE - 1)
       )
     );

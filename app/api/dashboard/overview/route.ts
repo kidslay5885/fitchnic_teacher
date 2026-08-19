@@ -56,6 +56,7 @@ async function fetchAllInstructors(sb: SB) {
     .from("instructors")
     .select(cols, { count: "exact" })
     .eq("is_banned", false)
+    .order("id")
     .range(0, PAGE - 1);
 
   if (error) throw error;
@@ -71,6 +72,7 @@ async function fetchAllInstructors(sb: SB) {
           .from("instructors")
           .select(cols)
           .eq("is_banned", false)
+          .order("id")
           .range(from, from + PAGE - 1),
       ),
     );
@@ -84,6 +86,7 @@ async function fetchAllWaves(sb: SB) {
   const { data: firstPage, count, error } = await sb
     .from("outreach_waves")
     .select(cols, { count: "exact" })
+    .order("id")
     .range(0, PAGE - 1);
 
   if (error) throw error;
@@ -95,7 +98,7 @@ async function fetchAllWaves(sb: SB) {
     for (let from = PAGE; from < total; from += PAGE) remaining.push(from);
     const results = await Promise.all(
       remaining.map((from) =>
-        sb.from("outreach_waves").select(cols).range(from, from + PAGE - 1),
+        sb.from("outreach_waves").select(cols).order("id").range(from, from + PAGE - 1),
       ),
     );
     for (const { data } of results) if (data) all.push(...data);

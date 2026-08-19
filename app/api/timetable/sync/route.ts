@@ -40,6 +40,7 @@ export async function POST() {
     const { data, error } = await sb
       .from("instructors")
       .select("id,name,meeting_date")
+      .order("id")
       .range(offset, offset + 999);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     instructors.push(...(data ?? []));
