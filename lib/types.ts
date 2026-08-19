@@ -25,7 +25,7 @@ export type ApplicationSource =
   | "핏크닉지원사업"
   | "머니업지원사업";
 export type ReviewStatus = "미확인" | "확인완료";
-export type InstructorSource = "강사모집" | "콘텐츠팀" | "지원서" | "YT채널수집";
+export type InstructorSource = "강사모집" | "강의기획팀" | "지원서" | "YT채널수집";
 export type YouTubeChannelStatus =
   | "미검토"
   | "컨펌 필요"

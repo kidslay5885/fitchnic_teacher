@@ -134,7 +134,7 @@ async function importContentTeam() {
       email_sent: r[11] === 1 || r[11] === true,
       final_status: str(r[18]),
       meeting_memo: str(r[19]),
-      source: "콘텐츠팀",
+      source: "강의기획팀",
     });
 
     for (let w = 0; w < 3; w++) {

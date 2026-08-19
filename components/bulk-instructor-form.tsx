@@ -144,7 +144,7 @@ export default function BulkInstructorForm({ onClose }: Props) {
         youtube: r.youtube,
         email: r.email,
         assignee: "크롤링",
-        source: "콘텐츠팀",
+        source: "강의기획팀",
         status: "미검토",
       }));
       const res = await fetch("/api/instructors/bulk", {
@@ -187,7 +187,7 @@ export default function BulkInstructorForm({ onClose }: Props) {
               <br />
               이름=<span className="font-medium">채널명 채널</span>, 분야=<span className="font-medium">유튜브</span>,
               유튜브=<span className="font-medium">채널링크</span>, 찾은사람=<span className="font-medium">크롤링</span>,
-              출처=<span className="font-medium">콘텐츠팀</span>로 등록됩니다.
+              출처=<span className="font-medium">강의기획팀</span>로 등록됩니다.
             </p>
             <textarea
               value={raw}

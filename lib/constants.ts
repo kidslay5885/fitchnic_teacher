@@ -74,4 +74,4 @@ export const BANNED_PLATFORMS = [
   "사이클해커스",
 ];
 
-export const SOURCES = ["강사모집", "콘텐츠팀", "지원서"] as const;
+export const SOURCES = ["강사모집", "강의기획팀", "지원서"] as const;
