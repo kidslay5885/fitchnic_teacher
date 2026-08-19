@@ -316,7 +316,7 @@ export default function YouTubeChannelsTab() {
                     onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleMouseDown(ch.id, e); }}
                     onMouseEnter={() => handleMouseEnter(ch.id)}
                   >
-                    <Checkbox checked={selectedIds.has(ch.id)} tabIndex={-1} />
+                    <Checkbox checked={selectedIds.has(ch.id)} tabIndex={-1} className="pointer-events-none" />
                   </div>
                   <div className="px-2 flex items-center gap-1 border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
                     <Badge

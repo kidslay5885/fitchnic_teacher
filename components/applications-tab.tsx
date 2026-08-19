@@ -425,7 +425,7 @@ export default function ApplicationsTab() {
               sorted.map((a, idx) => (
                 <TableRow key={a.id} className={`${idx % 2 === 1 ? "bg-muted/20" : ""} ${selected.has(a.id) ? "!bg-primary/10" : ""}`}>
                   <TableCell className="py-2 select-none" onClick={(e) => handleRowClick(a.id, e)}>
-                    <Checkbox checked={selected.has(a.id)} tabIndex={-1} />
+                    <Checkbox checked={selected.has(a.id)} tabIndex={-1} className="pointer-events-none" />
                   </TableCell>
                   <TableCell className="py-2 text-sm font-medium">
                     {a.applicant_name}

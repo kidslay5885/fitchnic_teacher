@@ -329,7 +329,7 @@ function InstructorListView() {
                     onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); handleMouseDown(i.id, e); }}
                     onMouseEnter={() => handleMouseEnter(i.id)}
                   >
-                    <Checkbox checked={selected.has(i.id)} tabIndex={-1} />
+                    <Checkbox checked={selected.has(i.id)} tabIndex={-1} className="pointer-events-none" />
                   </div>
                   <div className="px-2 flex items-center border-r border-gray-200/60" onClick={(e) => e.stopPropagation()}>
                     <Badge
