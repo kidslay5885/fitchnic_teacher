@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { TimeInput } from "@/components/ui/time-input";
 import { STATUS_COLORS, STATUSES, ASSIGNEES, SOURCES } from "@/lib/constants";
 import { requiresReason } from "@/lib/status-machine";
 import { isDupEmailReason } from "@/lib/duplicate-email";
@@ -934,7 +935,7 @@ export default function MeetingTab() {
                       </div>
                       <div className="w-[120px] sm:w-[140px]">
                         <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
-                        <Input type="time" className="h-9 text-sm" value={editingMeeting.time} onChange={(e) => setEditingMeeting({ ...editingMeeting, time: e.target.value })} />
+                        <TimeInput className="h-9 text-sm" value={editingMeeting.time} onChange={(v) => setEditingMeeting({ ...editingMeeting, time: v })} />
                       </div>
                     </div>
 
@@ -1688,7 +1689,7 @@ function AddMeetingModal({ instructors, dispatch, loadStats, onSave, onClose }: 
                 </div>
                 <div className="w-[120px]">
                   <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
-                  <Input type="time" className="h-9 text-sm" value={time} onChange={(e) => setTime(e.target.value)} />
+                  <TimeInput className="h-9 text-sm" value={time} onChange={setTime} />
                 </div>
               </div>
 
@@ -1840,7 +1841,7 @@ function AddMeetingModal({ instructors, dispatch, loadStats, onSave, onClose }: 
                   </div>
                   <div className="w-[120px]">
                     <label className="text-xs text-muted-foreground mb-1 block">시간 (선택)</label>
-                    <Input type="time" className="h-9 text-sm" value={time} onChange={(e) => setTime(e.target.value)} />
+                    <TimeInput className="h-9 text-sm" value={time} onChange={setTime} />
                   </div>
                 </div>
                 <div>
