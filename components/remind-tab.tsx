@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,11 +11,12 @@ import {
   TAGS, TAG_COLORS, DONE_STYLE, MEETING_TAGS, KICKOFF_TAGS, LEGEND_TAGS,
   remindDateFor, isAllChecked, toIso, parseIso, type RemindTag,
 } from "@/lib/remind-checklist";
-import type { Instructor, TimetableEvent } from "@/lib/types";
+import { STATUS_COLORS } from "@/lib/constants";
+import type { Instructor, InstructorStatus, TimetableEvent } from "@/lib/types";
 import { toast } from "sonner";
 import {
   ChevronLeft, ChevronRight, RefreshCw, Search, X, UserX, Check, CheckCircle2,
-  AlertTriangle,
+  AlertTriangle, Trash2, ExternalLink,
 } from "lucide-react";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
@@ -67,7 +69,7 @@ const calcFollowupDate = (meetingDate: string) => {
 };
 
 export default function RemindTab() {
-  const { state } = useOutreach();
+  const { state, dispatch } = useOutreach();
   const [events, setEvents] = useState<TimetableEvent[]>([]);
   const [checks, setChecks] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
@@ -75,6 +77,7 @@ export default function RemindTab() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [matchTarget, setMatchTarget] = useState<TimetableEvent | null>(null);
+  const [followupTarget, setFollowupTarget] = useState<Instructor | null>(null);
   const [outsideGrid, setOutsideGrid] = useState<{ sheet: string; cell: string; text: string }[]>([]);
   const [infoModal, setInfoModal] = useState<"outside" | "unmatched" | null>(null);
   const didInit = useRef(false);
@@ -157,9 +160,10 @@ export default function RemindTab() {
     const push = (
       refType: RemindItem["refType"], refId: string, tag: RemindTag,
       base: Omit<RemindItem, "key" | "refType" | "refId" | "tag" | "remindDate" | "checked" | "done">,
+      checkedOverride?: string[],
     ) => {
       const key = `${refType}:${refId}:${tag}`;
-      const checked = checks[key] || [];
+      const checked = checkedOverride ?? checks[key] ?? [];
       items.push({
         ...base,
         key, refType, refId, tag,
@@ -197,7 +201,8 @@ export default function RemindTab() {
         instructor: i,
         // 재연락은 미팅 방식보다 지금 강사 상태가 궁금하다
         note: i.status || "",
-      });
+      // 재연락 완료는 미팅관리와 같은 필드(instructors.remind_done)를 쓴다
+      }, i.remind_done ? ["contact"] : []);
     }
 
     return items.sort((a, b) => (a.remindDate + a.time).localeCompare(b.remindDate + b.time));
@@ -212,11 +217,45 @@ export default function RemindTab() {
     return map;
   }, [allItems]);
 
+  /** 강사 레코드 수정 — 미팅관리와 같은 store 를 갱신해 양쪽이 함께 반영된다 */
+  const patchInstructor = async (id: string, patch: Record<string, unknown>) => {
+    const res = await fetch(`/api/instructors/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error("저장 실패");
+    dispatch({ type: "UPDATE_INSTRUCTOR", instructor: await res.json() });
+  };
+
+  /** 재연락 삭제 — 미팅관리의 재연락 삭제와 동일하게 처리한다 */
+  const deleteFollowup = async (item: RemindItem) => {
+    if (!confirm(`${item.name} 재연락을 삭제하시겠습니까?`)) return;
+    try {
+      await patchInstructor(item.refId, { remind_date: null, remind_done: false, remind_disabled: true });
+      setFollowupTarget(null);
+      toast.success("재연락 삭제 완료");
+    } catch {
+      toast.error("삭제 실패");
+    }
+  };
+
   // ── 체크 토글 (낙관적 반영 후 저장) ──
   const toggleItem = async (item: RemindItem, itemKey: string) => {
     const next = item.checked.includes(itemKey)
       ? item.checked.filter((k) => k !== itemKey)
       : [...item.checked, itemKey];
+
+    // 재연락 완료는 미팅관리와 연동되도록 강사 레코드에 저장한다
+    if (item.tag === "followup") {
+      try {
+        await patchInstructor(item.refId, { remind_done: next.includes("contact") });
+      } catch {
+        toast.error("저장 실패");
+      }
+      return;
+    }
+
     const prev = checks[item.key];
     setChecks((c) => ({ ...c, [item.key]: next }));
     try {
@@ -391,7 +430,7 @@ export default function RemindTab() {
                             >
                               <div className="flex items-start gap-1">
                                 {it.done && <Check className="h-3.5 w-3.5 mt-[3px] shrink-0" />}
-                                {/* 시간표에서 온 일정은 이름을 눌러 강사 매칭을 확인·변경한다 */}
+                                {/* 시간표 일정은 이름을 눌러 강사 매칭을, 재연락은 사전 정보를 연다 */}
                                 {it.event ? (
                                   <button
                                     onClick={() => setMatchTarget(it.event!)}
@@ -404,11 +443,31 @@ export default function RemindTab() {
                                     {it.name}
                                     {it.note && <span className="ml-1 font-normal opacity-70">({it.note})</span>}
                                   </button>
+                                ) : it.instructor ? (
+                                  <button
+                                    onClick={() => setFollowupTarget(it.instructor!)}
+                                    className={`text-left text-sm font-semibold leading-tight break-all hover:underline decoration-dotted underline-offset-2 ${
+                                      it.done ? "" : "text-foreground"
+                                    }`}
+                                    title="클릭: 재연락 사전 정보 보기"
+                                  >
+                                    {it.name}
+                                    {it.note && <span className="ml-1 font-normal opacity-70">({it.note})</span>}
+                                  </button>
                                 ) : (
                                   <span className={`text-sm font-semibold leading-tight break-all ${it.done ? "" : "text-foreground"}`}>
                                     {it.name}
                                     {it.note && <span className="ml-1 font-normal opacity-70">({it.note})</span>}
                                   </span>
+                                )}
+                                {it.tag === "followup" && (
+                                  <button
+                                    onClick={() => deleteFollowup(it)}
+                                    className="ml-auto shrink-0 text-gray-300 hover:text-red-600 transition-colors"
+                                    title="재연락 삭제 (미팅관리에서도 삭제됩니다)"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
                                 )}
                               </div>
                               <div className="mt-1 flex items-center gap-1 flex-wrap">
@@ -503,6 +562,23 @@ export default function RemindTab() {
         </div>
       )}
 
+      {/* ── 재연락 사전 정보 모달 ── */}
+      {followupTarget && (() => {
+        // 모달을 연 채 체크를 바꿔도 최신 값이 보이도록 store 에서 다시 읽는다
+        const inst = instructorById.get(followupTarget.id) || followupTarget;
+        const item = allItems.find((x) => x.refType === "instructor" && x.refId === inst.id);
+        return (
+          <FollowupModal
+            instructor={inst}
+            done={!!inst.remind_done}
+            remindDate={item?.remindDate || inst.remind_date || ""}
+            onToggleDone={() => item && toggleItem(item, "contact")}
+            onDelete={() => item && deleteFollowup(item)}
+            onClose={() => setFollowupTarget(null)}
+          />
+        );
+      })()}
+
       {/* ── 수동 매칭 모달 ── */}
       {matchTarget && (
         <MatchModal
@@ -515,6 +591,140 @@ export default function RemindTab() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ── 재연락 사전 정보 모달 ──
+// 완료 체크·삭제 모두 미팅관리와 같은 강사 레코드를 고치므로 양쪽이 함께 반영된다.
+function FollowupModal({
+  instructor, done, remindDate, onToggleDone, onDelete, onClose,
+}: {
+  instructor: Instructor;
+  done: boolean;
+  remindDate: string;
+  onToggleDone: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const igUrl = instructor.instagram
+    ? (instructor.instagram.startsWith("http") ? instructor.instagram : `https://instagram.com/${instructor.instagram}`)
+    : "";
+
+  // 사후 정보는 JSON({special, positive, negative}) 또는 옛 방식의 평문으로 들어온다
+  const post = (() => {
+    try {
+      const p = JSON.parse(instructor.post_info || "");
+      return { special: p.special || "", positive: p.positive || "", negative: p.negative || "" };
+    } catch {
+      return { special: instructor.post_info || "", positive: "", negative: "" };
+    }
+  })();
+
+  const infoRow = (label: string, value: string) => (
+    <div className="flex gap-3 text-sm">
+      <span className="text-muted-foreground w-16 shrink-0">{label}</span>
+      <span className="break-words">{value || "-"}</span>
+    </div>
+  );
+
+  const textBlock = (label: string, value: string) =>
+    value ? (
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground mb-1">{label}</p>
+        <p className="text-sm whitespace-pre-wrap break-words rounded border bg-gray-50/60 px-2.5 py-2">{value}</p>
+      </div>
+    ) : null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <Card className="w-full max-w-[480px] max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="p-4 space-y-3.5 overflow-y-auto">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-orange-600">📞</span>
+              <p className="text-base font-semibold truncate">{instructor.name} 재연락</p>
+              <Badge className={`text-[10px] px-1.5 py-0 shrink-0 ${STATUS_COLORS[instructor.status as InstructorStatus] || ""}`}>
+                {instructor.status}
+              </Badge>
+            </div>
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* 연락처 */}
+          <div className="border rounded-lg p-3 space-y-2 bg-gray-50/50">
+            <p className="text-xs font-semibold text-muted-foreground">연락처</p>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-muted-foreground w-16 shrink-0">전화</span>
+              {instructor.phone
+                ? <a href={`tel:${instructor.phone}`} className="text-blue-600 hover:underline font-medium">{instructor.phone}</a>
+                : <span className="text-muted-foreground">-</span>}
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-muted-foreground w-16 shrink-0">이메일</span>
+              {instructor.email
+                ? <a href={`mailto:${instructor.email}`} className="text-blue-600 hover:underline font-medium break-all">{instructor.email}</a>
+                : <span className="text-muted-foreground">-</span>}
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-muted-foreground w-16 shrink-0">유튜브</span>
+              {instructor.youtube
+                ? <a href={instructor.youtube} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-0.5">링크<ExternalLink className="h-3 w-3" /></a>
+                : <span className="text-muted-foreground">-</span>}
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-muted-foreground w-16 shrink-0">인스타</span>
+              {igUrl
+                ? <a href={igUrl} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:underline flex items-center gap-0.5">링크<ExternalLink className="h-3 w-3" /></a>
+                : <span className="text-muted-foreground">-</span>}
+            </div>
+          </div>
+
+          {/* 기본 정보 */}
+          <div className="space-y-1.5">
+            {infoRow("분야", instructor.field)}
+            {infoRow("담당자", instructor.assignee)}
+            {infoRow("미팅일", instructor.meeting_date)}
+            {infoRow("미팅방식", instructor.meeting_type)}
+            {infoRow("재연락일", remindDate ? formatDay(remindDate) : "")}
+          </div>
+
+          {/* 사전 · 사후 정보 */}
+          {textBlock("사전 정보", instructor.pre_info)}
+          {textBlock("미팅 메모", instructor.meeting_memo)}
+          {textBlock("특이사항", post.special)}
+          {textBlock("긍정적 요소", post.positive)}
+          {textBlock("부정적 요소", post.negative)}
+
+          {/* 완료 체크 */}
+          <button
+            onClick={onToggleDone}
+            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors ${
+              done ? "bg-green-50 border-green-300" : "bg-gray-50 border-gray-200 hover:bg-muted"
+            }`}
+          >
+            <span className={`inline-flex items-center justify-center h-4 w-4 rounded border ${
+              done ? "bg-green-600 border-green-600 text-white" : "bg-white border-gray-300 text-transparent"
+            }`}>
+              <Check className="h-3 w-3" />
+            </span>
+            <span className={`text-sm font-medium ${done ? "text-green-800" : "text-gray-500"}`}>재연락 완료</span>
+          </button>
+
+          <div className="flex gap-2 pt-1 border-t">
+            <Button
+              size="sm" variant="outline"
+              className="h-9 text-sm flex-1 text-red-500 hover:text-red-600 hover:bg-red-50"
+              onClick={onDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />재연락 삭제
+            </Button>
+            <Button size="sm" variant="outline" className="h-9 text-sm" onClick={onClose}>닫기</Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
