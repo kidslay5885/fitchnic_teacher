@@ -195,7 +195,8 @@ export default function RemindTab() {
         time: "",
         name: i.name,
         instructor: i,
-        note: i.meeting_type || "",
+        // 재연락은 미팅 방식보다 지금 강사 상태가 궁금하다
+        note: i.status || "",
       });
     }
 
