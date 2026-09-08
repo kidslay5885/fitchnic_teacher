@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** 입력 중인 값("1", "7" 등)도 "HH:MM"으로 정규화 — 시가 비면 빈 문자열 */
+const toValue = (h: string, m: string) => (h ? `${pad(+h)}:${m ? pad(+m) : "00"}` : "");
+
 /** "HH:MM" → ["HH", "MM"] (없으면 빈 문자열) */
 const split = (value: string): [string, string] => {
   const m = (value || "").match(/^(\d{1,2}):(\d{2})$/);
@@ -32,9 +35,10 @@ function TimeInput({ value, onChange, className, disabled }: TimeInputProps) {
   const minuteRef = React.useRef<HTMLInputElement>(null);
 
   // 외부 값이 바뀌면 표시 값 동기화 (직접 입력으로 인한 갱신은 무시)
+  // 입력 중인 한 자리(예: "1")도 상위에는 "01:00"으로 전달되므로,
+  // 비교는 같은 방식으로 정규화해서 한다. (아니면 "1"이 곧바로 "01"로 덮어써짐)
   React.useEffect(() => {
-    const current = hour ? `${hour}:${minute || "00"}` : "";
-    if (current === value) return;
+    if (toValue(hour, minute) === value) return;
     const [h, m] = split(value);
     setHour(h);
     setMinute(m);
@@ -43,7 +47,7 @@ function TimeInput({ value, onChange, className, disabled }: TimeInputProps) {
 
   /** 시가 있으면 "HH:MM", 없으면 빈 값으로 상위에 전달 */
   const commit = (h: string, m: string) => {
-    const next = h ? `${pad(+h)}:${m ? pad(+m) : "00"}` : "";
+    const next = toValue(h, m);
     if (next !== value) onChange(next);
   };
 
