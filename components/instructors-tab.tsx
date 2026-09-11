@@ -109,8 +109,9 @@ function InstructorListView() {
       const f = state.filters;
       if (f.status !== "전체" && i.status !== f.status) return false;
       if (f.search) {
-        const q = f.search.toLowerCase().replace(/\s/g, "");
-        const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
+        // 한글 자모 분리형(NFD)도 매칭되도록 완성형으로 통일 후 비교
+        const q = f.search.normalize("NFC").toLowerCase().replace(/\s/g, "");
+        const strip = (s?: string) => s?.normalize("NFC").toLowerCase().replace(/\s/g, "") || "";
         return (
           strip(i.name).includes(q) ||
           strip(i.email).includes(q) ||

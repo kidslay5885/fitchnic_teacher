@@ -19,6 +19,16 @@ export function normalizeUrl(input: unknown): string {
   return s;
 }
 
+// 객체의 문자열 필드를 한글 완성형(NFC)으로 통일
+// - 맥/일부 앱에서 붙여넣은 자모 분리형(NFD) 텍스트는 눈으로 같아도 검색·중복 비교에 걸리지 않음
+export function normalizeTextFields<T extends Record<string, any>>(obj: T): T {
+  const next: any = { ...obj };
+  for (const k of Object.keys(next)) {
+    if (typeof next[k] === "string") next[k] = next[k].normalize("NFC");
+  }
+  return next;
+}
+
 // 콤마로 분리된 여러 URL 정규화
 export function normalizeRefLinks(input: unknown): string {
   if (typeof input !== "string") return "";

@@ -195,8 +195,8 @@ export default function ContactTab() {
     else if (viewFilter === "check_needed") list = list.filter((i) => checkNeededIds.has(i.id));
     else if (viewFilter !== "all") list = list.filter((i) => i.status === viewFilter);
     if (trimmedSearch) {
-      const q = trimmedSearch.toLowerCase().replace(/\s/g, "");
-      const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
+      const q = trimmedSearch.normalize("NFC").toLowerCase().replace(/\s/g, "");
+      const strip = (s?: string) => s?.normalize("NFC").toLowerCase().replace(/\s/g, "") || "";
       list = list.filter((i) => strip(i.name).includes(q) || strip(i.field).includes(q) || strip(i.email).includes(q));
     }
     if (sendMethodFilter === "기타") {

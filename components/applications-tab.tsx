@@ -119,7 +119,7 @@ export default function ApplicationsTab() {
   type NameMatch = { key: string; name: string; sub: string; source: "instructors" | "youtube_channels" };
   // 한 이름에 대해 instructors + youtube_channels 에서 정확/유사 일치 찾기
   const findMatchesFor = (name: string): { duplicates: NameMatch[]; similars: NameMatch[] } => {
-    const normalize = (s: string) => (s || "").replace(/\s+/g, "").toLowerCase();
+    const normalize = (s: string) => (s || "").normalize("NFC").replace(/\s+/g, "").toLowerCase();
     const k = normalize(name);
     if (!k) return { duplicates: [], similars: [] };
     const isClose = (n: string) => {
@@ -175,11 +175,11 @@ export default function ApplicationsTab() {
       if (activeSource !== "전체" && a.source_platform !== activeSource) return false;
       if (reviewFilter !== "전체" && a.review_status !== reviewFilter) return false;
       if (search) {
-        const q = search.toLowerCase();
+        const q = search.normalize("NFC").toLowerCase();
         return (
-          a.applicant_name?.toLowerCase().includes(q) ||
-          a.activity_name?.toLowerCase().includes(q) ||
-          a.topic?.toLowerCase().includes(q)
+          a.applicant_name?.normalize("NFC").toLowerCase().includes(q) ||
+          a.activity_name?.normalize("NFC").toLowerCase().includes(q) ||
+          a.topic?.normalize("NFC").toLowerCase().includes(q)
         );
       }
       return true;

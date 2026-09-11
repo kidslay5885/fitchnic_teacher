@@ -750,7 +750,7 @@ function MatchModal({
   const matchLabel = event.match_type === "자동" ? (event.match_reason || "자동") : event.match_type;
 
   const results = useMemo(() => {
-    const key = q.trim().toLowerCase();
+    const key = q.normalize("NFC").trim().toLowerCase();
     if (!key) return [];
     return instructors.filter((i) => i.name.toLowerCase().includes(key)).slice(0, 30);
   }, [q, instructors]);

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
-import { normalizeUrl, normalizeRefLinks } from "@/lib/utils";
+import { normalizeUrl, normalizeRefLinks, normalizeTextFields } from "@/lib/utils";
 import { findEmailOwners, normalizeEmail, dupEmailReason } from "@/lib/duplicate-email";
 
 // URL 계열 필드를 정규화 (프로토콜 누락 시 https:// 자동 추가)
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const sb = getSupabase();
   const body = await req.json();
   const { _force, ...rawInsert } = body;
-  const insertData = normalizeUrlFields(rawInsert);
+  const insertData = normalizeUrlFields(normalizeTextFields(rawInsert));
 
   // 중복 이름 체크 (공백 제거 후 비교: "감동 상영관" === "감동상영관")
   if (insertData.name && !_force) {
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
       .select("id, name, field, assignee, status, is_banned");
 
     const duplicates = allByName?.filter((i: any) =>
-      i.name.replace(/\s+/g, "").toLowerCase() === normalizedName.toLowerCase()
+      i.name.normalize("NFC").replace(/\s+/g, "").toLowerCase() === normalizedName.toLowerCase()
     );
 
     if (duplicates && duplicates.length > 0) {

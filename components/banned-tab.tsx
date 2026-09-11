@@ -26,7 +26,7 @@ export default function BannedTab() {
   useEffect(() => { if (state.bannedPlatforms.length === 0) loadBannedPlatforms(); }, []);
 
   const bannedInstructors = useMemo(() =>
-    state.instructors.filter((i) => i.is_banned && (!search || i.name.toLowerCase().includes(search.toLowerCase()))),
+    state.instructors.filter((i) => i.is_banned && (!search || i.name.normalize("NFC").toLowerCase().includes(search.normalize("NFC").toLowerCase()))),
   [state.instructors, search]);
 
   const handleToggleBan = async (id: string, ban: boolean, reason?: string) => {
@@ -44,9 +44,9 @@ export default function BannedTab() {
     setBanSaving(true);
 
     // 공백·대소문자 무시로 기존 강사 찾기
-    const normalized = name.replace(/\s+/g, "").toLowerCase();
+    const normalized = name.normalize("NFC").replace(/\s+/g, "").toLowerCase();
     const existing = state.instructors.find(
-      (i) => i.name.replace(/\s+/g, "").toLowerCase() === normalized,
+      (i) => i.name.normalize("NFC").replace(/\s+/g, "").toLowerCase() === normalized,
     );
 
     try {

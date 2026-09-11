@@ -141,8 +141,8 @@ export default function SubmitPage() {
       if (statusFilter !== "전체" && i.status !== statusFilter) return false;
       if (assigneeFilter !== "전체" && i.assignee !== assigneeFilter) return false;
       if (search) {
-        const q = search.toLowerCase().replace(/\s/g, "");
-        const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
+        const q = search.normalize("NFC").toLowerCase().replace(/\s/g, "");
+        const strip = (s?: string) => s?.normalize("NFC").toLowerCase().replace(/\s/g, "") || "";
         return (
           strip(i.name).includes(q) ||
           strip(i.email).includes(q) ||
@@ -173,8 +173,8 @@ export default function SubmitPage() {
   const ytFiltered = useMemo(() => {
     return ytChannels.filter((ch) => {
       if (search) {
-        const q = search.toLowerCase().replace(/\s/g, "");
-        const strip = (s?: string) => s?.toLowerCase().replace(/\s/g, "") || "";
+        const q = search.normalize("NFC").toLowerCase().replace(/\s/g, "");
+        const strip = (s?: string) => s?.normalize("NFC").toLowerCase().replace(/\s/g, "") || "";
         return (
           strip(ch.channel_name).includes(q) ||
           strip(ch.email).includes(q) ||
@@ -578,7 +578,7 @@ function SubmitForm({ instructors, ytChannels, onAdded, onUpdated, onScrollTo, o
     const name = form.name.trim();
     if (!name) return null;
     // 공백 제거 후 비교 (예: "감동 상영관" === "감동상영관")
-    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const normalize = (s: string) => s.normalize("NFC").replace(/\s+/g, "").toLowerCase();
     const normalized = normalize(name);
 
     // instructors 중복 체크

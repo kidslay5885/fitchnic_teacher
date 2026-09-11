@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { requiresReason } from "@/lib/status-machine";
 import { logActivity } from "@/lib/activity-log";
-import { normalizeUrl, normalizeRefLinks } from "@/lib/utils";
+import { normalizeUrl, normalizeRefLinks, normalizeTextFields } from "@/lib/utils";
 import type { InstructorStatus } from "@/lib/types";
 
 function normalizeUrlFields<T extends Record<string, any>>(obj: T): T {
@@ -70,7 +70,7 @@ export async function PATCH(
 
   // 내부 필드 제거
   const { _reason, _changed_by, _expected_updated_at, ...rawUpdate } = body;
-  const updateData = normalizeUrlFields(rawUpdate);
+  const updateData = normalizeUrlFields(normalizeTextFields(rawUpdate));
 
   // 충돌 감지: updated_at 비교
   if (_expected_updated_at) {

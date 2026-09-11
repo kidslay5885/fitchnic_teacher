@@ -56,7 +56,7 @@ export default function InstructorForm({ onClose }: Props) {
   const nameCheck = useMemo(() => {
     const name = form.name.trim();
     if (!name) return null;
-    const normalize = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+    const normalize = (s: string) => s.normalize("NFC").replace(/\s+/g, "").toLowerCase();
     const normalized = normalize(name);
 
     const duplicates = instructors.filter((i) => normalize(i.name) === normalized);

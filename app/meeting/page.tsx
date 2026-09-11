@@ -94,7 +94,7 @@ export default function MeetingReportPage() {
 
   const filteredList = useMemo(() => {
     if (!search) return meetingInstructors;
-    const q = search.toLowerCase();
+    const q = search.normalize("NFC").toLowerCase();
     return meetingInstructors.filter(
       (i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q)
     );

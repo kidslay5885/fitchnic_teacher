@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 import { logActivity } from "@/lib/activity-log";
-import { normalizeUrl } from "@/lib/utils";
+import { normalizeUrl, normalizeTextFields } from "@/lib/utils";
 import { findEmailOwners, normalizeEmail, dupEmailReason, isDupEmailReason } from "@/lib/duplicate-email";
 
 // 여러 강사 일괄 등록 (크롤링 채널 붙여넣기 등)
@@ -18,10 +18,10 @@ export async function POST(req: Request) {
   const seenInBatch = new Map<string, string>(); // 같은 요청 안에서의 중복도 처리
   let dupEmailExcluded = 0;
 
-  // 삽입 데이터 정규화 (유튜브 URL 프로토콜 보정) + 이메일 중복 시 자동 제외
+  // 삽입 데이터 정규화 (한글 완성형 통일, 유튜브 URL 프로토콜 보정) + 이메일 중복 시 자동 제외
   const rows = instructors.map((it: any) => {
     const row = {
-      ...it,
+      ...normalizeTextFields(it),
       youtube: normalizeUrl(it.youtube),
       status: it.status || "미검토",
     };

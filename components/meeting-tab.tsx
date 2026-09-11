@@ -349,7 +349,7 @@ export default function MeetingTab() {
   // 검색 필터
   const filteredList = useMemo(() => {
     if (!search) return respondedInstructors;
-    const q = search.toLowerCase();
+    const q = search.normalize("NFC").toLowerCase();
     return respondedInstructors.filter(
       (i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q) || i.assignee?.toLowerCase().includes(q)
     );
@@ -1551,7 +1551,7 @@ function AddMeetingModal({ instructors, dispatch, loadStats, onSave, onClose }: 
 
   const results = useMemo(() => {
     if (!search || search.length < 1) return [];
-    const q = search.toLowerCase();
+    const q = search.normalize("NFC").toLowerCase();
     return instructors
       .filter((i) => i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q))
       .slice(0, 8);

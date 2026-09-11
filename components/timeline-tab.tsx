@@ -82,7 +82,7 @@ export default function TimelineTab() {
   const filtered = useMemo(() => {
     const base = search
       ? contracted.filter((i) => {
-          const q = search.toLowerCase();
+          const q = search.normalize("NFC").toLowerCase();
           return i.name?.toLowerCase().includes(q) || i.field?.toLowerCase().includes(q);
         })
       : contracted;

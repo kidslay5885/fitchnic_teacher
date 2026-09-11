@@ -7,6 +7,7 @@ import {
   dupEmailReason,
   isDupEmailReason,
 } from "@/lib/duplicate-email";
+import { normalizeTextFields } from "@/lib/utils";
 
 export async function GET() {
   const sb = getSupabase();
@@ -42,9 +43,9 @@ export async function GET() {
   return NextResponse.json(all);
 }
 
-// 이름 정규화: 공백 제거 + 소문자
+// 이름 정규화: 한글 완성형 통일 + 공백 제거 + 소문자
 function normalizeName(name: string): string {
-  return name.trim().replace(/\s+/g, "").toLowerCase();
+  return name.normalize("NFC").trim().replace(/\s+/g, "").toLowerCase();
 }
 
 // 연락금지(is_banned=true) 강사의 정규화된 이름 Set을 반환한다.
@@ -64,7 +65,9 @@ async function getBannedInstructorNames(sb: ReturnType<typeof getSupabase>): Pro
 
 export async function POST(req: Request) {
   const sb = getSupabase();
-  const body = await req.json();
+  // 한글 완성형(NFC)으로 통일해서 저장
+  const raw = await req.json();
+  const body = Array.isArray(raw) ? raw.map(normalizeTextFields) : normalizeTextFields(raw);
 
   // 일괄 등록
   if (Array.isArray(body)) {
@@ -240,7 +243,7 @@ async function removeInstructor(sb: ReturnType<typeof getSupabase>, instructorId
 
 export async function PATCH(req: Request) {
   const sb = getSupabase();
-  const body = await req.json();
+  const body = normalizeTextFields(await req.json());
 
   // 일괄 상태 변경: { ids: string[], status: string }
   if (body.ids && Array.isArray(body.ids)) {

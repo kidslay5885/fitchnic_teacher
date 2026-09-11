@@ -66,7 +66,7 @@ export default function YouTubeChannelsTab() {
       if (filterProfile !== "전체" && c.profile !== filterProfile) return false;
       if (filterStatus !== "전체" && c.status !== filterStatus) return false;
       if (search) {
-        const s = search.toLowerCase();
+        const s = search.normalize("NFC").toLowerCase();
         return (
           c.channel_name.toLowerCase().includes(s) ||
           c.email.toLowerCase().includes(s) ||

@@ -28,9 +28,9 @@ interface ParsedRow {
   dupSource: "instructors" | "youtube_channels" | null;
 }
 
-// 이름 비교용 정규화: 공백 제거 + 소문자 + 끝의 "채널" 제거
+// 이름 비교용 정규화: 한글 완성형 통일 + 공백 제거 + 소문자 + 끝의 "채널" 제거
 const coreName = (s: string) =>
-  s.replace(/\s+/g, "").toLowerCase().replace(/채널$/, "");
+  s.normalize("NFC").replace(/\s+/g, "").toLowerCase().replace(/채널$/, "");
 const normEmail = (s: string) => s.trim().toLowerCase();
 
 export default function BulkInstructorForm({ onClose }: Props) {
