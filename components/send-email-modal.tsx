@@ -30,6 +30,7 @@ interface GmailAccountListItem {
   is_default: boolean;
   is_cron_sender: boolean;
   authenticated: boolean;
+  cc: string[];
   bcc: string[];
 }
 
@@ -629,6 +630,11 @@ export default function SendEmailModal({ open, onClose, selectedIds, instructors
                 발송 후 <span className="font-medium">{wave}차 기록이 자동 추가</span>되고
                 발송 예정 상태는 <span className="font-medium">진행 중</span>으로 변경됩니다.
               </div>
+              {selectedAccount && selectedAccount.cc.length > 0 && (
+                <div>
+                  · 참조(CC): <span className="font-medium">{selectedAccount.cc.join(", ")}</span>
+                </div>
+              )}
               {selectedAccount && selectedAccount.bcc.length > 0 && (
                 <div>
                   · 숨은참조(BCC): <span className="font-medium">{selectedAccount.bcc.join(", ")}</span>

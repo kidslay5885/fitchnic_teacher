@@ -15,10 +15,11 @@ export interface GmailAccount {
   refresh_token: string | null;
   is_default: boolean;
   is_cron_sender: boolean;
+  cc: string[];  // 계정별 고정 참조(CC) — 받는사람에게 보임
   bcc: string[];
 }
 
-const ACCOUNT_COLUMNS = "id, email, label, from_name, refresh_token, is_default, is_cron_sender, bcc";
+const ACCOUNT_COLUMNS = "id, email, label, from_name, refresh_token, is_default, is_cron_sender, cc, bcc";
 
 // (계정 id → 클라이언트) 캐시. refresh_token 이 바뀌면 무효화된다.
 const clientCache = new Map<string, { token: string; client: ReturnType<typeof buildOAuth2Client> }>();
@@ -54,6 +55,7 @@ function normalizeAccount(row: Record<string, unknown>): GmailAccount {
     refresh_token: (row.refresh_token as string | null) ?? null,
     is_default: !!row.is_default,
     is_cron_sender: !!row.is_cron_sender,
+    cc: Array.isArray(row.cc) ? (row.cc as string[]) : [],
     bcc: Array.isArray(row.bcc) ? (row.bcc as string[]) : [],
   };
 }
@@ -152,6 +154,7 @@ function buildRawMessage(
   subject: string,
   body: string,
   toName?: string,
+  cc?: string[],
   bcc?: string[],
   attachments?: EmailAttachment[],
 ) {
@@ -160,6 +163,9 @@ function buildRawMessage(
     `From: ${formatAddress(fromEmail, fromName)}`,
     `To: ${formatAddress(to, toName)}`,
   ];
+  if (cc && cc.length > 0) {
+    headers.push(`Cc: ${cc.join(", ")}`);
+  }
   if (bcc && bcc.length > 0) {
     headers.push(`Bcc: ${bcc.join(", ")}`);
   }
@@ -277,6 +283,7 @@ export async function sendEmail({
     subject,
     body,
     toName,
+    account.cc,
     account.bcc,
     attachments,
   );
