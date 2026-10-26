@@ -20,18 +20,46 @@ interface ParsedRow {
   idx: number;
   name: string;        // 최종 이름 (채널명 + " 채널")
   channelName: string; // 원본 채널명
-  youtube: string;     // 채널링크
+  youtube: string;     // 유튜브 채널링크
+  instagram: string;   // 인스타 URL
   email: string;
   // 중복/금지 판정
   dup: "banned" | "duplicate" | null;
-  dupBy: "name" | "email" | null;
+  dupBy: "name" | "email" | "instagram" | null;
   dupSource: "instructors" | "youtube_channels" | null;
 }
 
 // 이름 비교용 정규화: 한글 완성형 통일 + 공백 제거 + 소문자 + 끝의 "채널" 제거
 const coreName = (s: string) =>
   s.normalize("NFC").replace(/\s+/g, "").toLowerCase().replace(/채널$/, "");
+// 이름 비교 키: 전체 + "|" 앞 대표 이름 (예: "쪼몽이 | ADHD희망편" → "쪼몽이")
+const nameKeys = (s: string) => {
+  const keys = new Set<string>();
+  const full = coreName(s || "");
+  if (full) keys.add(full);
+  const head = coreName((s || "").split(/[|｜]/)[0]);
+  if (head.length >= 2) keys.add(head);
+  return [...keys];
+};
 const normEmail = (s: string) => s.trim().toLowerCase();
+const DUP_LABEL = { name: "이름", email: "이메일", instagram: "인스타" } as const;
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const IG_URL_RE = /instagram\.com\/([A-Za-z0-9._]+)/i;
+const IG_RESERVED = new Set(["p", "reel", "reels", "stories", "explore", "accounts"]);
+// 문자열에서 인스타 아이디 추출 (URL 우선, allowBare면 "@아이디"/"아이디" 단독 값도 인정)
+const igHandle = (s: string, allowBare = false) => {
+  if (!s) return "";
+  const m = s.match(IG_URL_RE);
+  if (m) {
+    const h = m[1].toLowerCase().replace(/\.+$/, "");
+    return IG_RESERVED.has(h) ? "" : h;
+  }
+  if (allowBare) {
+    const t = s.trim().replace(/^@/, "");
+    if (/^[A-Za-z0-9._]{2,30}$/.test(t) && /[A-Za-z]/.test(t)) return t.toLowerCase();
+  }
+  return "";
+};
 
 export default function BulkInstructorForm({ onClose }: Props) {
   const { state, dispatch, loadStats, loadYoutubeChannels } = useOutreach();
@@ -55,50 +83,71 @@ export default function BulkInstructorForm({ onClose }: Props) {
     const bannedNames = new Set<string>();
     const instrEmails = new Set<string>();
     const bannedEmails = new Set<string>();
+    const instrIgs = new Set<string>();
+    const bannedIgs = new Set<string>();
     for (const i of instructors) {
-      const cn = coreName(i.name);
-      if (cn) { instrNames.add(cn); if (i.is_banned) bannedNames.add(cn); }
+      for (const cn of nameKeys(i.name)) {
+        instrNames.add(cn); if (i.is_banned) bannedNames.add(cn);
+      }
       if (i.email) {
         const e = normEmail(i.email);
         instrEmails.add(e); if (i.is_banned) bannedEmails.add(e);
+      }
+      // 인스타는 instagram 외에 ref_link·youtube 칸에 들어간 경우도 있음
+      const igs = [igHandle(i.instagram, true), igHandle(i.ref_link), igHandle(i.youtube)];
+      for (const h of igs) {
+        if (h) { instrIgs.add(h); if (i.is_banned) bannedIgs.add(h); }
       }
     }
     const ytNames = new Set<string>();
     const ytEmails = new Set<string>();
     for (const ch of ytChannels) {
-      const cn = coreName(ch.channel_name);
-      if (cn) ytNames.add(cn);
+      for (const cn of nameKeys(ch.channel_name)) ytNames.add(cn);
       if (ch.email) ytEmails.add(normEmail(ch.email));
     }
+    const hasAny = (set: Set<string>, keys: string[]) => keys.some((k) => set.has(k));
 
     return raw
       .split("\n")
       .map((line) => line.replace(/\r$/, ""))
       .filter((line) => line.trim())
       .map((line, idx) => {
-        const cols = line.split("\t");
-        // 컬럼: 채널명 / 채널링크 / 구독자 / 총회수 / 영상수 / 이메일 / 검색어 / 날짜 / 비고
-        const channelName = (cols[0] || "").trim();
-        const youtube = (cols[1] || "").trim();
-        const email = (cols[5] || "").trim();
+        const cols = line.split("\t").map((c) => c.trim());
+        // 유튜브 형식: 채널명 / 채널링크 / 구독자 / 총회수 / 영상수 / 이메일 / 검색어 / 날짜 / 비고
+        // 인스타 형식: 이름 / 아이디 / 인스타URL / 이메일
+        // → 칸 위치에 의존하지 않고 내용으로 이메일·링크를 인식
+        const channelName = cols[0] || "";
+        const rest = cols.slice(1);
+        const email = (rest.join(" ").match(EMAIL_RE) || [""])[0];
+        const igCol = rest.find((c) => IG_URL_RE.test(c)) || "";
+        const ytCol =
+          rest.find((c) => /youtube\.com|youtu\.be/i.test(c)) ||
+          (!igCol && /^(https?:\/\/|www\.)/i.test(cols[1] || "") ? cols[1] : "");
+        const ig = igHandle(igCol);
+        const instagram = ig ? `https://www.instagram.com/${ig}/` : "";
+        const youtube = ytCol;
 
-        const cn = coreName(channelName);
+        const cns = nameKeys(channelName);
         const en = email ? normEmail(email) : "";
 
         let dup: ParsedRow["dup"] = null;
         let dupBy: ParsedRow["dupBy"] = null;
         let dupSource: ParsedRow["dupSource"] = null;
 
-        // 금지 우선 → 중복(이름) → 중복(이메일)
-        if ((cn && bannedNames.has(cn)) || (en && bannedEmails.has(en))) {
+        // 금지 우선 → 중복(이름) → 중복(이메일) → 중복(인스타)
+        const bannedByEmail = !!en && bannedEmails.has(en);
+        const bannedByIg = !!ig && bannedIgs.has(ig);
+        if (hasAny(bannedNames, cns) || bannedByEmail || bannedByIg) {
           dup = "banned";
-          dupBy = en && bannedEmails.has(en) ? "email" : "name";
+          dupBy = bannedByEmail ? "email" : bannedByIg ? "instagram" : "name";
           dupSource = "instructors";
-        } else if (cn && instrNames.has(cn)) {
+        } else if (hasAny(instrNames, cns)) {
           dup = "duplicate"; dupBy = "name"; dupSource = "instructors";
         } else if (en && instrEmails.has(en)) {
           dup = "duplicate"; dupBy = "email"; dupSource = "instructors";
-        } else if (cn && ytNames.has(cn)) {
+        } else if (ig && instrIgs.has(ig)) {
+          dup = "duplicate"; dupBy = "instagram"; dupSource = "instructors";
+        } else if (hasAny(ytNames, cns)) {
           dup = "duplicate"; dupBy = "name"; dupSource = "youtube_channels";
         } else if (en && ytEmails.has(en)) {
           dup = "duplicate"; dupBy = "email"; dupSource = "youtube_channels";
@@ -109,6 +158,7 @@ export default function BulkInstructorForm({ onClose }: Props) {
           name: channelName ? `${channelName} 채널` : "",
           channelName,
           youtube,
+          instagram,
           email,
           dup,
           dupBy,
@@ -142,6 +192,7 @@ export default function BulkInstructorForm({ onClose }: Props) {
         name: r.name,
         field: "유튜브",
         youtube: r.youtube,
+        instagram: r.instagram,
         email: r.email,
         assignee: "크롤링",
         source: "강의기획팀",
@@ -234,9 +285,9 @@ export default function BulkInstructorForm({ onClose }: Props) {
                           </td>
                           <td className="px-2 py-1.5 font-medium">
                             {r.name}
-                            {r.youtube && (
+                            {(r.youtube || r.instagram) && (
                               <span className="block text-[10px] text-muted-foreground font-normal truncate max-w-[220px]">
-                                {r.youtube}
+                                {r.youtube || r.instagram}
                               </span>
                             )}
                           </td>
@@ -244,13 +295,13 @@ export default function BulkInstructorForm({ onClose }: Props) {
                           <td className="px-2 py-1.5">
                             {banned && (
                               <span className="inline-flex items-center gap-1 text-red-600">
-                                <Ban className="h-3.5 w-3.5" />금지({r.dupBy === "email" ? "이메일" : "이름"})
+                                <Ban className="h-3.5 w-3.5" />금지({DUP_LABEL[r.dupBy ?? "name"]})
                               </span>
                             )}
                             {r.dup === "duplicate" && (
                               <span className="inline-flex items-center gap-1 text-orange-600">
                                 <AlertTriangle className="h-3.5 w-3.5" />
-                                중복({r.dupBy === "email" ? "이메일" : "이름"}
+                                중복({DUP_LABEL[r.dupBy ?? "name"]}
                                 {r.dupSource === "youtube_channels" ? "·YT" : ""})
                                 {r.dupBy === "email" && (
                                   <span className="text-[10px] text-orange-500">→ 제외로 등록</span>
