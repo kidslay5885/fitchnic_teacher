@@ -18,8 +18,9 @@ interface Props {
 // 붙여넣은 한 줄을 파싱한 결과
 interface ParsedRow {
   idx: number;
-  name: string;        // 최종 이름 (채널명 + " 채널")
-  channelName: string; // 원본 채널명
+  name: string;        // 최종 이름 (유튜브: 채널명 + " 채널", 인스타: 이름 그대로)
+  channelName: string; // 원본 채널명/이름
+  field: string;       // 분야 (분류 칸 값 → 없으면 유튜브/인스타)
   youtube: string;     // 유튜브 채널링크
   instagram: string;   // 인스타 URL
   email: string;
@@ -61,11 +62,35 @@ const igHandle = (s: string, allowBare = false) => {
   return "";
 };
 
+// 제목 줄 인식용 키워드
+const HEADER_RE = {
+  name: /^(이름|채널명|채널\s*이름|닉네임|강사명?)$/,
+  account: /^(계정|아이디|id|인스타\s*아이디)$/i,
+  category: /^(분류|카테고리|분야|구분|장르)$/,
+  email: /^(이메일|메일|e-?mail)$/i,
+  link: /^(링크|url|채널\s*링크|인스타\s*url|유튜브)$/i,
+  stat: /^(팔로워|구독자|총?\s*조회수|총회수|영상수|게시물|검색어|날짜|비고)$/,
+};
+type ColMap = { name: number; account: number; category: number };
+
+// 첫 줄이 제목 줄이면 칸 위치를 반환 (아니면 null)
+const parseHeader = (cols: string[]): ColMap | null => {
+  const find = (re: RegExp) => cols.findIndex((c) => re.test(c));
+  const known = Object.values(HEADER_RE).reduce((n, re) => n + cols.filter((c) => re.test(c)).length, 0);
+  // 제목 키워드가 2개 이상이고 이메일/URL 값이 없으면 제목 줄로 판단
+  if (known < 2 || cols.some((c) => EMAIL_RE.test(c) || /https?:\/\//i.test(c))) return null;
+  let category = find(HEADER_RE.category);
+  // 첫 칸 제목이 알 수 없는 값(예: "인스타툰")이면 분류 칸으로 간주
+  if (category < 0 && cols[0] && !Object.values(HEADER_RE).some((re) => re.test(cols[0]))) category = 0;
+  return { name: find(HEADER_RE.name), account: find(HEADER_RE.account), category };
+};
+
 export default function BulkInstructorForm({ onClose }: Props) {
   const { state, dispatch, loadStats, loadYoutubeChannels } = useOutreach();
   const instructors = state.instructors;
   const ytChannels = state.youtubeChannels;
 
+  const [mode, setMode] = useState<"youtube" | "instagram">("youtube");
   const [raw, setRaw] = useState("");
   const [include, setInclude] = useState<Record<number, boolean>>({});
   const [saving, setSaving] = useState(false);
@@ -107,25 +132,41 @@ export default function BulkInstructorForm({ onClose }: Props) {
     }
     const hasAny = (set: Set<string>, keys: string[]) => keys.some((k) => set.has(k));
 
-    return raw
+    const lines = raw
       .split("\n")
       .map((line) => line.replace(/\r$/, ""))
-      .filter((line) => line.trim())
+      .filter((line) => line.trim());
+    // 첫 줄이 제목 줄이면 칸 위치를 읽고 등록 대상에서 뺀다
+    const parsedHeader = lines.length ? parseHeader(lines[0].split("\t").map((c) => c.trim())) : null;
+    const dataLines = parsedHeader ? lines.slice(1) : lines;
+    // 인스타 모드에서 제목 줄이 없으면 기본 순서(분류·계정·이름·팔로워·이메일·링크)로 읽음
+    const header: ColMap | null =
+      parsedHeader ?? (mode === "instagram" ? { category: 0, account: 1, name: 2 } : null);
+
+    return dataLines
       .map((line, idx) => {
         const cols = line.split("\t").map((c) => c.trim());
         // 유튜브 형식: 채널명 / 채널링크 / 구독자 / 총회수 / 영상수 / 이메일 / 검색어 / 날짜 / 비고
-        // 인스타 형식: 이름 / 아이디 / 인스타URL / 이메일
-        // → 칸 위치에 의존하지 않고 내용으로 이메일·링크를 인식
-        const channelName = cols[0] || "";
-        const rest = cols.slice(1);
+        // 인스타 형식: (분류) / 계정 / 이름 / 팔로워 / 이메일 / 링크
+        // → 이름·분류는 제목 줄 기준(없으면 첫 칸), 이메일·링크는 내용으로 인식
+        const at = (i: number | undefined) => (i !== undefined && i >= 0 ? cols[i] || "" : "");
+        const category = at(header?.category);
+        const channelName = header
+          ? at(header.name) || at(header.account)
+          : cols[0] || "";
+        const rest = header ? cols : cols.slice(1);
         const email = (rest.join(" ").match(EMAIL_RE) || [""])[0];
         const igCol = rest.find((c) => IG_URL_RE.test(c)) || "";
         const ytCol =
           rest.find((c) => /youtube\.com|youtu\.be/i.test(c)) ||
-          (!igCol && /^(https?:\/\/|www\.)/i.test(cols[1] || "") ? cols[1] : "");
-        const ig = igHandle(igCol);
+          (!header && !igCol && /^(https?:\/\/|www\.)/i.test(cols[1] || "") ? cols[1] : "");
+        const ig = igHandle(igCol) || (header ? igHandle(at(header.account), true) : "");
         const instagram = ig ? `https://www.instagram.com/${ig}/` : "";
         const youtube = ytCol;
+        // 인스타만 있는 행은 인스타 강사로 처리 ("채널" 미부착)
+        const igOnly = mode === "instagram" || (!!instagram && !youtube);
+        const field = category || (igOnly ? "인스타" : "유튜브");
+        const name = channelName ? (igOnly ? channelName : `${channelName} 채널`) : "";
 
         const cns = nameKeys(channelName);
         const en = email ? normEmail(email) : "";
@@ -155,8 +196,9 @@ export default function BulkInstructorForm({ onClose }: Props) {
 
         return {
           idx,
-          name: channelName ? `${channelName} 채널` : "",
+          name,
           channelName,
+          field,
           youtube,
           instagram,
           email,
@@ -165,7 +207,7 @@ export default function BulkInstructorForm({ onClose }: Props) {
           dupSource,
         };
       });
-  }, [raw, instructors, ytChannels]);
+  }, [raw, mode, instructors, ytChannels]);
 
   // 붙여넣기가 바뀌면 포함 여부 기본값 재설정
   // 정상=포함, 이메일 중복=포함(서버가 '제외' 상태로 자동 등록), 이름 중복=미포함, 금지=불가
@@ -190,7 +232,7 @@ export default function BulkInstructorForm({ onClose }: Props) {
     try {
       const payload = selectedRows.map((r) => ({
         name: r.name,
-        field: "유튜브",
+        field: r.field,
         youtube: r.youtube,
         instagram: r.instagram,
         email: r.email,
@@ -230,20 +272,42 @@ export default function BulkInstructorForm({ onClose }: Props) {
         </DialogHeader>
 
         <div className="space-y-3">
+          {/* 유튜브 / 인스타 선택 */}
+          <div className="flex gap-1">
+            {(["youtube", "instagram"] as const).map((m) => (
+              <Button
+                key={m}
+                size="sm"
+                variant={mode === m ? "default" : "outline"}
+                className="h-7 text-xs"
+                onClick={() => setMode(m)}
+              >
+                {m === "youtube" ? "유튜브" : "인스타"}
+              </Button>
+            ))}
+          </div>
+
           {/* 안내 + 붙여넣기 */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">
-              스프레드시트에서 행을 복사해 붙여넣으세요. 컬럼 순서:
-              <span className="font-medium"> 채널명 · 채널링크 · 구독자 · 총회수 · 영상수 · 이메일 · 검색어 · 날짜</span>
+              스프레드시트에서 행을 복사해 붙여넣으세요. 이메일·링크는 칸 순서와 상관없이 자동 인식하고, 제목 줄이 있으면 제목 기준으로 읽습니다.
               <br />
-              이름=<span className="font-medium">채널명 채널</span>, 분야=<span className="font-medium">유튜브</span>,
-              유튜브=<span className="font-medium">채널링크</span>, 찾은사람=<span className="font-medium">크롤링</span>,
-              출처=<span className="font-medium">강의기획팀</span>로 등록됩니다.
+              {mode === "youtube" ? (
+                <>컬럼 순서: <span className="font-medium">채널명 · 채널링크 · 구독자 · 총회수 · 영상수 · 이메일 · 검색어 · 날짜</span> → 이름=<span className="font-medium">채널명 채널</span>, 분야=유튜브</>
+              ) : (
+                <>컬럼 순서: <span className="font-medium">분류 · 계정 · 이름 · 팔로워 · 이메일 · 링크</span> → 이름=<span className="font-medium">이름</span>, 분야=<span className="font-medium">분류</span>(없으면 인스타)</>
+              )}
+              <br />
+              찾은사람=<span className="font-medium">크롤링</span>, 출처=<span className="font-medium">강의기획팀</span>로 등록됩니다.
             </p>
             <textarea
               value={raw}
               onChange={(e) => setRaw(e.target.value)}
-              placeholder="시민 김상식TV&#9;https://www.youtube.com/@시민김상식tv&#9;109,000&#9;...&#9;koreasangsik@gmail.com&#9;음악추천&#9;2026. 7. 14"
+              placeholder={
+                mode === "youtube"
+                  ? "시민 김상식TV\thttps://www.youtube.com/@시민김상식tv\t109,000\t...\tkoreasangsik@gmail.com\t음악추천\t2026. 7. 14"
+                  : "인스타툰\tgreego_toon\t그리고\t530,000\t\thttps://www.instagram.com/greego_toon/"
+              }
               className="w-full h-40 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono resize-y focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
           </div>
@@ -265,6 +329,7 @@ export default function BulkInstructorForm({ onClose }: Props) {
                     <tr className="text-left text-muted-foreground">
                       <th className="w-10 px-2 py-1.5 text-center">추가</th>
                       <th className="px-2 py-1.5">이름</th>
+                      <th className="px-2 py-1.5">분야</th>
                       <th className="px-2 py-1.5">이메일</th>
                       <th className="px-2 py-1.5">상태</th>
                     </tr>
@@ -291,6 +356,7 @@ export default function BulkInstructorForm({ onClose }: Props) {
                               </span>
                             )}
                           </td>
+                          <td className="px-2 py-1.5 text-muted-foreground">{r.field}</td>
                           <td className="px-2 py-1.5 text-muted-foreground">{r.email || "-"}</td>
                           <td className="px-2 py-1.5">
                             {banned && (
