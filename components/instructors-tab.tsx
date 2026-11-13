@@ -16,6 +16,7 @@ import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus } from "@/lib/types";
 import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
+import SendBadges from "@/components/send-badges";
 import InstructorForm from "@/components/instructor-form";
 import BulkInstructorForm from "@/components/bulk-instructor-form";
 import BulkActions from "@/components/bulk-actions";
@@ -345,6 +346,7 @@ function InstructorListView() {
                   <div className="px-2 flex items-center border-r border-gray-200/60 font-medium overflow-hidden">
                     <span className="truncate">{i.name}</span>
                     {i.is_banned && <span className="text-red-500 ml-1 text-xs shrink-0">[금지]</span>}
+                    <SendBadges badges={i.send_badges} className="ml-1 flex-nowrap" />
                   </div>
                   <div className="px-2 flex items-center gap-0.5 border-r border-gray-200/60 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                     {i.ref_link ? i.ref_link.split(/\s*,\s*/).filter(Boolean).map((link, idx) => (

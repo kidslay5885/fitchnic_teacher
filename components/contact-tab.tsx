@@ -14,6 +14,7 @@ import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, OutreachWave } from "@/lib/types";
 import { buildEmailDuplicateMap } from "@/lib/email-duplicates";
 import InstructorDetail from "@/components/instructor-detail";
+import SendBadges from "@/components/send-badges";
 import SendEmailModal from "@/components/send-email-modal";
 import { toast } from "sonner";
 import { Search, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Copy, Download, Pencil, Mail, Calendar as CalendarIcon } from "lucide-react";
@@ -832,8 +833,9 @@ export default function ContactTab() {
                     title={i.name}
                     onClick={() => setDetailId(i.id)}
                   >
-                    {i.name}
+                    <span className="truncate">{i.name}</span>
                     {i.is_banned && <span className="shrink-0 text-red-500 text-xs" title={i.ban_reason || "연락 금지"}>[금지]</span>}
+                    <SendBadges badges={i.send_badges} className="flex-nowrap" />
                     {i.has_response && !i.pre_info && (
                       <span className="shrink-0 h-2 w-2 rounded-full bg-red-500" title="사전 정보 미입력" />
                     )}

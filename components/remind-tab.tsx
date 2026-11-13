@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
 import { Badge } from "@/components/ui/badge";
+import SendBadges from "@/components/send-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -452,6 +453,7 @@ export default function RemindTab() {
                                     title="클릭: 재연락 사전 정보 보기"
                                   >
                                     {it.name}
+                                    <SendBadges badges={it.instructor.send_badges} className="ml-1 align-middle" />
                                     {it.note && <span className="ml-1 font-normal opacity-70">({it.note})</span>}
                                   </button>
                                 ) : (
@@ -644,6 +646,7 @@ function FollowupModal({
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-orange-600">📞</span>
               <p className="text-base font-semibold truncate">{instructor.name} 재연락</p>
+              <SendBadges badges={instructor.send_badges} />
               <Badge className={`text-[10px] px-1.5 py-0 shrink-0 ${STATUS_COLORS[instructor.status as InstructorStatus] || ""}`}>
                 {instructor.status}
               </Badge>

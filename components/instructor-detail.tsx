@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import SendBadges from "@/components/send-badges";
 import { STATUS_COLORS, STATUSES, ASSIGNEES, WAVE_RESULTS } from "@/lib/constants";
 import { requiresReason } from "@/lib/status-machine";
 import type { Instructor, InstructorStatus, StatusHistory, OutreachWave } from "@/lib/types";
@@ -133,6 +134,25 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
     }
   };
 
+  // 발송 뱃지 삭제 (발송 탭 기록은 유지되고 강사 이름 옆 뱃지만 제거)
+  const handleRemoveBadge = async (label: string) => {
+    if (!confirm(`'${label}' 뱃지를 삭제하시겠습니까?`)) return;
+    try {
+      const next = (instructor.send_badges ?? []).filter((b) => b !== label);
+      const res = await fetch(`/api/instructors/${instructor.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ send_badges: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      dispatch({ type: "UPDATE_INSTRUCTOR", instructor: data });
+      toast.success("뱃지를 삭제했습니다.");
+    } catch (e: any) {
+      toast.error(e.message || "뱃지 삭제 실패");
+    }
+  };
+
   const handleDelete = async () => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
     try {
@@ -158,6 +178,12 @@ export default function InstructorDetail({ instructor, onClose }: Props) {
             </Badge>
           </div>
           {instructor.field && <p className="text-sm text-muted-foreground">{instructor.field} | {instructor.assignee || "미지정"}</p>}
+          {(instructor.send_badges?.length ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5 pt-1">
+              <span className="text-xs text-muted-foreground shrink-0">발송</span>
+              <SendBadges badges={instructor.send_badges} onRemove={handleRemoveBadge} />
+            </div>
+          )}
         </SheetHeader>
 
         <ScrollArea className="h-[calc(100vh-90px)]">

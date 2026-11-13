@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useRef, useEffect } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
+import SendBadges from "@/components/send-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -613,6 +614,7 @@ export default function MeetingTab() {
         <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">
           <span className="flex items-center gap-1">
             {i.name}
+            <SendBadges badges={i.send_badges} className="flex-nowrap" />
             {scheduleNames.has(i.name.trim()) && <span className="text-xs text-red-600 font-bold whitespace-nowrap">(타플랫폼 데뷔)</span>}
             {needsPostInfo(i) && <span className="shrink-0 h-2 w-2 rounded-full bg-red-500" title="사후 정보 미입력" />}
           </span>
@@ -887,6 +889,7 @@ export default function MeetingTab() {
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2">
                     <p className="text-base font-semibold">{inst.name}</p>
+                    <SendBadges badges={inst.send_badges} />
                     <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[inst.status as InstructorStatus] || ""}`}>{inst.status}</Badge>
                     {autoSaveStatus === "saving" && <span className="text-xs text-muted-foreground animate-pulse">저장 중...</span>}
                     {autoSaveStatus === "saved" && <span className="text-xs text-green-500">저장됨</span>}

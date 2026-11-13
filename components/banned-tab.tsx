@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
+import SendBadges from "@/components/send-badges";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -221,7 +222,7 @@ export default function BannedTab() {
             ) : (
               bannedInstructors.map((i, idx) => (
                 <TableRow key={i.id} className={idx % 2 === 1 ? "bg-muted/20" : ""}>
-                  <TableCell className="py-2 text-sm font-medium">{i.name}</TableCell>
+                  <TableCell className="py-2 text-sm font-medium">{i.name}<SendBadges badges={i.send_badges} className="ml-1 align-middle" /></TableCell>
                   <TableCell className="py-2 text-sm text-muted-foreground">{i.ban_reason || "-"}</TableCell>
                   <TableCell className="py-2 text-sm text-muted-foreground">{i.lecture_platform || "-"}</TableCell>
                   <TableCell className="py-2">

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useOutreach } from "@/hooks/use-outreach-store";
+import SendBadges from "@/components/send-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -307,6 +308,7 @@ export default function TimelineTab() {
                   <td className="px-3 py-2 border-r border-gray-200/60 font-medium whitespace-nowrap">
                     <span className="flex items-center gap-1.5">
                       {i.name}
+                      <SendBadges badges={i.send_badges} className="flex-nowrap" />
                       <span className="text-muted-foreground text-xs truncate max-w-[90px]">{i.field}</span>
                     </span>
                   </td>

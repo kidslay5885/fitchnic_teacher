@@ -81,6 +81,7 @@ export interface Instructor {
   meeting_type_override: boolean;
   free_lecture_date: string;   // 무료강의일 (촬영/리허설/킥오프 등 모든 마일스톤 기준)
   message_status: string;      // 미팅 안내 메시지 전송 현황 (JSON: {before,dayBefore,dayOf,afterEnd,rejected,carNumber})
+  send_badges?: string[];      // 발송 탭에서 보낸 발송명 뱃지 (여러 개)
   created_at: string;
   updated_at: string;
 }
@@ -174,7 +175,34 @@ export type TabId =
   | "activity"
   | "schedule"
   | "timeline"
-  | "remind";
+  | "remind"
+  | "bulksend";
+
+// ===== 발송 탭 =====
+export interface BulkSend {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  sender_account_id: string | null;
+  sender_email: string;
+  created_by: string;
+  created_at: string;
+  counts?: Record<string, number>; // 결과별 건수 (목록 조회 시)
+}
+
+export interface BulkSendRecipient {
+  id: string;
+  bulk_send_id: string;
+  email: string;
+  instructor_id: string | null;
+  instructor_name: string;
+  prev_status: string;
+  result: string;
+  reason: string;
+  sent_at: string | null;
+  created_at: string;
+}
 
 // ===== 시간표에서 가져온 강사미팅/킥오프 일정 =====
 export interface TimetableEvent {
